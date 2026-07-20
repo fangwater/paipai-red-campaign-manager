@@ -1,0 +1,8 @@
+.env
+.guorai/
+.idea/
+.vscode/
+bin/
+coverage.out
+paipai-red-campaign-manager
+go.mod.orig
