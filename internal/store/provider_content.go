@@ -48,6 +48,44 @@ func (p *Postgres) ProviderContentTables(ctx context.Context) ([]model.ProviderC
 	return tables, nil
 }
 
+func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.DocumentRef) ([]model.DocumentRef, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	noteIDs := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		noteIDs = append(noteIDs, ref.RecordID)
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT note_id
+		FROM service_provider_notes
+		WHERE note_id = ANY($1::text[])
+	`, noteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query existing provider notes: %w", err)
+	}
+	defer rows.Close()
+	existing := make(map[string]struct{}, len(noteIDs))
+	for rows.Next() {
+		var noteID string
+		if err := rows.Scan(&noteID); err != nil {
+			return nil, fmt.Errorf("scan existing provider note: %w", err)
+		}
+		existing[noteID] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate existing provider notes: %w", err)
+	}
+
+	candidates := make([]model.DocumentRef, 0, len(refs))
+	for _, ref := range refs {
+		if _, ok := existing[ref.RecordID]; !ok {
+			candidates = append(candidates, ref)
+		}
+	}
+	return candidates, nil
+}
+
 func (p *Postgres) MarkProviderContentSyncStarted(ctx context.Context, providerCode string) error {
 	commandTag, err := p.pool.Exec(ctx, `
 		UPDATE service_provider_content_tables
@@ -77,9 +115,11 @@ func (p *Postgres) MarkProviderContentSyncFailed(ctx context.Context, providerCo
 
 func (p *Postgres) ReplaceProviderContentSnapshot(ctx context.Context, snapshot model.ProviderContentSnapshot) (model.ProviderSyncResult, error) {
 	result := model.ProviderSyncResult{
-		Providers: 1,
-		Fetched:   len(snapshot.Records),
-		Upserted:  len(snapshot.Records),
+		Providers:  1,
+		Fetched:    len(snapshot.Records),
+		Upserted:   len(snapshot.Records),
+		Notes:      len(snapshot.Notes),
+		NoteErrors: snapshot.NoteErrors,
 	}
 	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -109,31 +149,36 @@ func (p *Postgres) ReplaceProviderContentSnapshot(ctx context.Context, snapshot 
 		batch.Queue(`
 			INSERT INTO service_provider_note_executions (
 				provider_code, record_key, source_row_number, submission_date, note_id,
-				content_type, cover_type, commercial_intensity, audience, user_scenario,
-				note_type, progress, review_feedback, synced_at, deleted_at
+				cover_type, commercial_intensity, audience, user_scenario, note_type,
+				progress, synced_at, deleted_at
 			) VALUES (
 				$1, $2, $3, NULLIF($4, ''), NULLIF($5, ''),
 				NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''),
-				NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''), NOW(), NULL
+				NULLIF($11, ''), NOW(), NULL
 			)
 			ON CONFLICT (provider_code, record_key) DO UPDATE SET
 				source_row_number = EXCLUDED.source_row_number,
 				submission_date = EXCLUDED.submission_date,
 				note_id = EXCLUDED.note_id,
-				content_type = EXCLUDED.content_type,
 				cover_type = EXCLUDED.cover_type,
 				commercial_intensity = EXCLUDED.commercial_intensity,
 				audience = EXCLUDED.audience,
 				user_scenario = EXCLUDED.user_scenario,
 				note_type = EXCLUDED.note_type,
 				progress = EXCLUDED.progress,
-				review_feedback = EXCLUDED.review_feedback,
 				synced_at = NOW(),
 				deleted_at = NULL
 		`, snapshot.Table.ProviderCode, record.RecordKey, record.SourceRowNumber,
-			record.SubmissionDate, record.NoteID, record.ContentType, record.CoverType,
-			record.CommercialIntensity, record.Audience, record.UserScenario,
-			record.NoteType, record.Progress, record.ReviewFeedback)
+			record.SubmissionDate, record.NoteID, record.CoverType, record.CommercialIntensity,
+			record.Audience, record.UserScenario, record.NoteType, record.Progress)
+	}
+	for _, note := range snapshot.Notes {
+		batch.Queue(`
+			INSERT INTO service_provider_notes (note_id, note_content)
+			VALUES ($1, $2)
+			ON CONFLICT (note_id) DO UPDATE SET
+				note_content = EXCLUDED.note_content
+		`, note.NoteID, note.NoteContent)
 	}
 	if batch.Len() > 0 {
 		results := tx.SendBatch(ctx, batch)

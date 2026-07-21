@@ -12,10 +12,12 @@ import (
 
 type ProviderSource interface {
 	FetchProviderContent(context.Context, model.ProviderContentTable) (model.ProviderContentSnapshot, error)
+	FetchProviderNotes(context.Context, []model.DocumentRef) ([]model.ProviderNote, int, error)
 }
 
 type ProviderDestination interface {
 	ProviderContentTables(context.Context) ([]model.ProviderContentTable, error)
+	ProviderNotesToFetch(context.Context, []model.DocumentRef) ([]model.DocumentRef, error)
 	MarkProviderContentSyncStarted(context.Context, string) error
 	MarkProviderContentSyncFailed(context.Context, string, error) error
 	ReplaceProviderContentSnapshot(context.Context, model.ProviderContentSnapshot) (model.ProviderSyncResult, error)
@@ -62,6 +64,27 @@ func (s *ProviderSyncer) Run(ctx context.Context) (model.ProviderSyncResult, err
 			syncErrors = append(syncErrors, syncErr)
 			continue
 		}
+		noteRefs, fetchErr := s.destination.ProviderNotesToFetch(ctx, snapshot.NoteRefs)
+		if fetchErr != nil {
+			syncErr := fmt.Errorf("find incremental notes for provider %s: %w", table.ProviderName, fetchErr)
+			if markErr := s.markFailed(table.ProviderCode, fetchErr); markErr != nil {
+				syncErr = errors.Join(syncErr, markErr)
+			}
+			syncErrors = append(syncErrors, syncErr)
+			continue
+		}
+		notes, noteErrors, fetchErr := s.source.FetchProviderNotes(ctx, noteRefs)
+		if fetchErr != nil {
+			syncErr := fmt.Errorf("fetch incremental notes for provider %s: %w", table.ProviderName, fetchErr)
+			if markErr := s.markFailed(table.ProviderCode, fetchErr); markErr != nil {
+				syncErr = errors.Join(syncErr, markErr)
+			}
+			syncErrors = append(syncErrors, syncErr)
+			continue
+		}
+		snapshot.NoteRefs = noteRefs
+		snapshot.Notes = notes
+		snapshot.NoteErrors += noteErrors
 
 		providerResult, replaceErr := s.destination.ReplaceProviderContentSnapshot(ctx, snapshot)
 		if replaceErr != nil {
@@ -76,6 +99,8 @@ func (s *ProviderSyncer) Run(ctx context.Context) (model.ProviderSyncResult, err
 		result.Fetched += providerResult.Fetched
 		result.Upserted += providerResult.Upserted
 		result.Deleted += providerResult.Deleted
+		result.Notes += providerResult.Notes
+		result.NoteErrors += providerResult.NoteErrors
 	}
 	return result, errors.Join(syncErrors...)
 }

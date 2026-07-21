@@ -24,18 +24,29 @@ CREATE TABLE IF NOT EXISTS service_provider_note_executions (
     source_row_number INTEGER NOT NULL CHECK (source_row_number >= 2),
     submission_date TEXT,
     note_id TEXT,
-    content_type TEXT,
     cover_type TEXT,
     commercial_intensity TEXT,
     audience TEXT,
     user_scenario TEXT,
     note_type TEXT,
     progress TEXT,
-    review_feedback TEXT,
     synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
     PRIMARY KEY (provider_code, record_key)
 );
+
+ALTER TABLE service_provider_note_executions DROP COLUMN IF EXISTS content_type;
+ALTER TABLE service_provider_note_executions DROP COLUMN IF EXISTS review_feedback;
+
+CREATE TABLE IF NOT EXISTS service_provider_notes (
+    note_id TEXT PRIMARY KEY,
+    note_content TEXT NOT NULL
+);
+
+DELETE FROM service_provider_note_executions
+WHERE note_id IS NULL OR note_id !~ '^[0-9a-fA-F]{24}$';
+DELETE FROM service_provider_notes
+WHERE note_id !~ '^[0-9a-fA-F]{24}$';
 
 CREATE INDEX IF NOT EXISTS idx_provider_note_executions_active
     ON service_provider_note_executions (provider_code, note_id)
@@ -56,10 +67,31 @@ INSERT INTO service_provider_content_tables (
     (
         'youyiyouer',
         '有一有二',
-        NULL,
-        NULL,
-        NULL,
+        'https://se3u0tsx62.feishu.cn/wiki/MnqJwPARoi94UGkZ9ZicKAR1nHc?sheet=d487ec',
+        'MnqJwPARoi94UGkZ9ZicKAR1nHc',
+        'd487ec',
         '达人笔记执行表',
-        FALSE
+        TRUE
+	),
+	(
+		'zhiyuan',
+		'智元',
+		'https://xcngqzsbenir.feishu.cn/wiki/WdSrwOXtxiG1OlksDFVcutVKnQg?sheet=QbHF0h',
+		'WdSrwOXtxiG1OlksDFVcutVKnQg',
+		'QbHF0h',
+		'koc稿件审核表',
+		TRUE
     )
 ON CONFLICT (provider_code) DO NOTHING;
+
+UPDATE service_provider_content_tables
+SET source_url = 'https://se3u0tsx62.feishu.cn/wiki/MnqJwPARoi94UGkZ9ZicKAR1nHc?sheet=d487ec',
+    wiki_token = 'MnqJwPARoi94UGkZ9ZicKAR1nHc', sheet_id = 'd487ec', enabled = TRUE,
+    updated_at = NOW()
+WHERE provider_code = 'youyiyouer';
+
+UPDATE service_provider_content_tables
+SET source_url = 'https://xcngqzsbenir.feishu.cn/wiki/WdSrwOXtxiG1OlksDFVcutVKnQg?sheet=QbHF0h',
+	wiki_token = 'WdSrwOXtxiG1OlksDFVcutVKnQg', sheet_id = 'QbHF0h',
+	sheet_name = 'koc稿件审核表', enabled = TRUE, updated_at = NOW()
+WHERE provider_code = 'zhiyuan';

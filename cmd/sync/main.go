@@ -94,6 +94,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 			"providers", result.Providers,
 			"fetched", result.Fetched,
 			"upserted", result.Upserted,
+			"notes", result.Notes,
+			"note_errors", result.NoteErrors,
 			"deleted", result.Deleted,
 			"duration", time.Since(startedAt),
 		)
