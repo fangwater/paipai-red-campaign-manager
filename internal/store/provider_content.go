@@ -15,7 +15,8 @@ var ErrProviderSyncLocked = errors.New("another sync for this service provider i
 func (p *Postgres) ProviderContentTables(ctx context.Context) ([]model.ProviderContentTable, error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT provider_code, provider_name, COALESCE(source_url, ''), COALESCE(wiki_token, ''),
-			COALESCE(spreadsheet_token, ''), COALESCE(sheet_id, ''), sheet_name, last_synced_at
+			COALESCE(spreadsheet_token, ''), COALESCE(sheet_id, ''), sheet_name, last_synced_at,
+			last_sync_status, COALESCE(last_sync_error, '')
 		FROM service_provider_content_tables
 		WHERE enabled
 		ORDER BY provider_name
@@ -37,6 +38,8 @@ func (p *Postgres) ProviderContentTables(ctx context.Context) ([]model.ProviderC
 			&table.SheetID,
 			&table.SheetName,
 			&table.LastSyncedAt,
+			&table.LastSyncStatus,
+			&table.LastSyncError,
 		); err != nil {
 			return nil, fmt.Errorf("scan service-provider content table: %w", err)
 		}
@@ -84,6 +87,21 @@ func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.Docume
 		}
 	}
 	return candidates, nil
+}
+
+func (p *Postgres) FailRunningProviderContentSyncs(ctx context.Context, reason string) error {
+	if reason == "" {
+		reason = "manual sync service restarted before the request finished"
+	}
+	_, err := p.pool.Exec(ctx, `
+		UPDATE service_provider_content_tables
+		SET last_sync_status = 'failed', last_sync_error = $1, updated_at = NOW()
+		WHERE last_sync_status = 'running'
+	`, reason)
+	if err != nil {
+		return fmt.Errorf("recover interrupted provider content syncs: %w", err)
+	}
+	return nil
 }
 
 func (p *Postgres) MarkProviderContentSyncStarted(ctx context.Context, providerCode string) error {

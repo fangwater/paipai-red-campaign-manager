@@ -43,10 +43,10 @@ type Snapshot struct {
 }
 
 type SyncResult struct {
-	Tables         int
-	Fetched        int
-	Upserted       int
-	Deleted        int64
-	Documents      int
-	DocumentErrors int
+	Tables         int   `json:"tables"`
+	Fetched        int   `json:"fetched"`
+	Upserted       int   `json:"upserted"`
+	Deleted        int64 `json:"deleted"`
+	Documents      int   `json:"documents"`
+	DocumentErrors int   `json:"document_errors"`
 }

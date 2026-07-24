@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"paipai-red-campaign-manager/internal/model"
 )
+
+var ErrUnknownProvider = errors.New("unknown or disabled service provider")
 
 type ProviderSource interface {
 	FetchProviderContent(context.Context, model.ProviderContentTable) (model.ProviderContentSnapshot, error)
@@ -34,12 +38,20 @@ func NewProvider(source ProviderSource, destination ProviderDestination) *Provid
 }
 
 func (s *ProviderSyncer) Run(ctx context.Context) (model.ProviderSyncResult, error) {
+	return s.RunProviders(ctx, nil)
+}
+
+func (s *ProviderSyncer) RunProviders(ctx context.Context, providerCodes []string) (model.ProviderSyncResult, error) {
 	if !s.running.CompareAndSwap(false, true) {
 		return model.ProviderSyncResult{}, ErrAlreadyRunning
 	}
 	defer s.running.Store(false)
 
 	tables, err := s.destination.ProviderContentTables(ctx)
+	if err != nil {
+		return model.ProviderSyncResult{}, err
+	}
+	tables, err = selectProviderContentTables(tables, providerCodes)
 	if err != nil {
 		return model.ProviderSyncResult{}, err
 	}
@@ -103,6 +115,36 @@ func (s *ProviderSyncer) Run(ctx context.Context) (model.ProviderSyncResult, err
 		result.NoteErrors += providerResult.NoteErrors
 	}
 	return result, errors.Join(syncErrors...)
+}
+
+func selectProviderContentTables(tables []model.ProviderContentTable, providerCodes []string) ([]model.ProviderContentTable, error) {
+	if len(providerCodes) == 0 {
+		return tables, nil
+	}
+	requested := make(map[string]struct{}, len(providerCodes))
+	for _, providerCode := range providerCodes {
+		providerCode = strings.TrimSpace(providerCode)
+		if providerCode == "" {
+			return nil, fmt.Errorf("%w: provider code cannot be empty", ErrUnknownProvider)
+		}
+		requested[providerCode] = struct{}{}
+	}
+	selected := make([]model.ProviderContentTable, 0, len(requested))
+	for _, table := range tables {
+		if _, ok := requested[table.ProviderCode]; ok {
+			selected = append(selected, table)
+			delete(requested, table.ProviderCode)
+		}
+	}
+	if len(requested) > 0 {
+		unknown := make([]string, 0, len(requested))
+		for providerCode := range requested {
+			unknown = append(unknown, providerCode)
+		}
+		sort.Strings(unknown)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownProvider, strings.Join(unknown, ", "))
+	}
+	return selected, nil
 }
 
 func (s *ProviderSyncer) markFailed(providerCode string, syncErr error) error {

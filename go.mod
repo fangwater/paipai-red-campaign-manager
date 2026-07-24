@@ -5,7 +5,6 @@ go 1.26
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/larksuite/oapi-sdk-go/v3 v3.9.9
-	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/term v0.45.0
 )
 

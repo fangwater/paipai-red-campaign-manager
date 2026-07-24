@@ -1,16 +1,16 @@
 # PaiPai RED Campaign Manager
 
-PaiPai 小红书投放管理服务。服务定时将飞书多维表格 Base、稿件正文和服务商电子表格同步到本地 PostgreSQL。
+PaiPai 小红书投放管理服务。飞书多维表格 Base、稿件正文和服务商电子表格只在显式调用本机 API 时同步到 PostgreSQL。
 
 ## 同步行为
 
-- 自动发现并分页同步 Base 内全部数据表，无需逐个配置 `table_id`。
+- 每次调用 Base 同步接口时发现并分页同步全部数据表，无需逐个配置 `table_id`。
 - 记录字段原样保存为 PostgreSQL `JSONB`。
 - 使用 `app_token + table_id + record_id` 作为幂等主键。
 - 飞书中消失的表和记录在 PostgreSQL 中标记为软删除。
 - 从富文本字段提取飞书 Wiki、Docx 和腾讯文档链接。
 - 飞书 Wiki 会解析为真实 Docx，并保存标题、版本和纯文本正文。
-- 稿件正文默认每小时刷新，普通表数据默认每 5 分钟同步。
+- 业务数据不使用定时器或启动同步；Base 正文仅在显式同步时按刷新间隔判断是否需要重新拉取。
 - 每轮写入和删除在同一个 PostgreSQL 事务中执行。
 - 进程内防重入，并使用 PostgreSQL advisory lock 防止多实例重复同步。
 - `sync_runs` 保存每轮表、记录、文档和错误数量。
@@ -58,13 +58,11 @@ cp .env.example .env
 - `LARK_APP_TOKEN`：多维表格 Base 的 App Token
 - `DATABASE_URL`：本地 PostgreSQL 连接字符串
 
-调度配置：
+飞书手动同步配置：
 
-- `SYNC_CRON`：标准五段 Cron，默认每 5 分钟
-- `SYNC_TIMEZONE`：Cron 时区，默认 `Asia/Shanghai`
-- `SYNC_ON_START`：启动时立即同步，默认 `true`
-- `SYNC_TIMEOUT`：单轮同步超时，默认 10 分钟
-- `DOCUMENT_REFRESH_INTERVAL`：稿件正文刷新间隔，默认 1 小时
+- `LARK_SYNC_LISTEN`：本机 API 监听地址，默认 `127.0.0.1:18081`
+- `SYNC_TIMEOUT`：一次显式同步请求的超时，默认 10 分钟
+- `DOCUMENT_REFRESH_INTERVAL`：调用 Base 同步时，已抓取正文的重新拉取间隔，默认 1 小时
 
 聚光 OpenAPI 配置：
 
@@ -80,12 +78,42 @@ sudo -u postgres createdb -O "$USER" paipai_red
 
 当前机器已创建由 `ubuntu` 角色拥有的 `paipai_red` 数据库。示例连接串通过本地 Unix socket 使用 peer 认证，不需要数据库密码。
 
-服务启动时自动执行幂等迁移 [migrations/001_init.sql](migrations/001_init.sql) 和 [migrations/002_provider_content.sql](migrations/002_provider_content.sql)。
+服务启动时自动执行 `migrations/` 中全部幂等迁移。
 
-## 运行
+## 飞书手动同步 API
+
+构建并启动本机 API：
 
 ```bash
-make run
+make lark-sync-start
+```
+
+服务由 PM2 运行在 `127.0.0.1:18081`，不会定时同步，也不会在启动时同步。接口同步返回结果：`200 OK` 表示数据库写入已经完成，已有同类作业运行时返回 `409 Conflict`。
+
+- `GET /healthz`：进程健康状态。
+- `POST /v1/sync/manuscripts`：同步服务商稿件表。
+- `GET /v1/sync/manuscripts/status`：查询三张稿件表最近的持久化同步状态。
+- `POST /v1/sync/base`：同步 Base 全部数据表和需要刷新的链接正文。
+
+稿件请求体为空或 `{}` 时同步全部三个服务商：`manjie`（曼杰）、`youyiyouer`（有一有二）、`zhiyuan`（智元）：
+
+```bash
+make lark-sync-manuscripts
+make lark-sync-status
+```
+
+只同步指定稿件表：
+
+```bash
+curl -sS http://127.0.0.1:18081/v1/sync/manuscripts \
+  -H "Content-Type: application/json" \
+  --data "{\"provider_codes\":[\"manjie\",\"zhiyuan\"]}"
+```
+
+请求中的服务商代码会在开始写入前完整校验。未知或未启用代码返回 `400 Bad Request`，不会只执行部分有效目标。Base 快照通过以下命令显式执行：
+
+```bash
+make lark-sync-base
 ```
 
 列出 Base 内全部数据表：
@@ -97,7 +125,11 @@ set +a
 go run ./cmd/list-tables
 ```
 
-停止服务时发送 `SIGINT` 或 `SIGTERM`。
+停止飞书手动同步服务：
+
+```bash
+make lark-sync-stop
+```
 
 ## 验证
 

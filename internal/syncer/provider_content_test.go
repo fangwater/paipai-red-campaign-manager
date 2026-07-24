@@ -90,6 +90,41 @@ func TestProviderRunContinuesAfterProviderFailure(t *testing.T) {
 	}
 }
 
+func TestProviderRunProvidersOnlySyncsRequestedTargets(t *testing.T) {
+	destination := &providerDestinationStub{tables: []model.ProviderContentTable{
+		{ProviderCode: "manjie", ProviderName: "曼杰"},
+		{ProviderCode: "youyiyouer", ProviderName: "有一有二"},
+		{ProviderCode: "zhiyuan", ProviderName: "智元"},
+	}}
+	service := NewProvider(providerSourceStub{}, destination)
+
+	result, err := service.RunProviders(context.Background(), []string{"zhiyuan", "manjie", "zhiyuan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Providers != 2 {
+		t.Fatalf("RunProviders() result = %+v", result)
+	}
+	if strings.Join(destination.saved, ",") != "manjie,zhiyuan" {
+		t.Fatalf("saved providers = %v", destination.saved)
+	}
+}
+
+func TestProviderRunProvidersRejectsUnknownTargetBeforeSync(t *testing.T) {
+	destination := &providerDestinationStub{tables: []model.ProviderContentTable{
+		{ProviderCode: "manjie", ProviderName: "曼杰"},
+	}}
+	service := NewProvider(providerSourceStub{}, destination)
+
+	_, err := service.RunProviders(context.Background(), []string{"missing"})
+	if !errors.Is(err, ErrUnknownProvider) {
+		t.Fatalf("RunProviders() error = %v, want ErrUnknownProvider", err)
+	}
+	if len(destination.started) != 0 || len(destination.saved) != 0 {
+		t.Fatalf("sync started for unknown target: started=%v saved=%v", destination.started, destination.saved)
+	}
+}
+
 func containsError(err error, text string) bool {
 	return err != nil && strings.Contains(err.Error(), text)
 }

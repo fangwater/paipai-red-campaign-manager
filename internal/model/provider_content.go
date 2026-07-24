@@ -11,6 +11,8 @@ type ProviderContentTable struct {
 	SheetID          string
 	SheetName        string
 	LastSyncedAt     *time.Time
+	LastSyncStatus   string
+	LastSyncError    string
 }
 
 type ProviderNoteExecution struct {
@@ -40,10 +42,10 @@ type ProviderContentSnapshot struct {
 }
 
 type ProviderSyncResult struct {
-	Providers  int
-	Fetched    int
-	Upserted   int
-	Deleted    int64
-	Notes      int
-	NoteErrors int
+	Providers  int   `json:"providers"`
+	Fetched    int   `json:"fetched"`
+	Upserted   int   `json:"upserted"`
+	Deleted    int64 `json:"deleted"`
+	Notes      int   `json:"notes"`
+	NoteErrors int   `json:"note_errors"`
 }

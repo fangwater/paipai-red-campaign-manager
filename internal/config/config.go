@@ -4,14 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 )
 
 const (
-	defaultCron                    = "*/5 * * * *"
+	defaultLarkSyncListen          = "127.0.0.1:18081"
 	defaultTimeout                 = 10 * time.Minute
-	defaultTimezone                = "Asia/Shanghai"
 	defaultDocumentRefreshInterval = time.Hour
 )
 
@@ -20,9 +18,7 @@ type Config struct {
 	LarkAppSecret           string
 	LarkAppToken            string
 	DatabaseURL             string
-	SyncCron                string
-	SyncTimezone            string
-	SyncOnStart             bool
+	LarkSyncListen          string
 	SyncTimeout             time.Duration
 	DocumentRefreshInterval time.Duration
 }
@@ -33,19 +29,9 @@ func Load() (Config, error) {
 		LarkAppSecret:           os.Getenv("LARK_APP_SECRET"),
 		LarkAppToken:            os.Getenv("LARK_APP_TOKEN"),
 		DatabaseURL:             os.Getenv("DATABASE_URL"),
-		SyncCron:                envOrDefault("SYNC_CRON", defaultCron),
-		SyncTimezone:            envOrDefault("SYNC_TIMEZONE", defaultTimezone),
-		SyncOnStart:             true,
+		LarkSyncListen:          envOrDefault("LARK_SYNC_LISTEN", defaultLarkSyncListen),
 		SyncTimeout:             defaultTimeout,
 		DocumentRefreshInterval: defaultDocumentRefreshInterval,
-	}
-
-	if raw := os.Getenv("SYNC_ON_START"); raw != "" {
-		value, err := strconv.ParseBool(raw)
-		if err != nil {
-			return Config{}, fmt.Errorf("parse SYNC_ON_START: %w", err)
-		}
-		cfg.SyncOnStart = value
 	}
 
 	var err error
