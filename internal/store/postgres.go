@@ -38,7 +38,7 @@ func (p *Postgres) Close() {
 }
 
 func (p *Postgres) Migrate(ctx context.Context) error {
-	if _, err := p.pool.Exec(ctx, migrations.InitSQL+"\n"+migrations.ProviderContentSQL+"\n"+migrations.GuoraiSQL); err != nil {
+	if _, err := p.pool.Exec(ctx, migrations.InitSQL+"\n"+migrations.ProviderContentSQL+"\n"+migrations.GuoraiSQL+"\n"+migrations.XHSJGCampaignsSQL+"\n"+migrations.XHSJGDeliverySQL+"\n"+migrations.XHSJGManualSyncSQL); err != nil {
 		return fmt.Errorf("apply PostgreSQL migration: %w", err)
 	}
 	return nil

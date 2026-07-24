@@ -16,3 +16,18 @@ var ProviderContentSQL string
 //
 //go:embed 003_guorai.sql
 var GuoraiSQL string
+
+// XHSJGCampaignsSQL contains the XHS Spotlight campaign snapshot schema.
+//
+//go:embed 004_xhs_jg_campaigns.sql
+var XHSJGCampaignsSQL string
+
+// XHSJGDeliverySQL contains the XHS Spotlight unit and creativity snapshot schema.
+//
+//go:embed 005_xhs_jg_units_creativities.sql
+var XHSJGDeliverySQL string
+
+// XHSJGManualSyncSQL contains the XHS Spotlight manual sync run schema.
+//
+//go:embed 006_xhs_jg_manual_sync.sql
+var XHSJGManualSyncSQL string

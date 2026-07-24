@@ -66,6 +66,12 @@ cp .env.example .env
 - `SYNC_TIMEOUT`：单轮同步超时，默认 10 分钟
 - `DOCUMENT_REFRESH_INTERVAL`：稿件正文刷新间隔，默认 1 小时
 
+聚光 OpenAPI 配置：
+
+- `XHS_JG_APP_ID`：聚光开放平台应用 ID
+- `XHS_JG_SECRET`：聚光开放平台应用 Secret
+- `XHS_JG_SESSION_FILE`：OAuth Token 会话文件，默认 `.xhs-jg/session.json`
+
 ## 初始化数据库
 
 ```bash
@@ -149,6 +155,136 @@ LEFT JOIN service_provider_note_executions AS records
 GROUP BY tables.provider_code
 ORDER BY tables.provider_name;
 ```
+
+## 小红书聚光 OpenAPI
+
+应用 ID 和 Secret 只保存在已被 Git 忽略的 `.env` 中。独立二进制 `bin/xhs-jg-authd` 负责授权、Token 持久化、本机 HTTP 服务和 Token 自动续期。
+
+构建并交给 PM2 后台运行：
+
+```bash
+make xhs-authd-start
+```
+
+服务允许在没有 OAuth 会话时启动。取得十分钟内有效的 `auth_code` 后，用同一个二进制隐藏输入并提交一次授权：
+
+```bash
+make xhs-authd-authorize
+```
+
+授权成功后，会话保存到 `.xhs-jg/session.json`。服务默认在 access token 到期前 10 分钟刷新，失败后每分钟重试；刷新成功才会原子保存小红书返回的新 access token 和 refresh token。查看状态和日志：
+
+```bash
+make xhs-authd-status
+make xhs-authd-logs
+```
+
+HTTP 服务仅监听 `127.0.0.1:18080`：
+
+- `GET /healthz`：进程健康状态。
+- `GET /readyz`：是否已有可用 access token。
+- `GET /v1/oauth/status`：授权账户、广告主和过期时间，不包含 Token。
+- `POST /v1/oauth/authorize`：提交首次或重新授权的 `auth_code`。
+- `POST /v1/oauth/refresh`：立即触发一次 Token 刷新。
+- `POST /v1/campaigns/list`：查询一页聚光推广计划。
+- `POST /v1/campaigns/all`：以每页 100 条自动翻页，返回全部匹配的推广计划。
+- `POST /v1/units/list`：查询一页聚光单元；分页参数为顶层 `page`、`page_size`。
+- `POST /v1/units/all`：从第 1 页自动翻页，返回全部匹配的单元。
+- `POST /v1/creativities/list`：查询一页聚光创意。
+- `POST /v1/creativities/all`：从第 1 页自动翻页，返回全部匹配的创意。
+- `GET /v1/sync/status`：当前手动作业和最近 10 次运行记录。
+- `POST /v1/sync/campaigns`：显式刷新推广计划；默认增量，也支持完整刷新。
+- `POST /v1/sync/units`：显式刷新推广单元；默认增量，也支持完整刷新。
+- `POST /v1/sync/creativities`：显式完整刷新推广创意。
+
+控制接口不返回原始 Token，也不允许监听非回环地址。聚光业务接口由该服务内部取得有效 access token 后代为请求，不向调用方暴露 Token。
+
+查询全部未删除计划（`status=6`）：
+
+```bash
+curl -sS http://127.0.0.1:18080/v1/campaigns/all \
+  -H 'Content-Type: application/json' \
+  --data '{"advertiser_id":123,"status":6}'
+```
+
+单页接口支持 `campaign_ids`、创建日期、更新日期和状态过滤。上游实际分页字段使用 `page_index`、`page_size`；本地接口也兼容官方示例中的 camelCase 写法：
+
+```json
+{
+  "advertiser_id": 123,
+  "update_start_date": "2026-07-01",
+  "update_end_date": "2026-07-21",
+  "page": {"page_index": 1, "page_size": 100}
+}
+```
+
+`/v1/campaigns/all` 会忽略传入的分页值并从第 1 页开始拉取。它返回所有符合过滤条件的计划；若要明确排除已删除计划，请传 `status=6`。上游接口为 `POST https://adapi.xiaohongshu.com/api/open/jg/campaign/list`，参见[小红书官方“查询计划”文档](https://ad-market.xiaohongshu.com/docs-center?bizType=943&articleId=3150)。
+
+查询广告主下的全部单元不需要逐计划请求，因为 `campaign_id` 是可选参数：
+
+```bash
+curl -sS http://127.0.0.1:18080/v1/units/all \
+  -H 'Content-Type: application/json' \
+  --data '{"advertiser_id":123}'
+```
+
+单元查询接口的请求状态只支持 `1=投放中`、`2=暂停`，没有“全部未删除”的请求状态。结构同步因此不传 `status` 拉取全部结果，再排除返回值中 `unit_filter_state=1` 的已删除单元。上游接口为 `POST https://adapi.xiaohongshu.com/api/open/jg/unit/list`，参见[小红书官方“获取单元列表接口”文档](https://ad-market.xiaohongshu.com/docs-center?bizType=943&articleId=3044)。
+
+查询全部未删除创意（`status=2`）：
+
+```bash
+curl -sS http://127.0.0.1:18080/v1/creativities/all \
+  -H 'Content-Type: application/json' \
+  --data '{"advertiser_id":123,"status":2}'
+```
+
+创意上游接口为 `POST https://adapi.xiaohongshu.com/api/open/jg/creativity/search`，分页位于 `page.page_index`、`page.page_size`，参见[小红书官方“创意查询”文档](https://ad-market.xiaohongshu.com/docs-center?bizType=943&articleId=3158)。
+
+业务数据不会在定时器或服务启动时自动刷新。只有显式调用计划、单元或创意接口时，目标表才会更新。三个 Make 命令分别刷新全部授权广告主，计划和单元默认使用增量模式，创意使用完整模式：
+
+```bash
+make xhs-sync-campaigns
+make xhs-sync-units
+make xhs-sync-creativities
+make xhs-sync-status
+```
+
+HTTP 请求体为空或 `{}` 时处理全部授权广告主；传 `advertiser_id` 时只处理指定的已授权广告主。计划和单元的 `mode` 可选 `incremental` 或 `full`，省略时默认为 `incremental`：
+
+```bash
+curl -sS http://127.0.0.1:18080/v1/sync/campaigns \
+  -H "Content-Type: application/json" \
+  --data "{\"advertiser_id\":123,\"mode\":\"incremental\"}"
+
+curl -sS http://127.0.0.1:18080/v1/sync/units \
+  -H "Content-Type: application/json" \
+  --data "{\"mode\":\"full\"}"
+
+curl -sS http://127.0.0.1:18080/v1/sync/creativities \
+  -H "Content-Type: application/json" \
+  --data "{\"advertiser_id\":123}"
+
+curl -sS http://127.0.0.1:18080/v1/sync/status
+```
+
+触发接口返回 `202 Accepted` 和包含 `target` 的运行记录，作业在后台继续执行。同一时刻只允许一个目标运行，已有作业时返回 `409 Conflict`。状态持久化到 `xhs_jg_sync_runs`，服务重启后仍可查询最近结果。
+
+计划和单元各自维护独立增量游标，使用更新时间窗口并额外重叠一天以覆盖日期粒度边界。增量模式只 upsert 本次返回记录，不删除窗口外数据；完整模式核对全部未删除记录，并将本次结果中缺失的数据设置 `deleted_at`。官方创意接口没有更新时间过滤，因此创意只支持 `full`，传 `incremental` 会返回 `400 Bad Request`。
+
+同步结果写入 `xhs_jg_advertisers`、`xhs_jg_campaigns`、`xhs_jg_units` 和 `xhs_jg_creativities`。三个业务表均保留稳定检索字段和完整 `raw_payload`，通过 `advertiser_id`、`campaign_id`、`unit_id` 关联。旧的 `go run ./cmd/xhs-jg-campaign-sync` 命令仅用于一次性排查。
+
+
+仍可使用一次性 CLI 完成初始授权或手动刷新：
+
+```bash
+make xhs-token
+make xhs-refresh
+```
+
+OAuth 接口：
+
+- 获取：`POST https://adapi.xiaohongshu.com/api/open/oauth2/access_token`
+- 刷新：`POST https://adapi.xiaohongshu.com/api/open/oauth2/refresh_token`
 
 ## 薯量笔记/计划触达查询与导出
 

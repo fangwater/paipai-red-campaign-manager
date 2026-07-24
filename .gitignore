@@ -1,8 +1,8 @@
 .env
 .guorai/
+.xhs-jg/
 .idea/
 .vscode/
 bin/
 coverage.out
 paipai-red-campaign-manager
-go.mod.orig
