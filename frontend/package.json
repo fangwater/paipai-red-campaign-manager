@@ -11,6 +11,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "china-area-data": "^5.0.1",
+    "china-map-data": "^1.0.4",
     "echarts": "6.1.0",
     "exceljs": "4.4.0",
     "lucide-react": "1.26.0",

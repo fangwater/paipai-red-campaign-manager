@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight,
-  CircleDollarSign, CircleHelp, Lightbulb, LoaderCircle, Megaphone, Rows3, Search, X
+  CircleDollarSign, CircleHelp, ChevronDown, ChevronUp, Lightbulb, LoaderCircle, MapPin, Megaphone, Rows3, Search, Smartphone, Tags, Target, Users, X
 } from "lucide-react";
+import TargetRegionMap from "./TargetRegionMap";
 
 type Creativity = {
   creativity_id: number;
@@ -21,6 +22,32 @@ type Creativity = {
   synced_at: string;
 };
 
+type SearchKeyword = {
+  keyword_id: number;
+  keyword: string;
+  bid: number;
+  feed_bid: number;
+  keyword_source: number;
+  phrase_match_type: number;
+};
+
+type CrowdPackage = { value: string; name: string; group_id?: string; type?: string; tag?: string; status: number; sync_status: number; };
+type PremiumCrowd = { id: string; name: string; ratio: string; };
+
+type TargetConfig = {
+  gender: string; age: string; city: string; area_code: string; device: string; device_price: string;
+  intelligent_expansion: number; generalization_switch: number; search_city_intent: string;
+  interest_keywords: string[]; behavior_keywords: string[]; excluded_crowds: string[];
+  crowd_packages: CrowdPackage[]; content_interests: string[]; shopping_interests: string[];
+  premium_crowds: PremiumCrowd[]; dandelion_crowds: string[];
+  brand_interest_group: boolean; brand_recognition_group: boolean; category_interest_group: boolean; goods_interest_group: boolean;
+};
+
+type UnitDelivery = {
+  target_template_id: number; keyword_gen_type: number; keyword_target_period: number; keyword_target_actions: number[];
+  search_keyword_count: number; search_keywords: SearchKeyword[]; target: TargetConfig;
+};
+
 type Unit = {
   unit_id: number;
   unit_name: string;
@@ -33,6 +60,7 @@ type Unit = {
   created_at?: string;
   updated_at?: string;
   synced_at: string;
+  delivery?: UnitDelivery;
   creativities: Creativity[];
 };
 
@@ -186,6 +214,107 @@ function creativityCount(item: LinkItem): number {
     total + match.units.reduce((sum, unit) => sum + unit.creativities.length, 0), 0);
 }
 
+const EMPTY_DELIVERY: UnitDelivery = {
+  target_template_id: 0, keyword_gen_type: -1, keyword_target_period: 0, keyword_target_actions: [],
+  search_keyword_count: 0, search_keywords: [],
+  target: {
+    gender: "", age: "", city: "", area_code: "", device: "", device_price: "",
+    intelligent_expansion: 0, generalization_switch: 0, search_city_intent: "",
+    interest_keywords: [], behavior_keywords: [], excluded_crowds: [], crowd_packages: [],
+    content_interests: [], shopping_interests: [], premium_crowds: [], dandelion_crowds: [],
+    brand_interest_group: false, brand_recognition_group: false, category_interest_group: false, goods_interest_group: false
+  }
+};
+
+function genderLabel(value: string): string {
+  return value === "0" ? "男" : value === "1" ? "女" : "不限";
+}
+
+function deviceLabel(value: string): string {
+  return value === "ios" ? "苹果设备" : value === "android" ? "安卓设备" : "不限";
+}
+
+function separatedSummary(value: string, fallback: string, limit = 5): string {
+  if (!value || value === "all" || value === "-1") return fallback;
+  const parts = value.split("#").filter(Boolean);
+  return parts.length > limit ? parts.slice(0, limit).join("、") + "等 " + parts.length + " 项" : parts.join("、");
+}
+
+function keywordGenLabel(value: number): string {
+  return ({ [-1]: "未启用拓词", 0: "手动选词", 1: "智能拓词", 2: "手动 + 智能" } as Record<number, string>)[value] ?? "未配置";
+}
+
+function keywordActionLabel(actions: number[]): string {
+  const labels: Record<number, string> = { 1: "搜索", 2: "互动", 3: "阅读" };
+  return actions.map((action) => labels[action]).filter(Boolean).join("、");
+}
+
+function searchIntentLabel(value: string): string {
+  return ({ "0": "居住地用户", "1": "居住或意图用户", "2": "所有用户" } as Record<string, string>)[value] ?? "未配置";
+}
+
+function phraseMatchLabel(value: number): string {
+  return ({ 0: "精确匹配", 1: "短语匹配", 2: "智能匹配" } as Record<number, string>)[value] ?? "官方未定义（" + value + "）";
+}
+
+function DeliveryTagGroup({ label, values, meta }: { label: string; values: string[]; meta?: string }) {
+  if (values.length === 0) return null;
+  return <div className="delivery-tag-group"><div><strong>{label}</strong>{meta ? <span>{meta}</span> : null}</div><div>{values.map((value, index) => <span title={value} key={value + index}>{value}</span>)}</div></div>;
+}
+
+function UnitDeliveryDetail({ unit }: { unit: Unit }) {
+  const [expanded, setExpanded] = useState(false);
+  const delivery = unit.delivery ?? EMPTY_DELIVERY;
+  const target = delivery.target;
+  const keywords = expanded ? delivery.search_keywords : delivery.search_keywords.slice(0, 12);
+  const crowdValues = [
+    ...target.crowd_packages.map((crowd) => crowd.name || crowd.value),
+    ...target.premium_crowds.map((crowd) => crowd.name + (crowd.ratio ? " · " + crowd.ratio + " 倍" : "")),
+    ...target.dandelion_crowds
+  ].filter(Boolean);
+  const groupValues = [
+    target.brand_interest_group ? "本品牌兴趣人群" : "", target.brand_recognition_group ? "本品牌认知人群" : "",
+    target.category_interest_group ? "行业兴趣人群" : "", target.goods_interest_group ? "商品兴趣人群" : ""
+  ].filter(Boolean);
+  const industryValues = [...target.content_interests, ...target.shopping_interests];
+  const action = keywordActionLabel(delivery.keyword_target_actions);
+  const behaviorMeta = [delivery.keyword_target_period > 0 ? "近 " + delivery.keyword_target_period + " 天" : "", action].filter(Boolean).join(" · ");
+  const regionCount = target.city && target.city !== "all" ? target.city.split("#").filter(Boolean).length : 0;
+
+  return <section className="unit-delivery-panel" data-unit-id={unit.unit_id}>
+    <header><div><span><Target size={16} /></span><div><h5>{unit.unit_name || "未命名单元"}</h5><p>单元 {unit.unit_id}</p></div></div><div>
+      {delivery.target_template_id > 0 ? <span>定向包 {delivery.target_template_id}</span> : null}
+      <span>{keywordGenLabel(delivery.keyword_gen_type)}</span><strong>{delivery.search_keyword_count} 个搜索词</strong>
+    </div></header>
+    <dl className="target-overview-grid">
+      <div><dt>定向模式</dt><dd>{enumLabel(targetTypes, unit.target_type)}</dd></div>
+      <div><dt><Users size={12} />性别</dt><dd>{genderLabel(target.gender)}</dd></div>
+      <div><dt>年龄</dt><dd title={target.age}>{separatedSummary(target.age, "不限")}</dd></div>
+      <div><dt><MapPin size={12} />地域</dt><dd>{target.city === "all" || regionCount === 0 ? "全国" : regionCount + " 个地域"}</dd></div>
+      <div><dt><Smartphone size={12} />设备</dt><dd>{deviceLabel(target.device)}</dd></div>
+      <div><dt>手机价格</dt><dd title={target.device_price}>{separatedSummary(target.device_price, "不限", 3)}</dd></div>
+      <div><dt>智能扩量</dt><dd>{target.intelligent_expansion === 1 ? "开启" : "关闭"}</dd></div>
+      <div><dt>定向拓宽</dt><dd>{target.generalization_switch === 1 ? "开启" : "关闭"}</dd></div>
+      <div><dt>地域意图</dt><dd>{searchIntentLabel(target.search_city_intent)}</dd></div>
+    </dl>
+    <TargetRegionMap city={target.city} areaCode={target.area_code} />
+    <div className="audience-groups">
+      <DeliveryTagGroup label="人群包" values={crowdValues} />
+      <DeliveryTagGroup label="平台人群" values={groupValues} />
+      <DeliveryTagGroup label="行业兴趣" values={industryValues} />
+      <DeliveryTagGroup label="兴趣关键词" values={target.interest_keywords} />
+      <DeliveryTagGroup label="行为关键词" values={target.behavior_keywords} meta={behaviorMeta} />
+      <DeliveryTagGroup label="排除人群" values={target.excluded_crowds} />
+      {crowdValues.length + groupValues.length + industryValues.length + target.interest_keywords.length + target.behavior_keywords.length + target.excluded_crowds.length === 0 ? <div className="delivery-empty">未配置细分人群</div> : null}
+    </div>
+    <section className="search-keyword-section">
+      <header><div><Tags size={14} /><h6>搜索竞价关键词</h6></div><span>{delivery.search_keyword_count} 个</span></header>
+      {keywords.length > 0 ? <div className="search-keyword-table-wrap"><table><thead><tr><th>关键词</th><th>匹配方式</th><th>关键词出价</th><th>追投出价</th></tr></thead><tbody>{keywords.map((keyword) => <tr key={keyword.keyword_id || keyword.keyword}><td title={keyword.keyword}>{keyword.keyword}</td><td>{phraseMatchLabel(keyword.phrase_match_type)}</td><td>¥{money.format(keyword.bid / 100)}</td><td>{keyword.feed_bid > 0 ? "¥" + money.format(keyword.feed_bid / 100) : "-"}</td></tr>)}</tbody></table></div> : <div className="delivery-empty">未配置搜索竞价词</div>}
+      {delivery.search_keyword_count > 12 ? <button type="button" className="delivery-expand-button" onClick={() => setExpanded((current) => !current)}>{expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}{expanded ? "收起关键词" : "展开全部 " + delivery.search_keyword_count + " 个关键词"}</button> : null}
+    </section>
+  </section>;
+}
+
 function XhsLinkQuery() {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -325,6 +454,7 @@ function XhsLinkQuery() {
           <div className="linked-entity-table-wrap"><table className="linked-entity-table unit-table"><thead><tr><th>单元ID</th><th>单元名称</th><th>状态</th><th>出价</th><th>定向类型</th><th>不可用状态</th><th>创建类型</th><th>更新时间</th><th>同步时间</th></tr></thead><tbody>
             {match.units.map((unit) => <tr key={unit.unit_id}><td>{unit.unit_id}</td><td title={unit.unit_name}>{unit.unit_name || "-"}</td><td><span className={`entity-status ${unitStateTone(unit.unit_filter_state)}`} title={`开关：${enableLabel(unit.unit_enable)} · 原始状态：${unit.unit_filter_state}`}>{enumLabel(unitStates, unit.unit_filter_state)}</span></td><td>¥{money.format(unit.event_bid / 100)}</td><td title={`原始码值 ${unit.target_type}`}>{enumLabel(targetTypes, unit.target_type)}</td><td title={`原始码值 ${unit.not_available_status}`}>{enumLabel(unitAvailability, unit.not_available_status)}</td><td title={`原始码值 ${unit.creation_type}`}>{enumLabel(unitCreationTypes, unit.creation_type)}</td><td>{formatDate(unit.updated_at)}</td><td>{formatDate(unit.synced_at)}</td></tr>)}
           </tbody></table></div>
+          <div className="unit-delivery-list">{match.units.map((unit) => <UnitDeliveryDetail unit={unit} key={unit.unit_id} />)}</div>
         </section>
 
         <section className="linked-entity-section">

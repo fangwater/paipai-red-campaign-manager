@@ -29,6 +29,19 @@ const match = {
     target_type: 2,
     not_available_status: 0,
     creation_type: 0,
+    delivery: {
+      target_template_id: 226275, keyword_gen_type: 2, keyword_target_period: 7, keyword_target_actions: [1, 2],
+      search_keyword_count: 13,
+      search_keywords: Array.from({ length: 13 }, (_, index) => ({ keyword_id: index + 1, keyword: index === 0 ? "磷虾油" : "关键词" + (index + 1), bid: 125, feed_bid: 80, keyword_source: 14, phrase_match_type: index === 0 ? 3 : index % 2 })),
+      target: {
+        gender: "1", age: "28-32#33-100", city: "北京#上海#定安", area_code: "1#2#3", device: "ios", device_price: "4000-5999",
+        intelligent_expansion: 1, generalization_switch: 1, search_city_intent: "1",
+        interest_keywords: ["鱼油"], behavior_keywords: ["辅酶q10"], excluded_crowds: [],
+        crowd_packages: [{ value: "2048_1", name: "心脑健康人群", status: 2, sync_status: 2 }],
+        content_interests: ["医疗保健"], shopping_interests: ["营养保健"], premium_crowds: [], dandelion_crowds: [],
+        brand_interest_group: true, brand_recognition_group: false, category_interest_group: true, goods_interest_group: false
+      }
+    },
     updated_at: "2026-07-23T17:00:00+08:00",
     synced_at: "2026-07-24T11:13:03+08:00",
     creativities: [{
@@ -103,6 +116,34 @@ test("queries and expands all linked Spotlight levels", async ({ page }) => {
   await expect(page.locator(".unit-table tbody tr")).toContainText("智能定向");
   await expect(page.locator(".unit-table tbody tr")).toContainText("创意不为空");
   await expect(page.locator(".unit-table tbody tr")).toContainText("标准投");
+  const deliveryPanel = page.locator(".unit-delivery-panel");
+  await expect(deliveryPanel).toContainText("智能定向");
+  await expect(deliveryPanel).toContainText("心脑健康人群");
+  await expect(deliveryPanel).toContainText("医疗保健");
+  await expect(deliveryPanel).toContainText("鱼油");
+  await expect(deliveryPanel).toContainText("近 7 天 · 搜索、互动");
+  const regionMap = deliveryPanel.getByRole("img", { name: "中国地域投放地图，3 个地域" });
+  await expect(regionMap).toBeVisible();
+  await expect.poll(() => regionMap.locator("canvas").evaluate((canvas) => {
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const colors = new Set<string>();
+    for (let index = 0; index < pixels.length; index += 64) {
+      if (pixels[index + 3] > 0) colors.add(`${pixels[index]},${pixels[index + 1]},${pixels[index + 2]}`);
+    }
+    return colors.size;
+  })).toBeGreaterThan(10);
+  await expect(deliveryPanel.locator(".target-region-list")).toContainText("北京");
+  await expect(deliveryPanel.locator(".target-region-list")).toContainText("上海");
+  await expect(deliveryPanel.locator(".target-region-list")).toContainText("海南");
+  await expect(deliveryPanel.locator(".target-region-list")).toContainText("定安");
+  await expect(deliveryPanel.locator(".target-region-list")).not.toContainText("其他地域");
+  await expect(deliveryPanel.locator(".search-keyword-table-wrap tbody tr")).toHaveCount(12);
+  await page.getByRole("button", { name: "展开全部 13 个关键词" }).click();
+  await expect(deliveryPanel.locator(".search-keyword-table-wrap tbody tr")).toHaveCount(13);
+  await expect(deliveryPanel).toContainText("磷虾油");
+  await expect(deliveryPanel).toContainText("官方未定义（3）");
   await expect(page.locator(".creativity-table tbody tr")).toContainText("有效");
   await expect(page.locator(".creativity-table tbody tr")).toContainText("笔记");
   await expect(page.locator(".creativity-table tbody tr")).toContainText("无组件");

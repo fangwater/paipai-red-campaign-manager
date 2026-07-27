@@ -119,6 +119,7 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 			COALESCE(unit.unit_filter_state, 0), COALESCE(unit.event_bid, 0), COALESCE(unit.target_type, 0),
 			COALESCE(unit.not_available_status, 0), COALESCE(unit.creation_type, 0),
 			COALESCE(unit.unit_created_at::TEXT, ''), COALESCE(unit.unit_updated_at::TEXT, ''), COALESCE(unit.synced_at::TEXT, ''),
+			COALESCE(unit.raw_payload, '{}'::jsonb),
 			creativity.creativity_id, creativity.creativity_name, creativity.creativity_enable,
 			creativity.creativity_filter_state, creativity.material_type, creativity.conversion_type,
 			creativity.note_id, creativity.item_id, creativity.audit_status, creativity.creativity_audit_state,
@@ -144,6 +145,7 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 		var ordinal int
 		var match maituo.XHSLinkMatch
 		var unit maituo.XHSLinkUnit
+		var unitRaw []byte
 		var creativity maituo.XHSLinkCreativity
 		if err := linkRows.Scan(
 			&ordinal, &match.AdvertiserID, &match.AdvertiserName,
@@ -153,7 +155,7 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 			&match.BiddingStrategy, &match.CampaignDayBudget, &match.CampaignCreatedAt, &match.CampaignUpdatedAt,
 			&match.StartDate, &match.ExpireDate, &match.SyncedAt,
 			&unit.UnitID, &unit.UnitName, &unit.UnitEnable, &unit.UnitFilterState, &unit.EventBid,
-			&unit.TargetType, &unit.NotAvailableStatus, &unit.CreationType, &unit.CreatedAt, &unit.UpdatedAt, &unit.SyncedAt,
+			&unit.TargetType, &unit.NotAvailableStatus, &unit.CreationType, &unit.CreatedAt, &unit.UpdatedAt, &unit.SyncedAt, &unitRaw,
 			&creativity.CreativityID, &creativity.CreativityName, &creativity.CreativityEnable,
 			&creativity.CreativityFilterState, &creativity.MaterialType, &creativity.ConversionType,
 			&creativity.NoteID, &creativity.ItemID, &creativity.AuditStatus, &creativity.CreativityAuditState,
@@ -171,6 +173,7 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 		}
 		matchRef := &result.Items[itemIndex].Matches[lastMatch]
 		if unit.UnitID != lastUnit {
+			unit.Delivery = maituo.ParseXHSLinkUnitDelivery(unitRaw)
 			unit.Creativities = []maituo.XHSLinkCreativity{}
 			matchRef.Units = append(matchRef.Units, unit)
 			lastUnit = unit.UnitID
