@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"paipai-red-campaign-manager/internal/model"
+	"paipai-red-campaign-manager/internal/store"
 	"paipai-red-campaign-manager/internal/syncer"
 )
 
@@ -38,6 +39,15 @@ func (stub *manuscriptSyncStub) RunProviders(_ context.Context, providerCodes []
 	return stub.result, stub.err
 }
 
+type dandelionStatusStub struct {
+	runs []store.LarkSyncRun
+	err  error
+}
+
+func (stub *dandelionStatusStub) LarkSyncRuns(context.Context, int) ([]store.LarkSyncRun, error) {
+	return stub.runs, stub.err
+}
+
 type manuscriptStatusStub struct {
 	tables []model.ProviderContentTable
 	err    error
@@ -47,28 +57,29 @@ func (stub *manuscriptStatusStub) ProviderContentTables(context.Context) ([]mode
 	return stub.tables, stub.err
 }
 
-func testAPIHandler(base *baseSyncStub, manuscripts *manuscriptSyncStub, status *manuscriptStatusStub) http.Handler {
+func testAPIHandler(manuscripts *manuscriptSyncStub, status *manuscriptStatusStub) http.Handler {
+	return testAPIHandlerTargets(&baseSyncStub{}, manuscripts, status)
+}
+
+func testAPIHandlerTargets(dandelion *baseSyncStub, manuscripts *manuscriptSyncStub, status *manuscriptStatusStub) http.Handler {
 	return newAPIHandler(&apiServer{
-		baseSync:       base,
-		manuscriptSync: manuscripts,
-		statusStore:    status,
-		timeout:        time.Second,
-		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		dandelionSync:   dandelion,
+		dandelionStatus: &dandelionStatusStub{runs: []store.LarkSyncRun{}},
+		manuscriptSync:  manuscripts,
+		statusStore:     status,
+		timeout:         time.Second,
+		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 }
 
 func TestManuscriptSyncEndpointSelectsProviders(t *testing.T) {
-	base := &baseSyncStub{}
 	manuscripts := &manuscriptSyncStub{result: model.ProviderSyncResult{Providers: 2, Upserted: 12}}
-	handler := testAPIHandler(base, manuscripts, &manuscriptStatusStub{})
+	handler := testAPIHandler(manuscripts, &manuscriptStatusStub{})
 
 	response := performRequest(t, handler, http.MethodPost, "/v1/sync/manuscripts",
 		`{"provider_codes":["manjie","zhiyuan"]}`, http.StatusOK)
 	if strings.Join(manuscripts.providerCodes, ",") != "manjie,zhiyuan" {
 		t.Fatalf("provider codes = %v", manuscripts.providerCodes)
-	}
-	if base.calls != 0 {
-		t.Fatalf("base sync calls = %d", base.calls)
 	}
 	if !strings.Contains(response, `"providers":2`) || !strings.Contains(response, `"upserted":12`) {
 		t.Fatalf("response = %s", response)
@@ -76,28 +87,37 @@ func TestManuscriptSyncEndpointSelectsProviders(t *testing.T) {
 }
 
 func TestManuscriptSyncEndpointRejectsUnknownProvider(t *testing.T) {
-	handler := testAPIHandler(&baseSyncStub{}, &manuscriptSyncStub{err: syncer.ErrUnknownProvider}, &manuscriptStatusStub{})
+	handler := testAPIHandler(&manuscriptSyncStub{err: syncer.ErrUnknownProvider}, &manuscriptStatusStub{})
 	performRequest(t, handler, http.MethodPost, "/v1/sync/manuscripts",
 		`{"provider_codes":["missing"]}`, http.StatusBadRequest)
 }
 
-func TestBaseSyncEndpointIsSeparate(t *testing.T) {
-	base := &baseSyncStub{result: model.SyncResult{Tables: 3, Upserted: 20}}
+func TestDandelionSyncEndpointIsSeparate(t *testing.T) {
+	dandelion := &baseSyncStub{result: model.SyncResult{Tables: 1, Fetched: 3103, Upserted: 3103}}
 	manuscripts := &manuscriptSyncStub{}
-	handler := testAPIHandler(base, manuscripts, &manuscriptStatusStub{})
+	handler := testAPIHandlerTargets(dandelion, manuscripts, &manuscriptStatusStub{})
 
-	response := performRequest(t, handler, http.MethodPost, "/v1/sync/base", "{}", http.StatusOK)
-	if base.calls != 1 || manuscripts.providerCodes != nil {
-		t.Fatalf("base calls=%d manuscript codes=%v", base.calls, manuscripts.providerCodes)
+	response := performRequest(t, handler, http.MethodPost, "/v1/sync/dandelion", "{}", http.StatusOK)
+	if dandelion.calls != 1 || manuscripts.providerCodes != nil {
+		t.Fatalf("dandelion calls=%d manuscript codes=%v", dandelion.calls, manuscripts.providerCodes)
 	}
-	if !strings.Contains(response, `"tables":3`) {
+	if !strings.Contains(response, `"tables":1`) || !strings.Contains(response, `"fetched":3103`) {
+		t.Fatalf("response = %s", response)
+	}
+}
+
+func TestDandelionStatusEndpoint(t *testing.T) {
+	handler := testAPIHandlerTargets(&baseSyncStub{}, &manuscriptSyncStub{}, &manuscriptStatusStub{})
+	server := handler
+	response := performRequest(t, server, http.MethodGet, "/v1/sync/dandelion/status", "", http.StatusOK)
+	if !strings.Contains(response, "\"recent\":[]") {
 		t.Fatalf("response = %s", response)
 	}
 }
 
 func TestManuscriptStatusEndpoint(t *testing.T) {
 	syncedAt := time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC)
-	handler := testAPIHandler(&baseSyncStub{}, &manuscriptSyncStub{}, &manuscriptStatusStub{
+	handler := testAPIHandler(&manuscriptSyncStub{}, &manuscriptStatusStub{
 		tables: []model.ProviderContentTable{{
 			ProviderCode: "manjie", ProviderName: "曼杰", SheetName: "达人笔记执行表",
 			LastSyncStatus: "succeeded", LastSyncedAt: &syncedAt,
@@ -111,10 +131,17 @@ func TestManuscriptStatusEndpoint(t *testing.T) {
 }
 
 func TestManualSyncHandlerRejectsInvalidRequests(t *testing.T) {
-	handler := testAPIHandler(&baseSyncStub{}, &manuscriptSyncStub{}, &manuscriptStatusStub{})
+	handler := testAPIHandler(&manuscriptSyncStub{}, &manuscriptStatusStub{})
 	performRequest(t, handler, http.MethodGet, "/v1/sync/manuscripts", "", http.StatusMethodNotAllowed)
 	performRequest(t, handler, http.MethodPost, "/v1/sync/manuscripts", `{"unknown":true}`, http.StatusBadRequest)
-	performRequest(t, handler, http.MethodPost, "/v1/sync/base", `{"provider_codes":[]}`, http.StatusBadRequest)
+	performRequest(t, handler, http.MethodPost, "/v1/sync/dandelion", `{"provider_codes":[]}`, http.StatusBadRequest)
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/sync/base", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("removed base endpoint status=%d want=%d", recorder.Code, http.StatusNotFound)
+	}
 }
 
 func TestRequireLoopbackAddress(t *testing.T) {

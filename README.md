@@ -55,7 +55,9 @@ cp .env.example .env
 
 - `LARK_APP_ID`：飞书自建应用 ID
 - `LARK_APP_SECRET`：飞书自建应用密钥
-- `LARK_APP_TOKEN`：多维表格 Base 的 App Token
+- `LARK_APP_TOKEN`：原多维表格 Base 的 App Token
+- `LARK_DANDELION_APP_TOKEN`：包含“蒲公英数据”的 Base App Token
+- `LARK_DANDELION_TABLE_ID`：“蒲公英数据”真实表 ID
 - `DATABASE_URL`：本地 PostgreSQL 连接字符串
 
 飞书手动同步配置：
@@ -80,6 +82,49 @@ sudo -u postgres createdb -O "$USER" paipai_red
 
 服务启动时自动执行 `migrations/` 中全部幂等迁移。
 
+## 前端中台
+
+前端位于 `frontend/`，使用 React、TypeScript 和 Vite。Maituo 客户日报模块支持一次选择或拖放多个 `.xlsx` 文件，本地解析后按报表日期升序执行，并展示服务器中已保存的报表日期和文件状态。
+
+```bash
+make frontend-dev
+make frontend-build
+```
+
+开发服务默认运行在 `http://localhost:5173/paipai/`。生产入口使用 `https://pangutech.online/paipai/`，直接复用根域名现有 DNS 和 HTTPS 证书。构建产物部署至 `/var/www/paipai`，Nginx snippet 位于 `deploy/nginx/paipai-console.conf`。生产站点公开健康检查和固定用途的 Excel 导入入口，其他本机同步 API 仍不可访问。
+
+```bash
+make frontend-deploy
+```
+
+## Maituo 客户日报导入 API
+
+`POST /v1/imports/maituo-customer-daily` 接收 `multipart/form-data`，唯一字段 `file` 为不超过 50 MB 的 `.xlsx`。前端多选后按日期逐个调用该接口。`GET /v1/imports/maituo-customer-daily` 返回按报表日期倒序排列的已保存文件。公网入口统一为 `/paipai/api/imports/maituo-customer-daily`。
+
+系统识别以下 5 张目标表。工作簿至少包含其中一张即可；缺少的目标表会跳过且不会修改该表已有数据，其他未知工作表会被忽略。实际存在的目标表，其表名和表头必须与样本一致：
+
+- `总览KPI`，业务键为 `报表日期 + 指标`
+- `笔记明细`，业务键为 `报表日期 + 笔记ID + 子账户 + 计划名 + 场域`
+- `分SPU总览`，业务键为 `报表日期 + SPU`
+- `分子账户`，业务键为 `报表日期 + SPU + 子账户 + 场域`
+- `淘搜趋势`，业务键为表内 `日期`
+
+报表日期优先从文件名中的 `YYYY-MM-DD` 提取；文件名没有日期时，使用 `淘搜趋势` 的最大日期。缺少 `淘搜趋势` 且文件名也没有日期时无法导入。成功导入过的文件 SHA-256 会返回 `already_saved=true`，避免重复写入。
+
+前四张业务表按报表日期独立保存：同一日期重复上传时仅更新差异，不同日期互不覆盖。`淘搜趋势` 不使用工作簿报表日期，而是按表内日期维护一套趋势序列；补传早于当前最新报表日期的历史文件时不会回退趋势。每个文件只处理实际存在的目标表，解析、比较和写入位于同一个事务中。GET 结果中的 `present_sheets` 和 `missing_sheets` 用于前端展示表覆盖情况。历史列表会补齐日期序列：周五、周六识别为业务周末并标记“无需日报”，其他缺失日期标记为“缺少报表”。
+
+## 笔记计划分析 API
+
+`GET /v1/analytics/maituo/note-campaigns` 按 `笔记ID + 计划名 + 场域` 聚合笔记明细。公网入口为 `/paipai/api/analytics/maituo/note-campaigns`。查询参数：
+
+- `window`：`3d`、`7d` 或 `all`，默认 `7d`；3D/7D 取最近实际存在的报表日，周五、周六自然跳过
+- `q`：按笔记ID、计划名或场域模糊搜索
+- `sort`：`daily_spend` 按最新报表日消耗排序，`cumulative_spend` 按所选范围累计消耗排序，默认 `cumulative_spend`
+- `page`、`page_size`：分页参数，每页最多 100 个组合
+
+每个组合返回所选报表日内的累计消耗、累计回搜人数，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加。分析结果不返回笔记 URL、分类或子账户。
+
+
 ## 飞书手动同步 API
 
 构建并启动本机 API：
@@ -93,7 +138,10 @@ make lark-sync-start
 - `GET /healthz`：进程健康状态。
 - `POST /v1/sync/manuscripts`：同步服务商稿件表。
 - `GET /v1/sync/manuscripts/status`：查询三张稿件表最近的持久化同步状态。
-- `POST /v1/sync/base`：同步 Base 全部数据表和需要刷新的链接正文。
+- `POST /v1/sync/dandelion`：只同步配置 Base 内的“蒲公英数据”表。
+- `GET /v1/sync/dandelion/status`：查询蒲公英最近 10 次持久化同步结果。
+
+前端入口为 `/paipai/data-sync/dandelion` 和 `/paipai/data-sync/manuscripts`。公网只开放四个固定路径：两个状态查询和两个显式同步触发；飞书凭据、Base Token 与源表地址均不返回前端。
 
 稿件请求体为空或 `{}` 时同步全部三个服务商：`manjie`（曼杰）、`youyiyouer`（有一有二）、`zhiyuan`（智元）：
 
@@ -110,11 +158,15 @@ curl -sS http://127.0.0.1:18081/v1/sync/manuscripts \
   --data "{\"provider_codes\":[\"manjie\",\"zhiyuan\"]}"
 ```
 
-请求中的服务商代码会在开始写入前完整校验。未知或未启用代码返回 `400 Bad Request`，不会只执行部分有效目标。Base 快照通过以下命令显式执行：
+请求中的服务商代码会在开始写入前完整校验。未知或未启用代码返回 `400 Bad Request`，不会只执行部分有效目标。
+
+“蒲公英数据”是独立目标，只读取配置的单表，不会扫描同 Base 的其他数据表：
 
 ```bash
-make lark-sync-base
+make lark-sync-dandelion
 ```
+
+该目标当前对应 Base `ULhXbXkAGaiNARsahfcclBX4nWe` 内的 `tbl3djNUVT4WANi0`，接口成功结果中的 `tables` 固定为 `1`。记录使用 `app_token + table_id + record_id` 与其他飞书目标隔离。
 
 列出 Base 内全部数据表：
 
@@ -228,6 +280,8 @@ HTTP 服务仅监听 `127.0.0.1:18080`：
 - `POST /v1/sync/campaigns`：显式刷新推广计划；默认增量，也支持完整刷新。
 - `POST /v1/sync/units`：显式刷新推广单元；默认增量，也支持完整刷新。
 - `POST /v1/sync/creativities`：显式完整刷新推广创意。
+
+前端入口为 `/paipai/xhs-jg-sync/campaigns`、`/paipai/xhs-jg-sync/units` 和 `/paipai/xhs-jg-sync/creativities`。公网只开放同步状态与三个显式触发路径，不开放 Token、授权或原始查询接口。
 
 控制接口不返回原始 Token，也不允许监听非回环地址。聚光业务接口由该服务内部取得有效 access token 后代为请求，不向调用方暴露 Token。
 

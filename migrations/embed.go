@@ -31,3 +31,28 @@ var XHSJGDeliverySQL string
 //
 //go:embed 006_xhs_jg_manual_sync.sql
 var XHSJGManualSyncSQL string
+
+// MaituoCustomerDailySQL contains the fixed Maituo workbook schema.
+//
+//go:embed 008_maituo_customer_daily.sql
+var MaituoCustomerDailySQL string
+
+// MaituoNoteReportDatesSQL adds report-date history for note details.
+//
+//go:embed 009_maituo_note_report_dates.sql
+var MaituoNoteReportDatesSQL string
+
+// MaituoPartialWorkbooksSQL records the known sheets found in each workbook.
+//
+//go:embed 010_maituo_partial_workbooks.sql
+var MaituoPartialWorkbooksSQL string
+
+// MaituoDatedSummaryTablesSQL adds report-date history to the first four workbook tables.
+//
+//go:embed 011_maituo_dated_summary_tables.sql
+var MaituoDatedSummaryTablesSQL string
+
+// MaituoRemoveImportVersionSQL removes the obsolete import-version marker.
+//
+//go:embed 012_remove_maituo_import_version.sql
+var MaituoRemoveImportVersionSQL string

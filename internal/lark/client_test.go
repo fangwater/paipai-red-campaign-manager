@@ -6,6 +6,20 @@ import (
 	"paipai-red-campaign-manager/internal/model"
 )
 
+func TestSelectTable(t *testing.T) {
+	tables := []model.Table{{ID: "tbl-one", Name: "one"}, {ID: "tbl-target", Name: "target"}}
+	table, err := selectTable(tables, "tbl-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.ID != "tbl-target" || table.Name != "target" {
+		t.Fatalf("selectTable() = %+v", table)
+	}
+	if _, err := selectTable(tables, "missing"); err == nil {
+		t.Fatal("selectTable() accepted an unknown table")
+	}
+}
+
 func TestMillisecondsToTime(t *testing.T) {
 	value := int64(1_700_000_000_123)
 	got := millisecondsToTime(&value)

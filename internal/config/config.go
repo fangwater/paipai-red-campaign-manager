@@ -17,6 +17,8 @@ type Config struct {
 	LarkAppID               string
 	LarkAppSecret           string
 	LarkAppToken            string
+	LarkDandelionAppToken   string
+	LarkDandelionTableID    string
 	DatabaseURL             string
 	LarkSyncListen          string
 	SyncTimeout             time.Duration
@@ -28,6 +30,8 @@ func Load() (Config, error) {
 		LarkAppID:               os.Getenv("LARK_APP_ID"),
 		LarkAppSecret:           os.Getenv("LARK_APP_SECRET"),
 		LarkAppToken:            os.Getenv("LARK_APP_TOKEN"),
+		LarkDandelionAppToken:   os.Getenv("LARK_DANDELION_APP_TOKEN"),
+		LarkDandelionTableID:    os.Getenv("LARK_DANDELION_TABLE_ID"),
 		DatabaseURL:             os.Getenv("DATABASE_URL"),
 		LarkSyncListen:          envOrDefault("LARK_SYNC_LISTEN", defaultLarkSyncListen),
 		SyncTimeout:             defaultTimeout,
@@ -44,12 +48,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	missing := make([]string, 0, 4)
+	missing := make([]string, 0, 6)
 	for name, value := range map[string]string{
-		"LARK_APP_ID":     cfg.LarkAppID,
-		"LARK_APP_SECRET": cfg.LarkAppSecret,
-		"LARK_APP_TOKEN":  cfg.LarkAppToken,
-		"DATABASE_URL":    cfg.DatabaseURL,
+		"LARK_APP_ID":              cfg.LarkAppID,
+		"LARK_APP_SECRET":          cfg.LarkAppSecret,
+		"LARK_APP_TOKEN":           cfg.LarkAppToken,
+		"LARK_DANDELION_APP_TOKEN": cfg.LarkDandelionAppToken,
+		"LARK_DANDELION_TABLE_ID":  cfg.LarkDandelionTableID,
+		"DATABASE_URL":             cfg.DatabaseURL,
 	} {
 		if value == "" {
 			missing = append(missing, name)

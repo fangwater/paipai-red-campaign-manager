@@ -16,8 +16,9 @@ import (
 var ErrSyncLocked = errors.New("another sync for this Bitable is already running")
 
 type Postgres struct {
-	pool     *pgxpool.Pool
-	appToken string
+	pool        *pgxpool.Pool
+	appToken    string
+	tableScoped bool
 }
 
 func NewPostgres(ctx context.Context, databaseURL, appToken string) (*Postgres, error) {
@@ -33,12 +34,23 @@ func NewPostgres(ctx context.Context, databaseURL, appToken string) (*Postgres, 
 	return &Postgres{pool: pool, appToken: appToken}, nil
 }
 
+// NewTableScopedPostgres reconciles only tables present in each snapshot. It is
+// intended for independent single-table sync targets that share a Base token.
+func NewTableScopedPostgres(ctx context.Context, databaseURL, appToken string) (*Postgres, error) {
+	postgres, err := NewPostgres(ctx, databaseURL, appToken)
+	if err != nil {
+		return nil, err
+	}
+	postgres.tableScoped = true
+	return postgres, nil
+}
+
 func (p *Postgres) Close() {
 	p.pool.Close()
 }
 
 func (p *Postgres) Migrate(ctx context.Context) error {
-	if _, err := p.pool.Exec(ctx, migrations.InitSQL+"\n"+migrations.ProviderContentSQL+"\n"+migrations.GuoraiSQL+"\n"+migrations.XHSJGCampaignsSQL+"\n"+migrations.XHSJGDeliverySQL+"\n"+migrations.XHSJGManualSyncSQL); err != nil {
+	if _, err := p.pool.Exec(ctx, migrations.InitSQL+"\n"+migrations.ProviderContentSQL+"\n"+migrations.GuoraiSQL+"\n"+migrations.XHSJGCampaignsSQL+"\n"+migrations.XHSJGDeliverySQL+"\n"+migrations.XHSJGManualSyncSQL+"\n"+migrations.MaituoCustomerDailySQL+"\n"+migrations.MaituoNoteReportDatesSQL+"\n"+migrations.MaituoPartialWorkbooksSQL+"\n"+migrations.MaituoDatedSummaryTablesSQL+"\n"+migrations.MaituoRemoveImportVersionSQL); err != nil {
 		return fmt.Errorf("apply PostgreSQL migration: %w", err)
 	}
 	return nil
@@ -94,7 +106,11 @@ func (p *Postgres) ReplaceSnapshot(ctx context.Context, snapshot model.Snapshot,
 		}
 	}
 
-	runID, err := p.startRun(ctx)
+	runTableID := ""
+	if p.tableScoped && len(snapshot.Tables) == 1 {
+		runTableID = snapshot.Tables[0].ID
+	}
+	runID, err := p.startRun(ctx, runTableID)
 	if err != nil {
 		return result, err
 	}
@@ -239,34 +255,44 @@ func (p *Postgres) ReplaceSnapshot(ctx context.Context, snapshot model.Snapshot,
 		SET deleted_at = NOW(), synced_at = NOW()
 		WHERE target.app_token = $1
 		  AND target.deleted_at IS NULL
+		  AND ($2 = FALSE OR EXISTS (
+			SELECT 1 FROM sync_table_ids AS scope
+			WHERE scope.table_id = target.table_id
+		  ))
 		  AND NOT EXISTS (
 			SELECT 1
 			FROM sync_record_ids AS source
 			WHERE source.table_id = target.table_id
 			  AND source.record_id = target.record_id
 		  )
-	`, p.appToken)
+	`, p.appToken, p.tableScoped)
 	if err != nil {
 		return result, fmt.Errorf("mark missing records deleted: %w", err)
 	}
 	result.Deleted = commandTag.RowsAffected()
 
-	if _, err := tx.Exec(ctx, `
-		UPDATE lark_bitable_tables AS target
-		SET deleted_at = NOW(), synced_at = NOW()
-		WHERE target.app_token = $1
-		  AND target.deleted_at IS NULL
-		  AND NOT EXISTS (
-			SELECT 1 FROM sync_table_ids AS source
-			WHERE source.table_id = target.table_id
-		  )
-	`, p.appToken); err != nil {
-		return result, fmt.Errorf("mark missing tables deleted: %w", err)
+	if !p.tableScoped {
+		if _, err := tx.Exec(ctx, `
+			UPDATE lark_bitable_tables AS target
+			SET deleted_at = NOW(), synced_at = NOW()
+			WHERE target.app_token = $1
+			  AND target.deleted_at IS NULL
+			  AND NOT EXISTS (
+				SELECT 1 FROM sync_table_ids AS source
+				WHERE source.table_id = target.table_id
+			  )
+		`, p.appToken); err != nil {
+			return result, fmt.Errorf("mark missing tables deleted: %w", err)
+		}
 	}
 
 	if _, err := tx.Exec(ctx, `
 		DELETE FROM lark_record_documents AS target
 		WHERE target.app_token = $1
+		  AND ($2 = FALSE OR EXISTS (
+			SELECT 1 FROM sync_table_ids AS scope
+			WHERE scope.table_id = target.table_id
+		  ))
 		  AND NOT EXISTS (
 			SELECT 1
 			FROM sync_document_refs AS source
@@ -276,7 +302,7 @@ func (p *Postgres) ReplaceSnapshot(ctx context.Context, snapshot model.Snapshot,
 			  AND source.provider = target.provider
 			  AND source.resource_key = target.resource_key
 		  )
-	`, p.appToken); err != nil {
+	`, p.appToken, p.tableScoped); err != nil {
 		return result, fmt.Errorf("delete stale document references: %w", err)
 	}
 
@@ -286,13 +312,13 @@ func (p *Postgres) ReplaceSnapshot(ctx context.Context, snapshot model.Snapshot,
 	return result, nil
 }
 
-func (p *Postgres) startRun(ctx context.Context) (int64, error) {
+func (p *Postgres) startRun(ctx context.Context, tableID string) (int64, error) {
 	var id int64
 	err := p.pool.QueryRow(ctx, `
 		INSERT INTO sync_runs (app_token, table_id, status)
-		VALUES ($1, '', 'running')
+		VALUES ($1, $2, 'running')
 		RETURNING id
-	`, p.appToken).Scan(&id)
+	`, p.appToken, tableID).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("create sync run: %w", err)
 	}

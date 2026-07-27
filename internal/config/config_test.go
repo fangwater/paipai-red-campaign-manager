@@ -9,6 +9,8 @@ func TestLoad(t *testing.T) {
 	t.Setenv("LARK_APP_ID", "app-id")
 	t.Setenv("LARK_APP_SECRET", "secret")
 	t.Setenv("LARK_APP_TOKEN", "app-token")
+	t.Setenv("LARK_DANDELION_APP_TOKEN", "dandelion-app-token")
+	t.Setenv("LARK_DANDELION_TABLE_ID", "tbl-dandelion")
 	t.Setenv("DATABASE_URL", "postgres://localhost/db")
 	t.Setenv("LARK_SYNC_LISTEN", "127.0.0.1:19081")
 	t.Setenv("SYNC_TIMEOUT", "30s")
@@ -17,6 +19,9 @@ func TestLoad(t *testing.T) {
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.LarkDandelionAppToken != "dandelion-app-token" || cfg.LarkDandelionTableID != "tbl-dandelion" {
+		t.Fatalf("dandelion config = %q / %q", cfg.LarkDandelionAppToken, cfg.LarkDandelionTableID)
 	}
 	if cfg.LarkSyncListen != "127.0.0.1:19081" {
 		t.Fatalf("LarkSyncListen = %q", cfg.LarkSyncListen)
@@ -33,6 +38,8 @@ func TestLoadRequiresCredentials(t *testing.T) {
 	t.Setenv("LARK_APP_ID", "")
 	t.Setenv("LARK_APP_SECRET", "")
 	t.Setenv("LARK_APP_TOKEN", "")
+	t.Setenv("LARK_DANDELION_APP_TOKEN", "")
+	t.Setenv("LARK_DANDELION_TABLE_ID", "")
 	t.Setenv("DATABASE_URL", "")
 
 	if _, err := Load(); err == nil {

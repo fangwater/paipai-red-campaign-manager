@@ -30,16 +30,24 @@ type manuscriptSyncService interface {
 	RunProviders(context.Context, []string) (model.ProviderSyncResult, error)
 }
 
+type dandelionStatusStore interface {
+	LarkSyncRuns(context.Context, int) ([]store.LarkSyncRun, error)
+}
+
 type manuscriptStatusStore interface {
 	ProviderContentTables(context.Context) ([]model.ProviderContentTable, error)
 }
 
 type apiServer struct {
-	baseSync       baseSyncService
-	manuscriptSync manuscriptSyncService
-	statusStore    manuscriptStatusStore
-	timeout        time.Duration
-	logger         *slog.Logger
+	dandelionSync       baseSyncService
+	dandelionStatus     dandelionStatusStore
+	manuscriptSync      manuscriptSyncService
+	statusStore         manuscriptStatusStore
+	maituoImport        maituoImportStore
+	maituoAnalytics     maituoAnalyticsStore
+	maituoXHSLinksStore maituoXHSLinkStore
+	timeout             time.Duration
+	logger              *slog.Logger
 }
 
 type apiResponse struct {
@@ -93,13 +101,29 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 
+	dandelionDestination, err := store.NewTableScopedPostgres(ctx, cfg.DatabaseURL, cfg.LarkDandelionAppToken)
+	if err != nil {
+		return err
+	}
+	defer dandelionDestination.Close()
+
 	source := larksource.NewClient(cfg.LarkAppID, cfg.LarkAppSecret, cfg.LarkAppToken)
+	dandelionSource := larksource.NewSingleTableSource(
+		cfg.LarkAppID,
+		cfg.LarkAppSecret,
+		cfg.LarkDandelionAppToken,
+		cfg.LarkDandelionTableID,
+	)
 	handler := newAPIHandler(&apiServer{
-		baseSync:       syncer.New(source, destination, cfg.DocumentRefreshInterval),
-		manuscriptSync: syncer.NewProvider(source, destination),
-		statusStore:    destination,
-		timeout:        cfg.SyncTimeout,
-		logger:         logger,
+		dandelionSync:       syncer.New(dandelionSource, dandelionDestination, cfg.DocumentRefreshInterval),
+		dandelionStatus:     dandelionDestination,
+		manuscriptSync:      syncer.NewProvider(source, destination),
+		statusStore:         destination,
+		maituoImport:        destination,
+		maituoAnalytics:     destination,
+		maituoXHSLinksStore: destination,
+		timeout:             cfg.SyncTimeout,
+		logger:              logger,
 	})
 	listener, err := net.Listen("tcp", cfg.LarkSyncListen)
 	if err != nil {
@@ -125,7 +149,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("Lark manual sync API started",
 		"listen", listener.Addr().String(),
 		"manual_only", true,
-		"targets", []string{"base", "manuscripts"},
+		"targets", []string{"dandelion", "manuscripts"},
 		"sync_timeout", cfg.SyncTimeout,
 	)
 	select {
@@ -146,7 +170,11 @@ func run(ctx context.Context, logger *slog.Logger) error {
 func newAPIHandler(server *apiServer) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", server.health)
-	mux.HandleFunc("/v1/sync/base", server.syncBase)
+	mux.HandleFunc("/v1/sync/dandelion", server.syncDandelion)
+	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
+	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
+	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
+	mux.HandleFunc("/v1/analytics/maituo/xhs-links", server.maituoXHSLinks)
 	mux.HandleFunc("/v1/sync/manuscripts", server.syncManuscripts)
 	mux.HandleFunc("/v1/sync/manuscripts/status", server.manuscriptStatus)
 	return noStoreHeaders(mux)
@@ -160,7 +188,26 @@ func (server *apiServer) health(writer http.ResponseWriter, request *http.Reques
 	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: map[string]string{"status": "ok"}})
 }
 
-func (server *apiServer) syncBase(writer http.ResponseWriter, request *http.Request) {
+func (server *apiServer) dandelionStatusHandler(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	runs, err := server.dandelionStatus.LarkSyncRuns(ctx, 10)
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: map[string]interface{}{"recent": runs}})
+}
+
+func (server *apiServer) syncDandelion(writer http.ResponseWriter, request *http.Request) {
+	server.syncBitableTarget(writer, request, "dandelion", server.dandelionSync)
+}
+
+func (server *apiServer) syncBitableTarget(writer http.ResponseWriter, request *http.Request, target string, service baseSyncService) {
 	if request.Method != http.MethodPost {
 		methodNotAllowed(writer, http.MethodPost)
 		return
@@ -171,8 +218,13 @@ func (server *apiServer) syncBase(writer http.ResponseWriter, request *http.Requ
 	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
 	defer cancel()
 	startedAt := time.Now()
-	result, err := server.baseSync.Run(ctx)
-	server.logger.Info("Lark Base manual sync finished", "result", result, "duration", time.Since(startedAt), "error", err)
+	result, err := service.Run(ctx)
+	server.logger.Info("Lark Bitable manual sync finished",
+		"target", target,
+		"result", result,
+		"duration", time.Since(startedAt),
+		"error", err,
+	)
 	writeSyncResult(writer, result, err)
 }
 
@@ -251,7 +303,7 @@ func writeSyncResult(writer http.ResponseWriter, result interface{}, err error) 
 	}
 	status := http.StatusBadGateway
 	switch {
-	case errors.Is(err, syncer.ErrAlreadyRunning):
+	case errors.Is(err, syncer.ErrAlreadyRunning), errors.Is(err, store.ErrSyncLocked):
 		status = http.StatusConflict
 	case errors.Is(err, syncer.ErrUnknownProvider):
 		status = http.StatusBadRequest

@@ -1,0 +1,33 @@
+.settings-page-heading { margin-bottom: 20px; }
+.settings-refresh { display: inline-flex; align-items: center; gap: 7px; }
+.settings-refresh:disabled { color: #a3a8ac; cursor: not-allowed; }
+.service-overview, .settings-actions { overflow: hidden; border: 1px solid #e0e4e6; border-radius: 8px; background: #fff; }
+.service-overview > header { min-height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-bottom: 1px solid #e7eaeb; color: #8a9196; }
+.service-overview > header > div { display: flex; flex-direction: column; gap: 3px; }
+.service-overview h2, .settings-actions h2 { margin: 0; color: #2a3034; font-size: 14px; font-weight: 650; }
+.service-overview p { margin: 0; color: #899096; font-size: 9px; }
+.service-status-row { min-height: 64px; display: grid; grid-template-columns: 36px minmax(0, 1fr) 86px; align-items: center; gap: 11px; padding: 9px 16px; border-bottom: 1px solid #eceeef; }
+.service-status-row:last-child { border-bottom: 0; }
+.service-kind { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; background: #eef2f1; color: #467064; }
+.service-status-row > div { display: flex; flex-direction: column; gap: 3px; }
+.service-status-row strong { color: #343a3e; font-size: 11px; }
+.service-status-row span { color: #899096; font-size: 9px; }
+.service-health { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10px !important; font-weight: 650; }
+.service-health.online { color: #28735d; }
+.service-health.offline { color: #bd4149; }
+.service-health.checking { color: #a36d25; }
+.settings-actions { margin-top: 18px; }
+.settings-actions > header { min-height: 52px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #e7eaeb; }
+.settings-actions > div { display: grid; grid-template-columns: repeat(2, 1fr); }
+.settings-actions button { min-height: 72px; display: flex; align-items: center; gap: 11px; padding: 12px 16px; border: 0; border-right: 1px solid #eceeef; background: #fff; color: #397662; text-align: left; }
+.settings-actions button:last-child { border-right: 0; }
+.settings-actions button:hover { background: #f8faf9; }
+.settings-actions button > span { display: flex; flex-direction: column; gap: 4px; }
+.settings-actions button strong { color: #343a3e; font-size: 11px; }
+.settings-actions button small { color: #899096; font-size: 9px; }
+
+@media (max-width: 620px) {
+  .settings-actions > div { grid-template-columns: 1fr; }
+  .settings-actions button { border-right: 0; border-bottom: 1px solid #eceeef; }
+  .settings-actions button:last-child { border-bottom: 0; }
+}

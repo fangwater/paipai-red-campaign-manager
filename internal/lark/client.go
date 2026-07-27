@@ -33,6 +33,26 @@ type Client struct {
 	appToken string
 }
 
+type SingleTableSource struct {
+	client  *Client
+	tableID string
+}
+
+func NewSingleTableSource(appID, appSecret, appToken, tableID string) *SingleTableSource {
+	return &SingleTableSource{
+		client:  NewClient(appID, appSecret, appToken),
+		tableID: tableID,
+	}
+}
+
+func (source *SingleTableSource) Snapshot(ctx context.Context) (model.Snapshot, error) {
+	return source.client.snapshotTable(ctx, source.tableID)
+}
+
+func (source *SingleTableSource) FetchDocuments(ctx context.Context, refs []model.DocumentRef) ([]model.Document, error) {
+	return source.client.FetchDocuments(ctx, refs)
+}
+
 func NewClient(appID, appSecret, appToken string) *Client {
 	return &Client{
 		client:   larksdk.NewClient(appID, appSecret),
@@ -57,6 +77,32 @@ func (c *Client) Snapshot(ctx context.Context) (model.Snapshot, error) {
 		snapshot.DocumentRefs = append(snapshot.DocumentRefs, refs...)
 	}
 	return snapshot, nil
+}
+
+func (c *Client) snapshotTable(ctx context.Context, tableID string) (model.Snapshot, error) {
+	tables, err := c.listTables(ctx)
+	if err != nil {
+		return model.Snapshot{}, err
+	}
+	table, err := selectTable(tables, tableID)
+	if err != nil {
+		return model.Snapshot{}, err
+	}
+	records, refs, err := c.listRecords(ctx, table.ID)
+	if err != nil {
+		return model.Snapshot{}, fmt.Errorf("sync table %s (%s): %w", table.Name, table.ID, err)
+	}
+	table.Records = records
+	return model.Snapshot{Tables: []model.Table{table}, DocumentRefs: refs}, nil
+}
+
+func selectTable(tables []model.Table, tableID string) (model.Table, error) {
+	for _, table := range tables {
+		if table.ID == tableID {
+			return table, nil
+		}
+	}
+	return model.Table{}, fmt.Errorf("Bitable table %q was not found", tableID)
 }
 
 func (c *Client) FetchDocuments(ctx context.Context, refs []model.DocumentRef) ([]model.Document, error) {
