@@ -12,15 +12,33 @@ import (
 )
 
 type maituoAnalyticsStub struct {
-	query  maituo.NoteCampaignAnalysisQuery
-	result maituo.NoteCampaignAnalysis
-	calls  int
+	query            maituo.NoteCampaignAnalysisQuery
+	result           maituo.NoteCampaignAnalysis
+	comparisonQuery  maituo.TrafficComparisonQuery
+	comparisonResult maituo.TrafficComparison
+	deliveryQuery    maituo.TrafficDeliveryComparisonQuery
+	deliveryResult   maituo.TrafficDeliveryComparison
+	calls            int
+	comparisonCalls  int
+	deliveryCalls    int
 }
 
 func (stub *maituoAnalyticsStub) MaituoNoteCampaignAnalysis(_ context.Context, query maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error) {
 	stub.calls++
 	stub.query = query
 	return stub.result, nil
+}
+
+func (stub *maituoAnalyticsStub) MaituoTrafficComparison(_ context.Context, query maituo.TrafficComparisonQuery) (maituo.TrafficComparison, error) {
+	stub.comparisonCalls++
+	stub.comparisonQuery = query
+	return stub.comparisonResult, nil
+}
+
+func (stub *maituoAnalyticsStub) MaituoTrafficDeliveryComparison(_ context.Context, query maituo.TrafficDeliveryComparisonQuery) (maituo.TrafficDeliveryComparison, error) {
+	stub.deliveryCalls++
+	stub.deliveryQuery = query
+	return stub.deliveryResult, nil
 }
 
 func TestMaituoNoteCampaignAnalysis(t *testing.T) {
@@ -66,5 +84,59 @@ func TestMaituoNoteCampaignAnalysisRejectsInvalidWindow(t *testing.T) {
 	server.maituoNoteCampaignAnalysis(response, request)
 	if response.Code != http.StatusBadRequest || stub.calls != 0 {
 		t.Fatalf("status = %d, calls = %d", response.Code, stub.calls)
+	}
+}
+
+func TestMaituoTrafficComparison(t *testing.T) {
+	stub := &maituoAnalyticsStub{comparisonResult: maituo.TrafficComparison{Window: "3d", Total: 2}}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/traffic-comparisons?window=3d&q=note&page=2&page_size=40", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoTrafficComparison(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if stub.comparisonCalls != 1 || stub.comparisonQuery.Window != "3d" || stub.comparisonQuery.Search != "note" || stub.comparisonQuery.Page != 2 || stub.comparisonQuery.PageSize != 40 {
+		t.Fatalf("calls = %d, query = %+v", stub.comparisonCalls, stub.comparisonQuery)
+	}
+}
+
+func TestMaituoTrafficComparisonRejectsInvalidWindow(t *testing.T) {
+	stub := &maituoAnalyticsStub{}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/traffic-comparisons?window=30d", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoTrafficComparison(response, request)
+	if response.Code != http.StatusBadRequest || stub.comparisonCalls != 0 {
+		t.Fatalf("status = %d, calls = %d", response.Code, stub.comparisonCalls)
+	}
+}
+
+func TestMaituoTrafficDeliveryComparison(t *testing.T) {
+	stub := &maituoAnalyticsStub{deliveryResult: maituo.TrafficDeliveryComparison{NoteID: "note-1", Placement: "搜索"}}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/traffic-comparison-delivery?note_id=note-1&placement=%E6%90%9C%E7%B4%A2", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoTrafficDeliveryComparison(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if stub.deliveryCalls != 1 || stub.deliveryQuery.NoteID != "note-1" || stub.deliveryQuery.Placement != "搜索" {
+		t.Fatalf("calls = %d, query = %+v", stub.deliveryCalls, stub.deliveryQuery)
+	}
+}
+
+func TestMaituoTrafficDeliveryComparisonRejectsInvalidPlacement(t *testing.T) {
+	stub := &maituoAnalyticsStub{}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/traffic-comparison-delivery?note_id=note-1&placement=all", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoTrafficDeliveryComparison(response, request)
+	if response.Code != http.StatusBadRequest || stub.deliveryCalls != 0 {
+		t.Fatalf("status = %d, calls = %d", response.Code, stub.deliveryCalls)
 	}
 }

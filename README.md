@@ -124,6 +124,18 @@ make frontend-deploy
 
 每个组合返回所选报表日内的累计消耗、累计回搜人数，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加。分析结果不返回笔记 URL、分类或子账户。
 
+## 投流情况对比 API
+
+`GET /v1/analytics/maituo/traffic-comparisons` 按 `笔记ID + 场域` 聚合最新报表日仍在投放的计划。公网入口为 `/paipai/api/analytics/maituo/traffic-comparisons`，前端页面为 `/paipai/traffic-comparison`。查询参数：
+
+- `window`：`3d`、`7d` 或 `all`，默认 `7d`；用于计划趋势和区间指标
+- `q`：按笔记ID、计划名或场域模糊搜索；命中计划名时仍返回同笔记、同场域下的全部计划
+- `page`、`page_size`：分页参数，每页最多 100 个笔记场域组合
+
+列表固定按“当天有效回搜成本差异降序、最高当天回搜成本降序”排列。单计划组合继续返回，但差异为 0；当天回搜人数为 0 的计划标记为无有效成本，不以 0 元参与差异计算。详情返回同一笔记、同一场域下各计划的当天指标、所选区间汇总和逐日报表点；周末不补日期，回搜成本不累加。
+
+`GET /v1/analytics/maituo/traffic-comparison-delivery?note_id=...&placement=信息流|搜索` 返回选中笔记场域下各计划关联到的聚光计划、单元及投放配置，公网入口为 `/paipai/api/analytics/maituo/traffic-comparison-delivery`。前端据此横向比较出价与优化目标、单元定向、人群、地域、设备和搜索关键词，不展示日报子账户、广告账户和计划日预算。默认只展示不同配置，列表型配置还会移除各计划共有值；地域归并到省级后比较。该接口按需加载，不增加列表响应体积。
+
 
 ## 飞书手动同步 API
 

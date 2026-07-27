@@ -4,73 +4,11 @@ import { TooltipComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import areaDataSource from "china-area-data/data.json";
 import chinaMap from "china-map-data/china.js";
+import { groupRegions, provinceNames, splitRegions } from "./target-regions";
 
 echarts.use([MapChart, TooltipComponent, CanvasRenderer]);
 echarts.registerMap("china-target-regions", chinaMap as never);
-
-type AreaData = Record<string, Record<string, string>>;
-type RegionGroup = { province: string; cities: string[] };
-
-const areaData = areaDataSource as AreaData;
-
-function normalizedAreaName(value: string): string {
-  return value
-    .replace(/特别行政区$/, "")
-    .replace(/壮族自治区$|回族自治区$|维吾尔自治区$|自治区$/, "")
-    .replace(/省$|市$|地区$|盟$|自治州$|林区$|县$/, "");
-}
-
-const provinceNames = Object.entries(areaData["86"] ?? {}).map(([code, name]) => ({
-  code,
-  mapName: normalizedAreaName(name)
-}));
-
-const cityProvince = new Map<string, string>();
-for (const province of provinceNames) {
-  cityProvince.set(province.mapName, province.mapName);
-  for (const [cityCode, cityName] of Object.entries(areaData[province.code] ?? {})) {
-    cityProvince.set(normalizedAreaName(cityName), province.mapName);
-    if (cityName.includes("直辖县级行政区划")) {
-      for (const countyName of Object.values(areaData[cityCode] ?? {})) {
-        cityProvince.set(normalizedAreaName(countyName), province.mapName);
-      }
-    }
-  }
-}
-
-function splitRegions(value: string): string[] {
-  if (!value || value === "all" || value === "-1") return [];
-  return value.split("#").map((item) => item.trim()).filter(Boolean);
-}
-
-function groupRegions(city: string): { nationwide: boolean; groups: RegionGroup[]; unmatched: string[]; total: number } {
-  const nationwide = city === "all";
-  const cities = splitRegions(city);
-  const grouped = new Map<string, string[]>();
-  const unmatched: string[] = [];
-
-  for (const cityName of cities) {
-    const province = cityProvince.get(normalizedAreaName(cityName));
-    if (!province) {
-      unmatched.push(cityName);
-      continue;
-    }
-    const values = grouped.get(province) ?? [];
-    values.push(cityName);
-    grouped.set(province, values);
-  }
-
-  return {
-    nationwide,
-    groups: provinceNames
-      .filter((province) => grouped.has(province.mapName))
-      .map((province) => ({ province: province.mapName, cities: grouped.get(province.mapName) ?? [] })),
-    unmatched,
-    total: nationwide ? provinceNames.length : cities.length
-  };
-}
 
 type TargetRegionMapProps = { city: string; areaCode: string };
 

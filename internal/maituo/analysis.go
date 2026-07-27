@@ -40,3 +40,73 @@ type NoteCampaignAnalysis struct {
 	PageSize    int                        `json:"page_size"`
 	Items       []NoteCampaignAnalysisItem `json:"items"`
 }
+
+type TrafficComparisonQuery struct {
+	Window   string
+	Search   string
+	Page     int
+	PageSize int
+}
+
+type TrafficComparisonPoint struct {
+	ReportDate    string  `json:"report_date"`
+	Spend         float64 `json:"spend"`
+	SearchUsers   int64   `json:"search_users"`
+	SearchCost    float64 `json:"search_cost"`
+	HasSearchCost bool    `json:"has_search_cost"`
+}
+
+type TrafficComparisonCampaign struct {
+	CampaignName        string                   `json:"campaign_name"`
+	FirstReportDate     string                   `json:"first_report_date"`
+	LastReportDate      string                   `json:"last_report_date"`
+	ActiveDays          int                      `json:"active_days"`
+	LatestSpend         float64                  `json:"latest_spend"`
+	LatestSearchUsers   int64                    `json:"latest_search_users"`
+	LatestSearchCost    float64                  `json:"latest_search_cost"`
+	HasLatestSearchCost bool                     `json:"has_latest_search_cost"`
+	TotalSpend          float64                  `json:"total_spend"`
+	TotalSearchUsers    int64                    `json:"total_search_users"`
+	Points              []TrafficComparisonPoint `json:"points"`
+}
+
+type TrafficComparisonItem struct {
+	NoteID                  string                      `json:"note_id"`
+	Placement               string                      `json:"placement"`
+	CampaignCount           int                         `json:"campaign_count"`
+	ComparableCampaignCount int                         `json:"comparable_campaign_count"`
+	LatestSearchCostMin     float64                     `json:"latest_search_cost_min"`
+	LatestSearchCostMax     float64                     `json:"latest_search_cost_max"`
+	SearchCostGap           float64                     `json:"search_cost_gap"`
+	LatestSpend             float64                     `json:"latest_spend"`
+	LatestSearchUsers       int64                       `json:"latest_search_users"`
+	Campaigns               []TrafficComparisonCampaign `json:"campaigns"`
+}
+
+type TrafficComparison struct {
+	Window      string                  `json:"window"`
+	ReportDates []string                `json:"report_dates"`
+	LatestDate  string                  `json:"latest_date"`
+	Total       int                     `json:"total"`
+	Page        int                     `json:"page"`
+	PageSize    int                     `json:"page_size"`
+	Items       []TrafficComparisonItem `json:"items"`
+}
+
+type TrafficDeliveryComparisonQuery struct {
+	NoteID    string
+	Placement string
+}
+
+type TrafficDeliveryCampaign struct {
+	CampaignName string         `json:"campaign_name"`
+	Subaccounts  []string       `json:"subaccounts"`
+	Matches      []XHSLinkMatch `json:"matches"`
+}
+
+type TrafficDeliveryComparison struct {
+	ReportDate string                    `json:"report_date"`
+	NoteID     string                    `json:"note_id"`
+	Placement  string                    `json:"placement"`
+	Campaigns  []TrafficDeliveryCampaign `json:"campaigns"`
+}

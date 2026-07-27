@@ -11,6 +11,8 @@ import (
 
 type maituoAnalyticsStore interface {
 	MaituoNoteCampaignAnalysis(context.Context, maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error)
+	MaituoTrafficComparison(context.Context, maituo.TrafficComparisonQuery) (maituo.TrafficComparison, error)
+	MaituoTrafficDeliveryComparison(context.Context, maituo.TrafficDeliveryComparisonQuery) (maituo.TrafficDeliveryComparison, error)
 }
 
 func (server *apiServer) maituoNoteCampaignAnalysis(writer http.ResponseWriter, request *http.Request) {
@@ -72,4 +74,73 @@ func positiveQueryInt(request *http.Request, name string, fallback, minimum, max
 		return 0, false
 	}
 	return parsed, true
+}
+
+func (server *apiServer) maituoTrafficComparison(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	window := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("window")))
+	if window == "" {
+		window = "7d"
+	}
+	if window != "3d" && window != "7d" && window != "all" {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "window 仅支持 3d、7d 或 all"})
+		return
+	}
+	page, ok := positiveQueryInt(request, "page", 1, 1, 100000)
+	if !ok {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "page 必须是正整数"})
+		return
+	}
+	pageSize, ok := positiveQueryInt(request, "page_size", 25, 1, 100)
+	if !ok {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "page_size 必须是 1 到 100 的整数"})
+		return
+	}
+	search := strings.TrimSpace(request.URL.Query().Get("q"))
+	if len([]rune(search)) > 200 {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "搜索内容不能超过 200 个字符"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	result, err := server.maituoAnalytics.MaituoTrafficComparison(ctx, maituo.TrafficComparisonQuery{
+		Window: window, Search: search, Page: page, PageSize: pageSize,
+	})
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: result})
+}
+
+func (server *apiServer) maituoTrafficDeliveryComparison(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	noteID := strings.TrimSpace(request.URL.Query().Get("note_id"))
+	if noteID == "" || len([]rune(noteID)) > 200 {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "note_id 必须填写且不能超过 200 个字符"})
+		return
+	}
+	placement := strings.TrimSpace(request.URL.Query().Get("placement"))
+	if placement != "信息流" && placement != "搜索" {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "placement 仅支持信息流或搜索"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	result, err := server.maituoAnalytics.MaituoTrafficDeliveryComparison(ctx, maituo.TrafficDeliveryComparisonQuery{
+		NoteID: noteID, Placement: placement,
+	})
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: result})
 }
