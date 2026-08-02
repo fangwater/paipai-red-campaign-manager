@@ -18,9 +18,18 @@ type maituoAnalyticsStub struct {
 	comparisonResult maituo.TrafficComparison
 	deliveryQuery    maituo.TrafficDeliveryComparisonQuery
 	deliveryResult   maituo.TrafficDeliveryComparison
+	diagnosisSPU     string
+	diagnosisResult  maituo.AccountPlanDiagnosis
 	calls            int
 	comparisonCalls  int
 	deliveryCalls    int
+	diagnosisCalls   int
+}
+
+func (stub *maituoAnalyticsStub) MaituoAccountPlanDiagnosis(_ context.Context, spu string) (maituo.AccountPlanDiagnosis, error) {
+	stub.diagnosisCalls++
+	stub.diagnosisSPU = spu
+	return stub.diagnosisResult, nil
 }
 
 func (stub *maituoAnalyticsStub) MaituoNoteCampaignAnalysis(_ context.Context, query maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error) {
@@ -39,6 +48,21 @@ func (stub *maituoAnalyticsStub) MaituoTrafficDeliveryComparison(_ context.Conte
 	stub.deliveryCalls++
 	stub.deliveryQuery = query
 	return stub.deliveryResult, nil
+}
+
+func TestMaituoAccountPlanDiagnosis(t *testing.T) {
+	stub := &maituoAnalyticsStub{diagnosisResult: maituo.AccountPlanDiagnosis{ReportDate: "2026-07-27", SPU: "辅酶"}}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/account-plan-diagnosis", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoAccountPlanDiagnosis(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if stub.diagnosisCalls != 1 || stub.diagnosisSPU != "辅酶" {
+		t.Fatalf("calls = %d, spu = %q", stub.diagnosisCalls, stub.diagnosisSPU)
+	}
 }
 
 func TestMaituoNoteCampaignAnalysis(t *testing.T) {

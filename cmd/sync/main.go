@@ -174,6 +174,7 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
 	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
+	mux.HandleFunc("/v1/analytics/maituo/account-plan-diagnosis", server.maituoAccountPlanDiagnosis)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparisons", server.maituoTrafficComparison)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparison-delivery", server.maituoTrafficDeliveryComparison)
 	mux.HandleFunc("/v1/analytics/maituo/xhs-links", server.maituoXHSLinks)

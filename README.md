@@ -124,6 +124,19 @@ make frontend-deploy
 
 每个组合返回所选报表日内的累计消耗、累计回搜人数，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加。分析结果不返回笔记 URL、分类或子账户。
 
+## 子账户与计划诊断 API
+
+`GET /v1/analytics/maituo/account-plan-diagnosis` 复刻日报看板的“子账户与计划诊断”，公网入口为 `/paipai/api/analytics/maituo/account-plan-diagnosis`，前端页面为 `/paipai/account-plan-diagnosis`。可选参数 `spu` 默认取 `辅酶`。
+
+子账户层读取最新完整日报的“分子账户”表，统一使用 KPI 70；搜索使用回搜成本，信息流使用预计回流后成本，并返回较上一自然日变化和最近 7 个自然日点位。计划层读取同日报的“笔记明细”表，搜索 KPI 为 30，信息流 KPI 为 70：
+
+- 成本为空：今日未投放
+- 成本低于 KPI：建议放大
+- 成本达到或超过 KPI 且连续不足 3 个有效报表日：正常观察
+- 成本达到或超过 KPI 且连续满 3 个有效报表日：建议停止
+
+计划明细按笔记 ID 精确关联“蒲公英数据”，同一笔记存在多条快照时取“数据更新日期”最新的一条，补充标题、达人、类型、内容标签、发布时间、合作金额、曝光、阅读、互动及单价。响应同时返回蒲公英最近同步时间和匹配/缺失数量；未匹配笔记保留日报诊断结果，不以相似内容替代。
+
 ## 投流情况对比 API
 
 `GET /v1/analytics/maituo/traffic-comparisons` 按 `笔记ID + 场域` 聚合最新报表日仍在投放的计划。公网入口为 `/paipai/api/analytics/maituo/traffic-comparisons`，前端页面为 `/paipai/traffic-comparison`。查询参数：

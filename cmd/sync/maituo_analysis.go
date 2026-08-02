@@ -13,6 +13,31 @@ type maituoAnalyticsStore interface {
 	MaituoNoteCampaignAnalysis(context.Context, maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error)
 	MaituoTrafficComparison(context.Context, maituo.TrafficComparisonQuery) (maituo.TrafficComparison, error)
 	MaituoTrafficDeliveryComparison(context.Context, maituo.TrafficDeliveryComparisonQuery) (maituo.TrafficDeliveryComparison, error)
+	MaituoAccountPlanDiagnosis(context.Context, string) (maituo.AccountPlanDiagnosis, error)
+}
+
+func (server *apiServer) maituoAccountPlanDiagnosis(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	spu := strings.TrimSpace(request.URL.Query().Get("spu"))
+	if spu == "" {
+		spu = "辅酶"
+	}
+	if len([]rune(spu)) > 50 {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "spu 不能超过 50 个字符"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	result, err := server.maituoAnalytics.MaituoAccountPlanDiagnosis(ctx, spu)
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: result})
 }
 
 func (server *apiServer) maituoNoteCampaignAnalysis(writer http.ResponseWriter, request *http.Request) {

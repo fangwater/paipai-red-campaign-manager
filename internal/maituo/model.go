@@ -122,6 +122,68 @@ type SearchTrend struct {
 	RowMetadata
 }
 
+type AccountPlanDiagnosis struct {
+	ReportDate        string             `json:"report_date"`
+	SPU               string             `json:"spu"`
+	AccountKPI        float64            `json:"account_kpi"`
+	PlanKPIs          map[string]float64 `json:"plan_kpis"`
+	DandelionSyncedAt string             `json:"dandelion_synced_at"`
+	DandelionMatched  int                `json:"dandelion_matched"`
+	DandelionMissing  int                `json:"dandelion_missing"`
+	Accounts          []AccountDiagnosis `json:"accounts"`
+}
+
+type AccountDiagnosisPoint struct {
+	ReportDate string   `json:"report_date"`
+	Cost       *float64 `json:"cost"`
+}
+
+type AccountDiagnosis struct {
+	Account      string                  `json:"account"`
+	Placement    string                  `json:"placement"`
+	Spend        float64                 `json:"spend"`
+	Cost         *float64                `json:"cost"`
+	CostMetric   string                  `json:"cost_metric"`
+	PreviousCost *float64                `json:"previous_cost"`
+	ChangePct    *float64                `json:"change_pct"`
+	KPI          float64                 `json:"kpi"`
+	Status       string                  `json:"status"`
+	OverPlans    int                     `json:"over_plans"`
+	EnlargePlans int                     `json:"enlarge_plans"`
+	StopPlans    int                     `json:"stop_plans"`
+	Points       []AccountDiagnosisPoint `json:"points"`
+	Plans        []PlanDiagnosis         `json:"plans"`
+}
+
+type DandelionNoteSupplement struct {
+	Title           string  `json:"title"`
+	Author          string  `json:"author"`
+	NoteType        string  `json:"note_type"`
+	ContentTag      string  `json:"content_tag"`
+	PublishedDate   string  `json:"published_date"`
+	DataUpdatedDate string  `json:"data_updated_date"`
+	DandelionAmount float64 `json:"dandelion_amount"`
+	Impressions     int64   `json:"impressions"`
+	Reads           int64   `json:"reads"`
+	Interactions    int64   `json:"interactions"`
+	ReadCost        float64 `json:"read_cost"`
+	InteractionCost float64 `json:"interaction_cost"`
+}
+
+type PlanDiagnosis struct {
+	NoteID             string                   `json:"note_id"`
+	NoteURL            string                   `json:"note_url"`
+	CampaignName       string                   `json:"campaign_name"`
+	Spend              float64                  `json:"spend"`
+	Cost               *float64                 `json:"cost"`
+	CostMetric         string                   `json:"cost_metric"`
+	KPI                float64                  `json:"kpi"`
+	OverKPI            bool                     `json:"over_kpi"`
+	Action             string                   `json:"action"`
+	ConsecutiveOverKPI int                      `json:"consecutive_over_kpi"`
+	Dandelion          *DandelionNoteSupplement `json:"dandelion,omitempty"`
+}
+
 type TableResult struct {
 	Key       string `json:"key"`
 	Name      string `json:"name"`
