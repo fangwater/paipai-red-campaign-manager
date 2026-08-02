@@ -9,6 +9,8 @@ import "./xhs-link-query.css";
 import "./xhs-sync.css";
 import "./data-sync.css";
 import "./system-settings.css";
+import "./business-overview.css";
+import "./guorai-data.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

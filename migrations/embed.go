@@ -61,3 +61,8 @@ var MaituoRemoveImportVersionSQL string
 //
 //go:embed 013_similar_note_embeddings.sql
 var SimilarNoteEmbeddingsSQL string
+
+// GuoraiCredentialsSQL stores the account used to renew an expired Guorai session.
+//
+//go:embed 014_guorai_credentials.sql
+var GuoraiCredentialsSQL string

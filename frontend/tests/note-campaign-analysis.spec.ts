@@ -9,10 +9,12 @@ const points = [
 test("renders cumulative ECharts and switches the note campaign key", async ({ page }) => {
   const requestedWindows: string[] = [];
   const requestedSorts: string[] = [];
+  const requestedPlanIDs: string[] = [];
   await page.route("**/paipai/api/analytics/maituo/note-campaigns?*", async (route) => {
     const url = new URL(route.request().url());
     requestedWindows.push(url.searchParams.get("window") ?? "");
     requestedSorts.push(url.searchParams.get("sort") || "");
+    requestedPlanIDs.push(url.searchParams.get("plan_id") || "");
     const windowOption = url.searchParams.get("window") ?? "7d";
     await route.fulfill({
       status: 200,
@@ -34,15 +36,43 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
       })
     });
   });
+  await page.route("**/paipai/api/analytics/maituo/note-content?*", async (route) => {
+    const url = new URL(route.request().url());
+    const noteID = url.searchParams.get("note_id") || "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          note_id: noteID,
+          note_url: `https://www.xiaohongshu.com/explore/${noteID}`,
+          found: true,
+          note_content: "这是从稿件库查询到的真实笔记内容。",
+          providers: ["智元"]
+        }
+      })
+    });
+  });
 
-  await page.goto("/paipai/note-campaign-analysis");
+  await page.goto("/paipai/note-campaign-analysis?plan_id=211253819&plan_name=%E5%85%B3%E8%81%94%E8%AE%A1%E5%88%92&window=all");
   await expect(page.getByRole("heading", { name: "笔记计划分析" })).toBeVisible();
+  await expect.poll(() => requestedPlanIDs).toContain("211253819");
+  await expect(page.getByText("关联计划", { exact: true })).toBeVisible();
   await expect(page.locator(".metric-chart")).toHaveCount(3);
   await expect(page.getByText("累计回搜成本", { exact: true })).toHaveCount(0);
   await expect(page.getByText("回搜成本", { exact: true })).toBeVisible();
   await expect(page.locator(".focus-identity")).toContainText("磷虾油搜索计划");
   await expect(page.locator(".analysis-table tbody tr")).toHaveCount(2);
   await expect(page.getByText("http", { exact: false })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "查询内容" }).click();
+  const contentDialog = page.getByRole("dialog", { name: "笔记内容" });
+  await expect(contentDialog).toContainText("这是从稿件库查询到的真实笔记内容。");
+  await expect(contentDialog).toContainText("智元");
+  await expect(contentDialog.getByRole("link", { name: "打开小红书笔记" })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/note-a");
+  await contentDialog.getByRole("button", { name: "关闭笔记内容" }).click();
+  await expect(contentDialog).toHaveCount(0);
 
   await expect.poll(async () => page.locator(".metric-chart canvas").evaluateAll((canvases) => canvases.map((canvas) => {
     const element = canvas as HTMLCanvasElement;

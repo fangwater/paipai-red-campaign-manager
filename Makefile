@@ -1,7 +1,7 @@
 .PHONY: run test build frontend-dev frontend-build frontend-deploy xhs-token xhs-refresh xhs-authd-build xhs-authd-start \
 	lark-sync-build lark-sync-start lark-sync-manuscripts lark-sync-dandelion lark-sync-status lark-sync-logs lark-sync-stop \
 	xhs-authd-authorize xhs-authd-status xhs-authd-logs xhs-authd-stop xhs-campaign-sync xhs-sync-status xhs-sync-campaigns xhs-sync-units xhs-sync-creativities \
-	embeddings-refresh embeddings-force-refresh
+	embeddings-refresh embeddings-force-refresh guorai-build guorai-login guorai-sync guorai-sync-install guorai-sync-now guorai-sync-status guorai-sync-logs
 
 run:
 	@set -a; . ./.env; set +a; go run ./cmd/sync
@@ -26,6 +26,31 @@ embeddings-refresh:
 
 embeddings-force-refresh:
 	@set -a; . ./.env; set +a; go run ./cmd/embed-notes --force
+
+guorai-build:
+	go build -o bin/paipai-guorai ./cmd/guorai
+
+guorai-login: guorai-build
+	@set -a; . ./.env; set +a; ./bin/paipai-guorai login
+
+guorai-sync: guorai-build
+	@set -a; . ./.env; set +a; ./bin/paipai-guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 7 --timeout 30m
+
+guorai-sync-install: guorai-build
+	systemd-analyze verify deploy/systemd/paipai-guorai-sync.service deploy/systemd/paipai-guorai-sync.timer
+	@sudo install -m 0644 deploy/systemd/paipai-guorai-sync.service /etc/systemd/system/paipai-guorai-sync.service
+	@sudo install -m 0644 deploy/systemd/paipai-guorai-sync.timer /etc/systemd/system/paipai-guorai-sync.timer
+	@sudo systemctl daemon-reload
+	@sudo systemctl enable --now paipai-guorai-sync.timer
+
+guorai-sync-now: guorai-build
+	@sudo systemctl start paipai-guorai-sync.service
+
+guorai-sync-status:
+	@systemctl status paipai-guorai-sync.timer paipai-guorai-sync.service --no-pager
+
+guorai-sync-logs:
+	@journalctl -u paipai-guorai-sync.service -n 100 --no-pager
 
 lark-sync-logs:
 	pm2 logs paipai-lark-sync --lines 100

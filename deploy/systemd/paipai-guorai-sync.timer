@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PaiPai Guorai sync every day
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1min
+Unit=paipai-guorai-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -3,9 +3,18 @@ package maituo
 type NoteCampaignAnalysisQuery struct {
 	Window   string
 	Search   string
+	PlanID   string
 	Sort     string
 	Page     int
 	PageSize int
+}
+
+type NoteContent struct {
+	NoteID      string   `json:"note_id"`
+	NoteURL     string   `json:"note_url"`
+	Found       bool     `json:"found"`
+	NoteContent string   `json:"note_content"`
+	Providers   []string `json:"providers"`
 }
 
 type NoteCampaignPoint struct {

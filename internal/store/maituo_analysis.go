@@ -2,12 +2,47 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"strings"
 
 	"paipai-red-campaign-manager/internal/maituo"
+
+	"github.com/jackc/pgx/v5"
 )
+
+func (p *Postgres) MaituoNoteContent(ctx context.Context, noteID string) (maituo.NoteContent, error) {
+	result := maituo.NoteContent{
+		NoteID:    noteID,
+		NoteURL:   "https://www.xiaohongshu.com/explore/" + url.PathEscape(noteID),
+		Providers: []string{},
+	}
+	err := p.pool.QueryRow(ctx, `
+		SELECT notes.note_content,
+			COALESCE(
+				ARRAY_AGG(DISTINCT tables.provider_name ORDER BY tables.provider_name)
+					FILTER (WHERE tables.provider_name IS NOT NULL),
+				'{}'::TEXT[]
+			)
+		FROM service_provider_notes notes
+		LEFT JOIN service_provider_note_executions executions
+		  ON executions.note_id=notes.note_id AND executions.deleted_at IS NULL
+		LEFT JOIN service_provider_content_tables tables
+		  ON tables.provider_code=executions.provider_code
+		WHERE notes.note_id=$1
+		GROUP BY notes.note_id, notes.note_content
+	`, noteID).Scan(&result.NoteContent, &result.Providers)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return result, nil
+	}
+	if err != nil {
+		return result, fmt.Errorf("query Maituo note content: %w", err)
+	}
+	result.Found = true
+	return result, nil
+}
 
 func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error) {
 	if query.Sort == "" {
@@ -71,6 +106,11 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 			JOIN selected_dates dates USING (report_date)
 			WHERE notes.deleted_at IS NULL
 			  AND ($2 = '%%' OR notes.note_id ILIKE $2 OR notes.campaign_name ILIKE $2 OR notes.placement ILIKE $2)
+			  AND ($7 = '' OR EXISTS (
+				SELECT 1
+				FROM guorai_plan_notes links
+				WHERE links.plan_id=$7 AND links.note_id=notes.note_id AND links.is_active
+			  ))
 			GROUP BY notes.report_date, notes.note_id, notes.campaign_name, notes.placement
 		), summaries AS (
 			SELECT note_id, campaign_name, placement,
@@ -93,7 +133,7 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 			CASE WHEN $6 = 'cumulative_spend' THEN total_spend END DESC,
 			total_spend DESC, total_search_users DESC, note_id, campaign_name, placement
 		LIMIT $3 OFFSET $4
-	`, result.ReportDates, searchPattern, query.PageSize, offset, latestReportDate, query.Sort)
+	`, result.ReportDates, searchPattern, query.PageSize, offset, latestReportDate, query.Sort, query.PlanID)
 	if err != nil {
 		return result, fmt.Errorf("query Maituo note campaign summaries: %w", err)
 	}

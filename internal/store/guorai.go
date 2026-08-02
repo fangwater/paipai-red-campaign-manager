@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"paipai-red-campaign-manager/internal/model"
@@ -13,7 +15,79 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrGuoraiSyncLocked = errors.New("another Guorai sync for this window is already running")
+var (
+	ErrGuoraiSyncLocked          = errors.New("another Guorai sync is already running")
+	ErrGuoraiCredentialsNotFound = errors.New("Guorai credentials are not stored in PostgreSQL")
+)
+
+type GuoraiCredentials struct {
+	Username string
+	Password string
+}
+
+func (p *Postgres) SaveGuoraiCredentials(ctx context.Context, credentials GuoraiCredentials) error {
+	credentials.Username = strings.TrimSpace(credentials.Username)
+	if credentials.Username == "" || credentials.Password == "" {
+		return errors.New("Guorai username and password are required")
+	}
+	if _, err := p.pool.Exec(ctx, `
+		INSERT INTO guorai_credentials (credential_key, username, password_value)
+		VALUES ('default', $1, $2)
+		ON CONFLICT (credential_key) DO UPDATE SET
+			username = EXCLUDED.username,
+			password_value = EXCLUDED.password_value,
+			updated_at = NOW()
+	`, credentials.Username, credentials.Password); err != nil {
+		return fmt.Errorf("save Guorai credentials: %w", err)
+	}
+	return nil
+}
+
+func (p *Postgres) LoadGuoraiCredentials(ctx context.Context) (GuoraiCredentials, error) {
+	var credentials GuoraiCredentials
+	err := p.pool.QueryRow(ctx, `
+		SELECT username, password_value
+		FROM guorai_credentials
+		WHERE credential_key = 'default'
+	`).Scan(&credentials.Username, &credentials.Password)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GuoraiCredentials{}, ErrGuoraiCredentialsNotFound
+	}
+	if err != nil {
+		return GuoraiCredentials{}, fmt.Errorf("load Guorai credentials: %w", err)
+	}
+	return credentials, nil
+}
+
+func (p *Postgres) AcquireGuoraiSyncLock(ctx context.Context) (func(), error) {
+	connection, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire PostgreSQL connection for Guorai sync lock: %w", err)
+	}
+	var locked bool
+	if err := connection.QueryRow(ctx,
+		"SELECT pg_try_advisory_lock(hashtextextended('guorai:full-sync', 0))",
+	).Scan(&locked); err != nil {
+		connection.Release()
+		return nil, fmt.Errorf("acquire Guorai sync lock: %w", err)
+	}
+	if !locked {
+		connection.Release()
+		return nil, ErrGuoraiSyncLocked
+	}
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = connection.Exec(unlockCtx,
+				"SELECT pg_advisory_unlock(hashtextextended('guorai:full-sync', 0))",
+			)
+			connection.Release()
+		})
+	}, nil
+}
 
 type guoraiMetricField struct {
 	column string

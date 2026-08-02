@@ -69,23 +69,31 @@ func executeGuoraiBatch(ctx context.Context, tx pgx.Tx, batch *pgx.Batch) error 
 func expandGuoraiMetrics(ctx context.Context, tx pgx.Tx, table string, fields []guoraiMetricField, fetchID int64) error {
 	assignments := make([]string, 0, len(fields))
 	for _, field := range fields {
-		jsonType := "number"
-		cast := field.cast
-		if field.cast == "boolean" {
-			jsonType = "boolean"
-		}
-		if field.cast == "bigint" {
-			cast = "numeric::bigint"
-		}
-		assignments = append(assignments, fmt.Sprintf(
-			"%s=CASE WHEN jsonb_typeof(raw_payload->'%s')='%s' THEN (raw_payload->>'%s')::%s END",
-			field.column, field.json, jsonType, field.json, cast))
+		assignments = append(assignments, guoraiMetricAssignment(field))
 	}
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE fetch_id=$1", table, strings.Join(assignments, ","))
 	if _, err := tx.Exec(ctx, query, fetchID); err != nil {
 		return fmt.Errorf("expand Guorai raw metrics: %w", err)
 	}
 	return nil
+}
+func guoraiMetricAssignment(field guoraiMetricField) string {
+	jsonType := fmt.Sprintf("jsonb_typeof(raw_payload->'%s')", field.json)
+	rawValue := fmt.Sprintf("raw_payload->>'%s'", field.json)
+	if field.cast == "boolean" {
+		return fmt.Sprintf(
+			"%s=CASE WHEN %s='boolean' OR (%s='string' AND LOWER(%s) IN ('true','false')) THEN (%s)::boolean END",
+			field.column, jsonType, jsonType, rawValue, rawValue,
+		)
+	}
+	cast := field.cast
+	if field.cast == "bigint" {
+		cast = "numeric::bigint"
+	}
+	return fmt.Sprintf(
+		"%s=CASE WHEN %s='number' OR (%s='string' AND %s ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$') THEN (%s)::%s END",
+		field.column, jsonType, jsonType, rawValue, rawValue, cast,
+	)
 }
 
 func guoraiString(value any) string {

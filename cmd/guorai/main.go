@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"paipai-red-campaign-manager/internal/guorai"
+	"paipai-red-campaign-manager/internal/store"
 
 	"golang.org/x/term"
 )
@@ -58,11 +59,16 @@ func runLogin(ctx context.Context, args []string) error {
 	flags.SetOutput(os.Stderr)
 	username := flags.String("username", os.Getenv("GUORAI_USERNAME"), "Guorai account username")
 	session := flags.String("session", defaultSessionPath(), "path to the persistent cookie session")
+	databaseURL := flags.String("database-url", os.Getenv("DATABASE_URL"), "PostgreSQL connection string; defaults to DATABASE_URL")
+	storeCredentials := flags.Bool("store-credentials", true, "store the validated username and password in PostgreSQL")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*username) == "" {
 		return errors.New("--username or GUORAI_USERNAME is required")
+	}
+	if *storeCredentials && strings.TrimSpace(*databaseURL) == "" {
+		return errors.New("--database-url or DATABASE_URL is required when --store-credentials is enabled")
 	}
 	password, err := readPassword()
 	if err != nil {
@@ -76,6 +82,24 @@ func runLogin(ctx context.Context, args []string) error {
 	defer cancel()
 	if err := client.Login(loginCtx, *username, password); err != nil {
 		return err
+	}
+	if *storeCredentials {
+		destination, err := store.NewPostgres(loginCtx, *databaseURL, "guorai")
+		if err != nil {
+			return err
+		}
+		defer destination.Close()
+		if err := destination.Migrate(loginCtx); err != nil {
+			return err
+		}
+		if err := destination.SaveGuoraiCredentials(loginCtx, store.GuoraiCredentials{
+			Username: *username,
+			Password: password,
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "login succeeded; session saved to %s and credentials stored in PostgreSQL\n", *session)
+		return nil
 	}
 	fmt.Fprintf(os.Stderr, "login succeeded; session saved to %s\n", *session)
 	return nil
@@ -169,7 +193,7 @@ func registerFilterFlags(flags *flag.FlagSet) *guorai.NotesFilter {
 	flags.StringVar(&filter.BeginDate, "from", "", "touch-time start date (YYYY-MM-DD); defaults to 7 days before cutoff")
 	flags.StringVar(&filter.EndDate, "to", "", "touch-time end date (YYYY-MM-DD); defaults to statistics cutoff")
 	flags.StringVar(&filter.BrandID, "brand-id", "", "XHS brand ID; defaults to the bound brand")
-	flags.StringVar(&filter.MerchantID, "merchant-id", "", "merchant ID; omitted for all/default shop")
+	flags.StringVar(&filter.MerchantID, "merchant-id", os.Getenv("GUORAI_MERCHANT_ID"), "merchant ID; defaults to GUORAI_MERCHANT_ID")
 	flags.StringVar(&filter.SortField, "sort-field", "totalPayAmt", "metric field used for sorting")
 	flags.StringVar(&filter.SortOrder, "sort-order", "DESC", "ASC or DESC")
 	return &filter

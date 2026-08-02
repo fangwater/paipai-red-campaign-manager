@@ -22,11 +22,13 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 	session := flags.String("session", defaultSessionPath(), "path to the persistent cookie session")
 	databaseURL := flags.String("database-url", os.Getenv("DATABASE_URL"), "PostgreSQL connection string; defaults to DATABASE_URL")
 	businessType := flags.String("type", "all", "business type: note, plan, or all")
-	snapshotDays := flags.Int("days", 15, "number of rolling snapshot dates to refresh")
-	windowDays := flags.Int("window-days", 7, "inclusive days in each rolling window")
+	snapshotDays := flags.Int("days", 1, "number of latest rolling snapshot dates to refresh")
+	noteWindowDays := flags.Int("note-window-days", 14, "inclusive days in each note rolling window")
+	planWindowDays := flags.Int("plan-window-days", 7, "inclusive days in each plan rolling window")
+	windowDaysOverride := flags.Int("window-days", 0, "override both note and plan rolling windows")
 	asOfRaw := flags.String("as-of", "", "latest snapshot date (YYYY-MM-DD); defaults to the platform cutoff")
 	brandID := flags.String("brand-id", "", "XHS brand ID; defaults to the bound brand")
-	merchantID := flags.String("merchant-id", "", "merchant ID; omitted for all/default shop")
+	merchantID := flags.String("merchant-id", os.Getenv("GUORAI_MERCHANT_ID"), "merchant ID; defaults to GUORAI_MERCHANT_ID")
 	pageSize := flags.Int("page-size", 500, "records requested per API page (max 500)")
 	timeout := flags.Duration("timeout", 30*time.Minute, "maximum time for the complete sync")
 	if err := flags.Parse(args); err != nil {
@@ -38,8 +40,14 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 	if *snapshotDays <= 0 || *snapshotDays > 365 {
 		return errors.New("--days must be between 1 and 365")
 	}
-	if *windowDays <= 0 || *windowDays > 90 {
-		return errors.New("--window-days must be between 1 and 90")
+	if *noteWindowDays <= 0 || *noteWindowDays > 90 {
+		return errors.New("--note-window-days must be between 1 and 90")
+	}
+	if *planWindowDays <= 0 || *planWindowDays > 90 {
+		return errors.New("--plan-window-days must be between 1 and 90")
+	}
+	if *windowDaysOverride < 0 || *windowDaysOverride > 90 {
+		return errors.New("--window-days must be 0 or between 1 and 90")
 	}
 	if *pageSize <= 0 || *pageSize > 500 {
 		return errors.New("--page-size must be between 1 and 500")
@@ -66,12 +74,20 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 	if err := destination.Migrate(syncCtx); err != nil {
 		return err
 	}
+	releaseSyncLock, err := destination.AcquireGuoraiSyncLock(syncCtx)
+	if err != nil {
+		return err
+	}
+	defer releaseSyncLock()
 
 	totalWindows := 0
 	totalRows := 0
 	for _, entityType := range types {
-		base, err := client.ResolveFilter(syncCtx, guorai.NotesFilter{
-			BusinessType: entityType, BrandID: *brandID, MerchantID: *merchantID, PageSize: *pageSize,
+		entityWindowDays := guoraiWindowDays(entityType, *noteWindowDays, *planWindowDays, *windowDaysOverride)
+		base, err := guoraiWithStoredLogin(syncCtx, client, destination, func() (guorai.ResolvedFilter, error) {
+			return client.ResolveFilter(syncCtx, guorai.NotesFilter{
+				BusinessType: entityType, BrandID: *brandID, MerchantID: *merchantID, PageSize: *pageSize,
+			})
 		})
 		if err != nil {
 			return fmt.Errorf("resolve %s sync context: %w", entityType, err)
@@ -91,7 +107,7 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 			}
 		}
 
-		for _, window := range guoraiRollingWindows(asOf, *snapshotDays, *windowDays) {
+		for _, window := range guoraiRollingWindows(asOf, *snapshotDays, entityWindowDays) {
 			windowEnd := window.End
 			windowStart := window.Start
 			resolved := base
@@ -100,7 +116,9 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 			resolved.PageSize = *pageSize
 			resolved.Limit = 0
 
-			queryResult, err := client.QueryResolved(syncCtx, resolved)
+			queryResult, err := guoraiWithStoredLogin(syncCtx, client, destination, func() (guorai.NotesResult, error) {
+				return client.QueryResolved(syncCtx, resolved)
+			})
 			if err != nil {
 				return fmt.Errorf("query %s snapshot %s: %w", entityType, resolved.EndDate, err)
 			}
@@ -136,8 +154,43 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 				entityType, resolved.EndDate, resolved.BeginDate, resolved.EndDate, stored.Rows, stored.FetchID)
 		}
 	}
-	fmt.Printf("Guorai sync completed: %d windows, %d rows\n", totalWindows, totalRows)
+	fmt.Printf("Guorai sync completed: %d windows, %d rows (note window %d days, plan window %d days)\n",
+		totalWindows, totalRows,
+		guoraiWindowDays(guorai.BusinessTypeNote, *noteWindowDays, *planWindowDays, *windowDaysOverride),
+		guoraiWindowDays(guorai.BusinessTypePlan, *noteWindowDays, *planWindowDays, *windowDaysOverride),
+	)
 	return nil
+}
+
+type guoraiLoginClient interface {
+	Login(context.Context, string, string) error
+}
+
+type guoraiCredentialsLoader interface {
+	LoadGuoraiCredentials(context.Context) (store.GuoraiCredentials, error)
+}
+
+func guoraiWithStoredLogin[T any](
+	ctx context.Context,
+	client guoraiLoginClient,
+	credentialsLoader guoraiCredentialsLoader,
+	operation func() (T, error),
+) (T, error) {
+	result, err := operation()
+	if !errors.Is(err, guorai.ErrSessionExpired) {
+		return result, err
+	}
+	credentials, loadErr := credentialsLoader.LoadGuoraiCredentials(ctx)
+	if loadErr != nil {
+		var zero T
+		return zero, fmt.Errorf("renew expired Guorai session: %w", loadErr)
+	}
+	if loginErr := client.Login(ctx, credentials.Username, credentials.Password); loginErr != nil {
+		var zero T
+		return zero, fmt.Errorf("renew expired Guorai session: %w", loginErr)
+	}
+	fmt.Fprintln(os.Stderr, "Guorai session renewed using stored PostgreSQL credentials")
+	return operation()
 }
 
 func guoraiSyncTypes(value string) ([]string, error) {
@@ -151,6 +204,16 @@ func guoraiSyncTypes(value string) ([]string, error) {
 	default:
 		return nil, errors.New("--type must be note, plan, or all")
 	}
+}
+
+func guoraiWindowDays(entityType string, noteWindowDays, planWindowDays, override int) int {
+	if override > 0 {
+		return override
+	}
+	if entityType == guorai.BusinessTypeNote {
+		return noteWindowDays
+	}
+	return planWindowDays
 }
 
 func guoraiAttributionDays(value any) int {

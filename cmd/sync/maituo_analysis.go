@@ -11,6 +11,7 @@ import (
 
 type maituoAnalyticsStore interface {
 	MaituoNoteCampaignAnalysis(context.Context, maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error)
+	MaituoNoteContent(context.Context, string) (maituo.NoteContent, error)
 	MaituoTrafficComparison(context.Context, maituo.TrafficComparisonQuery) (maituo.TrafficComparison, error)
 	MaituoTrafficDeliveryComparison(context.Context, maituo.TrafficDeliveryComparisonQuery) (maituo.TrafficDeliveryComparison, error)
 	MaituoAccountPlanDiagnosis(context.Context, string) (maituo.AccountPlanDiagnosis, error)
@@ -68,6 +69,11 @@ func (server *apiServer) maituoNoteCampaignAnalysis(writer http.ResponseWriter, 
 		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "搜索内容不能超过 200 个字符"})
 		return
 	}
+	planID := strings.TrimSpace(request.URL.Query().Get("plan_id"))
+	if len([]rune(planID)) > 200 {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "plan_id 不能超过 200 个字符"})
+		return
+	}
 	sort := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("sort")))
 	if sort == "" {
 		sort = "cumulative_spend"
@@ -80,8 +86,29 @@ func (server *apiServer) maituoNoteCampaignAnalysis(writer http.ResponseWriter, 
 	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
 	defer cancel()
 	result, err := server.maituoAnalytics.MaituoNoteCampaignAnalysis(ctx, maituo.NoteCampaignAnalysisQuery{
-		Window: window, Search: search, Sort: sort, Page: page, PageSize: pageSize,
+		Window: window, Search: search, PlanID: planID, Sort: sort, Page: page, PageSize: pageSize,
 	})
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: result})
+}
+
+func (server *apiServer) maituoNoteContent(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	noteID := strings.TrimSpace(request.URL.Query().Get("note_id"))
+	if noteID == "" || len([]rune(noteID)) > 200 {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "note_id 必须填写且不能超过 200 个字符"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	result, err := server.maituoAnalytics.MaituoNoteContent(ctx, noteID)
 	if err != nil {
 		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
 		return

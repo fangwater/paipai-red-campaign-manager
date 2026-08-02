@@ -422,15 +422,15 @@ OAuth 接口：
 
 ## 薯量笔记/计划触达查询与导出
 
-`cmd/guorai` 复用薯量网页使用的认证和数据接口，同时支持“我的关注笔记”和“我的关注计划”。登录只保存 Cookie，不保存密码；默认会话文件为 `.guorai/session.json`，目录已加入 `.gitignore`，文件权限为 `0600`。两个列表共用这一个会话。
+`cmd/guorai` 复用薯量网页使用的认证和数据接口，同时支持“我的关注笔记”和“我的关注计划”。默认会话文件为 `.guorai/session.json`，目录已加入 `.gitignore`，文件权限为 `0600`。登录成功后，账号和密码同时保存到 PostgreSQL 的 `guorai_credentials` 表，两个列表共用这一套登录状态。
 
 首次登录：
 
 ```bash
-go run ./cmd/guorai login --username "$GUORAI_USERNAME"
+make guorai-login
 ```
 
-命令会隐藏密码输入。也可以临时设置 `GUORAI_PASSWORD` 环境变量用于非交互运行。
+在 `.env` 中配置 `GUORAI_USERNAME` 和品牌绑定店铺的 `GUORAI_MERCHANT_ID`。登录命令会隐藏密码输入、更新会话文件并把验证通过的账号密码写入数据库。若只想更新 Cookie，可传 `--store-credentials=false`。`GUORAI_PASSWORD` 仍只用于临时非交互输入，无需写进 `.env`。
 
 按笔记触达时间查询并输出 JSON（`note` 是默认类型）：
 
@@ -460,7 +460,7 @@ go run ./cmd/guorai export --type plan --from 2026-07-09 --to 2026-07-16 --outpu
 
 ### Rolling 快照入库
 
-`guorai sync` 默认同时回刷笔记和计划最近 15 个快照日。每个快照日查询含首尾共 7 天的触达窗口，并保存平台原始 JSON、类型化原始指标、最新维度和计划-笔记关系。
+`guorai sync` 默认只刷新平台当前截止日的一份最新快照，同时处理笔记和计划。查询会使用 `GUORAI_MERCHANT_ID` 指定店铺，否则薯量仅返回关注列表维度而不返回投放指标。笔记快照查询含首尾共 14 天的触达窗口，计划快照查询 7 天窗口，并保存平台原始 JSON、类型化原始指标、最新维度和计划-笔记关系。
 
 ```bash
 set -a; . ./.env; set +a
@@ -470,14 +470,37 @@ go run ./cmd/guorai sync
 等价的显式参数：
 
 ```bash
-go run ./cmd/guorai sync --type all --days 15 --window-days 7 --timeout 30m
+go run ./cmd/guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 7 --timeout 30m
 ```
 
-可使用 `--type note` 或 `--type plan` 只同步一种数据，使用 `--as-of YYYY-MM-DD` 回刷指定截止日期。默认以平台统计截止日期为最新快照日。
+可使用 `--type note` 或 `--type plan` 只同步一种数据，使用 `--as-of YYYY-MM-DD` 回刷指定截止日期。默认以平台统计截止日期为最新快照日。`--window-days N` 可在临时回刷时统一覆盖笔记和计划窗口。
+
+手动执行同一套生产参数：
+
+```bash
+make guorai-sync
+```
+
+安装每天 09:00（Asia/Shanghai）运行的 systemd timer：
+
+```bash
+make guorai-sync-install
+```
+
+安装后也可以人工触发、查看状态和日志：
+
+```bash
+make guorai-sync-now
+make guorai-sync-status
+make guorai-sync-logs
+```
+
+自动与手动同步共用 PostgreSQL 全局锁，不会并行执行。同步发现 Cookie 失效时，会使用 `guorai_credentials` 中的账号密码自动登录并重试当前操作一次。systemd timer 使用 `Persistent=true`，机器错过计划时间后会在恢复时补跑。
 
 PostgreSQL 表：
 
 - `guorai_fetch_runs`：拉取批次、窗口、归因配置、请求和合并后的原始响应。
+- `guorai_credentials`：自动续登录使用的单账户账号和密码。
 - `guorai_notes` / `guorai_plans`：最新维度信息。
 - `guorai_plan_notes`：计划与笔记当前关系。
 - `guorai_note_snapshots` / `guorai_plan_snapshots`：追加式 Rolling 原始指标快照。

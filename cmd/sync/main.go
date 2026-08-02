@@ -52,6 +52,8 @@ type apiServer struct {
 	maituoImport        maituoImportStore
 	maituoAnalytics     maituoAnalyticsStore
 	maituoXHSLinksStore maituoXHSLinkStore
+	guoraiAnalytics     guoraiAnalyticsStore
+	businessOverview    businessOverviewStore
 	timeout             time.Duration
 	logger              *slog.Logger
 }
@@ -139,6 +141,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		maituoImport:        destination,
 		maituoAnalytics:     destination,
 		maituoXHSLinksStore: destination,
+		guoraiAnalytics:     destination,
+		businessOverview:    destination,
 		timeout:             cfg.SyncTimeout,
 		logger:              logger,
 	})
@@ -191,10 +195,13 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
 	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
+	mux.HandleFunc("/v1/analytics/maituo/note-content", server.maituoNoteContent)
 	mux.HandleFunc("/v1/analytics/maituo/account-plan-diagnosis", server.maituoAccountPlanDiagnosis)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparisons", server.maituoTrafficComparison)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparison-delivery", server.maituoTrafficDeliveryComparison)
 	mux.HandleFunc("/v1/analytics/maituo/xhs-links", server.maituoXHSLinks)
+	mux.HandleFunc("/v1/analytics/guorai/latest", server.guoraiLatest)
+	mux.HandleFunc("/v1/analytics/overview", server.businessOverviewHandler)
 	mux.HandleFunc("/v1/sync/manuscripts", server.syncManuscripts)
 	mux.HandleFunc("/v1/sync/manuscripts/status", server.manuscriptStatus)
 	return noStoreHeaders(mux)

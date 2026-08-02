@@ -4,7 +4,8 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-react";
+import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, FileSearch, Link2, LoaderCircle, Search, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -42,6 +43,14 @@ type AnalysisResult = {
   page: number;
   page_size: number;
   items: AnalysisItem[];
+};
+
+type NoteContentResult = {
+  note_id: string;
+  note_url: string;
+  found: boolean;
+  note_content: string;
+  providers: string[];
 };
 
 type ServiceState = "checking" | "online" | "offline";
@@ -138,15 +147,24 @@ function MetricChart({ title, value, color, dates, values }: MetricChartProps) {
 }
 
 function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) {
-  const [windowOption, setWindowOption] = useState<WindowOption>("7d");
+  const [routeParams, setRouteParams] = useSearchParams();
+  const planID = routeParams.get("plan_id")?.trim() ?? "";
+  const planName = routeParams.get("plan_name")?.trim() ?? "";
+  const initialWindow = routeParams.get("window");
+  const initialSearch = routeParams.get("q")?.trim() ?? "";
+  const [windowOption, setWindowOption] = useState<WindowOption>(initialWindow === "3d" || initialWindow === "all" ? initialWindow : "7d");
   const [sortOption, setSortOption] = useState<SortOption>("cumulative_spend");
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<AnalysisResult>(EMPTY_RESULT);
   const [selectedKey, setSelectedKey] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [contentOpen, setContentOpen] = useState(false);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState("");
+  const [noteContent, setNoteContent] = useState<NoteContentResult | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -157,9 +175,19 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
   }, [searchInput]);
 
   useEffect(() => {
+    if (!contentOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContentOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [contentOpen]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ window: windowOption, sort: sortOption, page: String(page), page_size: "25" });
     if (searchQuery) params.set("q", searchQuery);
+    if (planID) params.set("plan_id", planID);
     setLoading(true);
     setError("");
     fetch(`${import.meta.env.BASE_URL}api/analytics/maituo/note-campaigns?${params}`, { signal: controller.signal })
@@ -179,13 +207,39 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, searchQuery, sortOption, windowOption]);
+  }, [page, planID, searchQuery, sortOption, windowOption]);
 
   const selected = result.items.find((item) => itemKey(item) === selectedKey) ?? result.items[0];
   const pageCount = Math.max(1, Math.ceil(result.total / result.page_size));
   const dateRange = result.report_dates.length > 0
     ? `${result.report_dates[0]} - ${result.report_dates[result.report_dates.length - 1]}`
     : "暂无报表日期";
+
+  const queryNoteContent = async (noteID: string) => {
+    setContentOpen(true);
+    setContentLoading(true);
+    setContentError("");
+    setNoteContent(null);
+    try {
+      const params = new URLSearchParams({ note_id: noteID });
+      const response = await fetch(`${import.meta.env.BASE_URL}api/analytics/maituo/note-content?${params}`);
+      const payload = await response.json() as { success: boolean; data?: NoteContentResult; error?: string };
+      if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error || "笔记内容读取失败");
+      setNoteContent(payload.data);
+    } catch (fetchError) {
+      setContentError(fetchError instanceof Error ? fetchError.message : "笔记内容读取失败");
+    } finally {
+      setContentLoading(false);
+    }
+  };
+
+  const clearPlanFilter = () => {
+    const next = new URLSearchParams(routeParams);
+    next.delete("plan_id");
+    next.delete("plan_name");
+    setRouteParams(next, { replace: true });
+    setPage(1);
+  };
 
   return <>
     <section className="page-heading analysis-page-heading">
@@ -194,7 +248,10 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
     </section>
 
     <section className="analysis-toolbar">
-      <label className="analysis-search"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索笔记ID、计划或场域" /></label>
+      <div className="analysis-query-controls">
+        <label className="analysis-search"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索笔记ID、计划或场域" /></label>
+        {planID ? <span className="analysis-plan-filter" title={planName || planID}><Link2 size={13} /><span>{planName || planID}</span><button title="清除计划筛选" aria-label="清除计划筛选" onClick={clearPlanFilter}><X size={13} /></button></span> : null}
+      </div>
       <div className="analysis-range"><span>{dateRange} · {result.report_dates.length} 个报表日</span><div className="segmented-control" aria-label="分析时间范围">
         {WINDOW_OPTIONS.map((option) => <button key={option.value} className={windowOption === option.value ? "active" : ""} onClick={() => { setWindowOption(option.value); setPage(1); }}>{option.label}</button>)}
       </div></div>
@@ -205,7 +262,7 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
     <section className="analysis-focus">
       {loading && !selected ? <div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在读取分析数据</div>
         : selected ? <>
-          <div className="focus-identity"><span className={`placement-swatch placement-${selected.placement}`}>{selected.placement}</span><strong>{selected.campaign_name}</strong><small>{selected.note_id}</small></div>
+          <div className="focus-identity"><span className={`placement-swatch placement-${selected.placement}`}>{selected.placement}</span><strong>{selected.campaign_name}</strong><small>{selected.note_id}</small><button className="note-content-trigger" onClick={() => void queryNoteContent(selected.note_id)} disabled={contentLoading && contentOpen}>{contentLoading && contentOpen ? <LoaderCircle size={15} className="spin" /> : <FileSearch size={15} />}查询内容</button></div>
           <div className="metric-chart-grid">
             <MetricChart title="累计消耗" value={`¥${moneyFormatter.format(selected.total_spend)}`} color="#2f7d67" dates={selected.points.map((point) => point.report_date)} values={selected.points.map((point) => point.cumulative_spend)} />
             <MetricChart title="累计回搜人数" value={countFormatter.format(selected.total_search_users)} color="#c94e55" dates={selected.points.map((point) => point.report_date)} values={selected.points.map((point) => point.cumulative_search_users)} />
@@ -225,6 +282,23 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
       </tbody></table></div>
       <footer className="analysis-pagination"><span>第 {result.page}/{pageCount} 页</span><div><button className="icon-button" title="上一页" aria-label="上一页" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={17} /></button><button className="icon-button" title="下一页" aria-label="下一页" disabled={page >= pageCount || loading} onClick={() => setPage((current) => current + 1)}><ChevronRight size={17} /></button></div></footer>
     </section>
+
+    {contentOpen ? <div className="note-content-overlay" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setContentOpen(false);
+    }}>
+      <section className="note-content-dialog" role="dialog" aria-modal="true" aria-labelledby="note-content-title">
+        <header><div><h2 id="note-content-title">笔记内容</h2><span>{noteContent?.note_id || selected?.note_id || "--"}</span></div><button className="icon-button" title="关闭" aria-label="关闭笔记内容" onClick={() => setContentOpen(false)}><X size={18} /></button></header>
+        <div className="note-content-body">
+          {contentLoading ? <div className="note-content-state"><LoaderCircle size={18} className="spin" />正在读取稿件内容</div>
+            : contentError ? <div className="note-content-state error"><AlertCircle size={18} />{contentError}</div>
+              : noteContent?.found ? <>
+                {noteContent.providers.length > 0 ? <div className="note-content-source"><span>来源机构</span><strong>{noteContent.providers.join("、")}</strong></div> : null}
+                <pre>{noteContent.note_content}</pre>
+              </> : <div className="note-content-state">当前稿件库未收录这篇笔记的内容</div>}
+        </div>
+        <footer>{noteContent?.note_url ? <a href={noteContent.note_url} target="_blank" rel="noreferrer"><ExternalLink size={15} />打开小红书笔记</a> : <span />}</footer>
+      </section>
+    </div> : null}
   </>;
 }
 
