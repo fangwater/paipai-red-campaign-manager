@@ -9,7 +9,7 @@ import (
 
 func TestFindProviderColumnsAndRecord(t *testing.T) {
 	headers := []interface{}{
-		"无关字段", " 提交日期 ", "笔记 ID", "内容类型", "稿件", "封面类型", "商业强度",
+		"无关字段", " 提交日期 ", "笔记 ID", "笔记类型", "稿件", "封面类型", "商业强度",
 		"对话人群", "用户场景", "进度",
 	}
 	headerRow, columns, err := findProviderColumns([][]interface{}{

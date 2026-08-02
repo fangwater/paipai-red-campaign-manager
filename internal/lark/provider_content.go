@@ -37,6 +37,7 @@ var providerColumnNames = []string{
 
 var providerColumnAliases = map[string]string{
 	"发布时间": "提交日期",
+	"笔记类型": "内容类型",
 	"人群标签": "对话人群",
 	"对应场景": "用户场景",
 	"笔记进度": "进度",
