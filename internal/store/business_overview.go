@@ -24,14 +24,17 @@ type overviewTrendRow struct {
 	SearchCost *float64
 }
 
-func (p *Postgres) BusinessOverview(ctx context.Context, days int) (model.BusinessOverview, error) {
-	result := model.BusinessOverview{Days: days, SPU: overviewSPU}
-	trend, err := p.loadBusinessOverviewTrend(ctx, days)
+func (p *Postgres) BusinessOverview(ctx context.Context, days int, spu string) (model.BusinessOverview, error) {
+	if spu == "" {
+		spu = overviewSPU
+	}
+	result := model.BusinessOverview{Days: days, SPU: spu}
+	trend, err := p.loadBusinessOverviewTrend(ctx, days, spu)
 	if err != nil {
 		return result, err
 	}
 	result.Trend = trend
-	newNotes, err := p.loadBusinessOverviewNotes(ctx, days)
+	newNotes, err := p.loadBusinessOverviewNotes(ctx, days, spu)
 	if err != nil {
 		return result, err
 	}
@@ -39,14 +42,13 @@ func (p *Postgres) BusinessOverview(ctx context.Context, days int) (model.Busine
 	return result, nil
 }
 
-func (p *Postgres) loadBusinessOverviewTrend(ctx context.Context, days int) (model.OverviewTrend, error) {
+func (p *Postgres) loadBusinessOverviewTrend(ctx context.Context, days int, spu string) (model.OverviewTrend, error) {
 	var latestDate string
 	if err := p.pool.QueryRow(ctx, `
 		SELECT COALESCE(MAX(report_date)::TEXT, '')
-		FROM maituo_customer_daily_trends
-		WHERE coenzyme_spend IS NOT NULL OR coenzyme_search_uv IS NOT NULL
-		   OR coenzyme_order_uv IS NOT NULL OR coenzyme_search_cost IS NOT NULL
-	`).Scan(&latestDate); err != nil {
+		FROM maituo_customer_daily_spus
+		WHERE deleted_at IS NULL AND spu=$1
+	`, spu).Scan(&latestDate); err != nil {
 		return model.OverviewTrend{}, fmt.Errorf("query business overview latest trend date: %w", err)
 	}
 	result := model.OverviewTrend{Metrics: []model.OverviewMetric{}}
@@ -67,14 +69,17 @@ func (p *Postgres) loadBusinessOverviewTrend(ctx context.Context, days int) (mod
 
 	rows, err := p.pool.Query(ctx, `
 		SELECT dates.day::DATE::TEXT,
-			trends.coenzyme_spend::DOUBLE PRECISION,
-			trends.coenzyme_search_uv::DOUBLE PRECISION,
-			trends.coenzyme_order_uv::DOUBLE PRECISION,
-			trends.coenzyme_search_cost::DOUBLE PRECISION
+			spus.auction_spend::DOUBLE PRECISION,
+			CASE WHEN $3='辅酶' THEN trends.coenzyme_search_uv ELSE trends.krill_oil_search_uv END::DOUBLE PRECISION,
+			CASE WHEN $3='辅酶' THEN trends.coenzyme_order_uv ELSE trends.krill_oil_order_uv END::DOUBLE PRECISION,
+			spus.search_cost::DOUBLE PRECISION
 		FROM generate_series($1::DATE, $2::DATE, INTERVAL '1 day') dates(day)
-		LEFT JOIN maituo_customer_daily_trends trends ON trends.report_date=dates.day::DATE
+		LEFT JOIN maituo_customer_daily_spus spus
+		  ON spus.report_date=dates.day::DATE AND spus.spu=$3 AND spus.deleted_at IS NULL
+		LEFT JOIN maituo_customer_daily_trends trends
+		  ON trends.report_date=dates.day::DATE AND trends.deleted_at IS NULL
 		ORDER BY dates.day
-	`, result.PreviousStartDate, result.EndDate)
+	`, result.PreviousStartDate, result.EndDate, spu)
 	if err != nil {
 		return result, fmt.Errorf("query business overview trend: %w", err)
 	}
@@ -157,12 +162,12 @@ func overviewNullableFloat(value pgtype.Float8) *float64 {
 	return &result
 }
 
-func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int) (model.OverviewNewNotes, error) {
+func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int, spu string) (model.OverviewNewNotes, error) {
 	result := model.OverviewNewNotes{Daily: []model.OverviewDailyNotes{}, Agencies: []model.OverviewAgency{}}
 	for _, agency := range overviewAgencyOrder {
 		audienceTags := []string{}
 		if agency == "飓风" {
-			audienceTags = []string{"辅酶选购"}
+			audienceTags = []string{spu + "选购"}
 		}
 		result.Agencies = append(result.Agencies, model.OverviewAgency{Agency: agency, AudienceTags: audienceTags, Notes: []model.OverviewNote{}})
 	}
@@ -182,10 +187,10 @@ func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int) (mod
 			FROM lark_bitable_records records
 			JOIN lark_bitable_tables tables ON tables.app_token=records.app_token AND tables.table_id=records.table_id
 			WHERE records.deleted_at IS NULL AND tables.name='蒲公英数据'
-			  AND records.fields ->> 'spu名称' ILIKE '%辅酶%'
+			  AND records.fields ->> 'spu名称' ILIKE $1
 		)
 		SELECT COALESCE(MAX(published_date)::TEXT, '') FROM base WHERE agency IS NOT NULL
-	`).Scan(&latestDate); err != nil {
+	`, "%"+spu+"%").Scan(&latestDate); err != nil {
 		return result, fmt.Errorf("query business overview latest Dandelion date: %w", err)
 	}
 	if latestDate == "" {
@@ -239,7 +244,7 @@ func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int) (mod
 			FROM lark_bitable_records records
 			JOIN lark_bitable_tables tables ON tables.app_token=records.app_token AND tables.table_id=records.table_id
 			WHERE records.deleted_at IS NULL AND tables.name='蒲公英数据'
-			  AND records.fields ->> 'spu名称' ILIKE '%辅酶%'
+			  AND records.fields ->> 'spu名称' ILIKE $3
 		), matched AS (
 			SELECT base.*, execution.audience
 			FROM base
@@ -256,7 +261,7 @@ func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int) (mod
 		), deduplicated AS (
 			SELECT DISTINCT ON (note_id) note_id, title, note_url, author, note_type, content_tag,
 				agency, published_date, synced_at,
-				CASE WHEN agency='飓风' THEN '辅酶选购' ELSE COALESCE(audience, '') END AS audience
+				CASE WHEN agency='飓风' THEN $4 ELSE COALESCE(audience, '') END AS audience
 			FROM matched
 			ORDER BY note_id, published_date DESC, synced_at DESC
 		)
@@ -264,7 +269,7 @@ func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int) (mod
 			published_date::TEXT, audience, MAX(synced_at) OVER () AS source_synced_at
 		FROM deduplicated
 		ORDER BY published_date DESC, agency, note_id
-	`, result.StartDate, result.EndDate)
+	`, result.StartDate, result.EndDate, "%"+spu+"%", spu+"选购")
 	if err != nil {
 		return result, fmt.Errorf("query business overview Dandelion notes: %w", err)
 	}

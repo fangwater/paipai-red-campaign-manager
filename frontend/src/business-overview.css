@@ -1,6 +1,7 @@
 .overview-page-heading { align-items: center; }
 .overview-heading-actions { display: flex; align-items: center; gap: 14px; }
 .overview-heading-actions .heading-status { padding-top: 0; }
+.overview-spu { grid-template-columns: repeat(2, 68px); }
 .overview-period { grid-template-columns: repeat(3, 58px); }
 
 .overview-section-heading {
@@ -108,8 +109,9 @@
 }
 @media (max-width: 620px) {
   .overview-page-heading { align-items: stretch; flex-direction: column; gap: 13px; }
-  .overview-heading-actions { justify-content: space-between; }
+  .overview-heading-actions { display: grid; grid-template-columns: 1fr; }
   .overview-heading-actions .heading-status { display: none; }
+  .overview-spu { width: 100%; grid-template-columns: repeat(2, 1fr); }
   .overview-period { width: 100%; grid-template-columns: repeat(3, 1fr); }
   .overview-section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
   .overview-metric-card > header { align-items: flex-start; }

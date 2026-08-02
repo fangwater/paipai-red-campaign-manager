@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-function makeOverview(days: number) {
+function makeOverview(days: number, spu: "辅酶" | "磷虾油") {
   const dates = Array.from({ length: days }, (_, index) => {
     const date = new Date(Date.UTC(2026, 6, 1 + index));
     return date.toISOString().slice(0, 10);
@@ -16,7 +16,7 @@ function makeOverview(days: number) {
   });
   return {
     days,
-    spu: "辅酶",
+    spu,
     trend: {
       start_date: dates[0],
       end_date: dates[dates.length - 1],
@@ -53,30 +53,33 @@ function makeOverview(days: number) {
           notes: [{ note_id: "note-3", title: "给爸妈选辅酶", url: "https://example.com/note-3", author: "阿橙", published_date: dates[2], agency: "曼杰", audience: "中老年", note_type: "图文", content_tag: "家庭" }]
         },
         { agency: "引响", count: 0, audience_tags: [], notes: [] },
-        { agency: "飓风", count: 0, audience_tags: ["辅酶选购"], notes: [] },
+        { agency: "飓风", count: 0, audience_tags: [spu + "选购"], notes: [] },
         { agency: "有一有二", count: 0, audience_tags: [], notes: [] }
       ]
     }
   };
 }
 
-async function mockCommon(page: Page, requestedDays: string[]) {
+async function mockCommon(page: Page, requestedQueries: string[]) {
   await page.route("**/paipai/healthz", (route) => route.fulfill({ status: 200, body: "ok" }));
   await page.route("**/paipai/api/imports/maituo-customer-daily", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] }) }));
   await page.route("**/paipai/api/analytics/overview?*", async (route) => {
-    const days = new URL(route.request().url()).searchParams.get("days") ?? "7";
-    requestedDays.push(days);
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: makeOverview(Number(days)) }) });
+    const params = new URL(route.request().url()).searchParams;
+    const days = params.get("days") ?? "7";
+    const spu = (params.get("spu") ?? "辅酶") as "辅酶" | "磷虾油";
+    requestedQueries.push(spu + ":" + days);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: makeOverview(Number(days), spu) }) });
   });
 }
 
 test("renders overview trends and agency note details", async ({ page }) => {
-  const requestedDays: string[] = [];
-  await mockCommon(page, requestedDays);
+  const requestedQueries: string[] = [];
+  await mockCommon(page, requestedQueries);
 
   await page.goto("/paipai/overview");
   await expect(page.getByRole("heading", { name: "数据总览" })).toBeVisible();
   await expect(page.locator(".overview-metric-card")).toHaveCount(4);
+  await expect.poll(() => requestedQueries).toContain("辅酶:7");
   await expect(page.getByText("较前周期 +25.0%")).toBeVisible();
   await expect(page.getByText("辅酶选购", { exact: true })).toBeVisible();
   await expect(page.locator(".agency-table tbody tr")).toHaveCount(2);
@@ -95,13 +98,17 @@ test("renders overview trends and agency note details", async ({ page }) => {
   await expect(page.getByText("给爸妈选辅酶")).toBeVisible();
   await expect(page.getByRole("link", { name: "打开笔记 note-3" })).toHaveAttribute("href", "https://example.com/note-3");
 
+  await page.getByRole("button", { name: "磷虾油", exact: true }).click();
+  await expect.poll(() => requestedQueries).toContain("磷虾油:7");
+  await expect(page.getByText("磷虾油选购", { exact: true })).toBeVisible();
+
   await page.getByRole("button", { name: "14日" }).click();
-  await expect.poll(() => requestedDays).toContain("14");
+  await expect.poll(() => requestedQueries).toContain("磷虾油:14");
 });
 
 test("overview remains usable on mobile", async ({ page }) => {
-  const requestedDays: string[] = [];
-  await mockCommon(page, requestedDays);
+  const requestedQueries: string[] = [];
+  await mockCommon(page, requestedQueries);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/paipai/overview");
 

@@ -24,12 +24,14 @@ func (stub *guoraiAnalyticsStub) GuoraiLatest(_ context.Context, query model.Guo
 
 type businessOverviewStub struct {
 	days   int
+	spu    string
 	result model.BusinessOverview
 	err    error
 }
 
-func (stub *businessOverviewStub) BusinessOverview(_ context.Context, days int) (model.BusinessOverview, error) {
+func (stub *businessOverviewStub) BusinessOverview(_ context.Context, days int, spu string) (model.BusinessOverview, error) {
 	stub.days = days
+	stub.spu = spu
 	return stub.result, stub.err
 }
 
@@ -83,9 +85,9 @@ func TestGuoraiLatestHandlerRejectsInvalidType(t *testing.T) {
 }
 
 func TestBusinessOverviewHandler(t *testing.T) {
-	stub := &businessOverviewStub{result: model.BusinessOverview{Days: 14, SPU: "辅酶"}}
+	stub := &businessOverviewStub{result: model.BusinessOverview{Days: 14, SPU: "磷虾油"}}
 	server := &apiServer{businessOverview: stub, timeout: time.Second}
-	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/overview?days=14", nil)
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/overview?days=14&spu=%E7%A3%B7%E8%99%BE%E6%B2%B9", nil)
 	response := httptest.NewRecorder()
 
 	server.businessOverviewHandler(response, request)
@@ -93,14 +95,26 @@ func TestBusinessOverviewHandler(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
-	if stub.days != 14 || !strings.Contains(response.Body.String(), `"spu":"辅酶"`) {
-		t.Fatalf("days=%d body=%s", stub.days, response.Body.String())
+	if stub.days != 14 || stub.spu != "磷虾油" || !strings.Contains(response.Body.String(), `"spu":"磷虾油"`) {
+		t.Fatalf("days=%d spu=%q body=%s", stub.days, stub.spu, response.Body.String())
 	}
 }
 
 func TestBusinessOverviewHandlerRejectsUnsupportedPeriod(t *testing.T) {
 	server := &apiServer{businessOverview: &businessOverviewStub{}, timeout: time.Second}
 	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/overview?days=21", nil)
+	response := httptest.NewRecorder()
+
+	server.businessOverviewHandler(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestBusinessOverviewHandlerRejectsUnsupportedSPU(t *testing.T) {
+	server := &apiServer{businessOverview: &businessOverviewStub{}, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/overview?days=7&spu=other", nil)
 	response := httptest.NewRecorder()
 
 	server.businessOverviewHandler(response, request)

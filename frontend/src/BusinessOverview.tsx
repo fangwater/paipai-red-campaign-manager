@@ -10,6 +10,7 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRendere
 
 type ServiceState = "checking" | "online" | "offline";
 type PeriodDays = 7 | 14 | 30;
+type SPUOption = "辅酶" | "磷虾油";
 
 type MetricPoint = {
   date: string;
@@ -47,7 +48,7 @@ type OverviewAgency = {
 
 type OverviewResult = {
   days: PeriodDays;
-  spu: string;
+  spu: SPUOption;
   trend: {
     start_date: string;
     end_date: string;
@@ -65,6 +66,7 @@ type OverviewResult = {
     source_synced_at: string | null;
   };
 };
+const SPU_OPTIONS: SPUOption[] = ["辅酶", "磷虾油"];
 
 const PERIOD_OPTIONS: PeriodDays[] = [7, 14, 30];
 const METRIC_COLORS: Record<string, string> = {
@@ -234,6 +236,7 @@ function safeURL(value: string): string | null {
 
 function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
   const [days, setDays] = useState<PeriodDays>(7);
+  const [spu, setSPU] = useState<SPUOption>("辅酶");
   const [result, setResult] = useState<OverviewResult | null>(null);
   const [selectedAgency, setSelectedAgency] = useState("");
   const [loading, setLoading] = useState(true);
@@ -243,7 +246,8 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    fetch(import.meta.env.BASE_URL + "api/analytics/overview?days=" + days, { signal: controller.signal })
+    const params = new URLSearchParams({ days: String(days), spu });
+    fetch(import.meta.env.BASE_URL + "api/analytics/overview?" + params, { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json() as { success: boolean; data?: OverviewResult; error?: string };
         if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error || "数据总览读取失败");
@@ -260,14 +264,17 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [days]);
+  }, [days, spu]);
 
   const agency = result?.new_notes.agencies.find((item) => item.agency === selectedAgency) ?? result?.new_notes.agencies[0];
 
   return <>
     <section className="page-heading overview-page-heading">
-      <div><h1>数据总览</h1><p>辅酶 · Maituo 客户日报与蒲公英数据</p></div>
+      <div><h1>数据总览</h1><p>{spu} · Maituo 客户日报与蒲公英数据</p></div>
       <div className="overview-heading-actions">
+        <div className="segmented-control overview-spu" aria-label="总览 SPU">
+          {SPU_OPTIONS.map((option) => <button key={option} className={spu === option ? "active" : ""} onClick={() => setSPU(option)}>{option}</button>)}
+        </div>
         <div className="segmented-control overview-period" aria-label="总览时间范围">
           {PERIOD_OPTIONS.map((option) => <button key={option} className={days === option ? "active" : ""} onClick={() => setDays(option)}>{option}日</button>)}
         </div>
