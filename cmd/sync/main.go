@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"paipai-red-campaign-manager/internal/config"
+	"paipai-red-campaign-manager/internal/embedding"
 	larksource "paipai-red-campaign-manager/internal/lark"
 	"paipai-red-campaign-manager/internal/model"
 	"paipai-red-campaign-manager/internal/store"
@@ -30,6 +31,10 @@ type manuscriptSyncService interface {
 	RunProviders(context.Context, []string) (model.ProviderSyncResult, error)
 }
 
+type noteEmbeddingService interface {
+	Refresh(context.Context, bool) (model.NoteEmbeddingRefreshResult, error)
+}
+
 type dandelionStatusStore interface {
 	LarkSyncRuns(context.Context, int) ([]store.LarkSyncRun, error)
 }
@@ -42,6 +47,7 @@ type apiServer struct {
 	dandelionSync       baseSyncService
 	dandelionStatus     dandelionStatusStore
 	manuscriptSync      manuscriptSyncService
+	embeddingRefresh    noteEmbeddingService
 	statusStore         manuscriptStatusStore
 	maituoImport        maituoImportStore
 	maituoAnalytics     maituoAnalyticsStore
@@ -100,6 +106,16 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err := destination.FailRunningProviderContentSyncs(ctx, "manual sync service restarted before the request finished"); err != nil {
 		return err
 	}
+	embeddingClient, err := embedding.NewClient(cfg.BailianAPIKey, cfg.BailianBaseURL, nil)
+	if err != nil {
+		return fmt.Errorf("configure Bailian embeddings: %w", err)
+	}
+	embeddingRefresher, err := embedding.NewRefresher(
+		destination, embeddingClient, cfg.BailianEmbeddingModel, cfg.BailianDimensions,
+	)
+	if err != nil {
+		return fmt.Errorf("configure note embedding refresh: %w", err)
+	}
 
 	dandelionDestination, err := store.NewTableScopedPostgres(ctx, cfg.DatabaseURL, cfg.LarkDandelionAppToken)
 	if err != nil {
@@ -118,6 +134,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		dandelionSync:       syncer.New(dandelionSource, dandelionDestination, cfg.DocumentRefreshInterval),
 		dandelionStatus:     dandelionDestination,
 		manuscriptSync:      syncer.NewProvider(source, destination),
+		embeddingRefresh:    embeddingRefresher,
 		statusStore:         destination,
 		maituoImport:        destination,
 		maituoAnalytics:     destination,
@@ -244,6 +261,13 @@ func (server *apiServer) syncManuscripts(writer http.ResponseWriter, request *ht
 	defer cancel()
 	startedAt := time.Now()
 	result, err := server.manuscriptSync.RunProviders(ctx, payload.ProviderCodes)
+	if err == nil && server.embeddingRefresh != nil {
+		embeddingResult, embeddingErr := server.embeddingRefresh.Refresh(ctx, false)
+		result.Embeddings = &embeddingResult
+		if embeddingErr != nil {
+			err = fmt.Errorf("manuscript sync succeeded but embedding refresh failed: %w", embeddingErr)
+		}
+	}
 	server.logger.Info("Lark manuscript manual sync finished",
 		"provider_codes", payload.ProviderCodes,
 		"result", result,
@@ -306,7 +330,7 @@ func writeSyncResult(writer http.ResponseWriter, result interface{}, err error) 
 	}
 	status := http.StatusBadGateway
 	switch {
-	case errors.Is(err, syncer.ErrAlreadyRunning), errors.Is(err, store.ErrSyncLocked):
+	case errors.Is(err, syncer.ErrAlreadyRunning), errors.Is(err, store.ErrSyncLocked), errors.Is(err, store.ErrNoteEmbeddingRefreshLocked):
 		status = http.StatusConflict
 	case errors.Is(err, syncer.ErrUnknownProvider):
 		status = http.StatusBadRequest

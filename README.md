@@ -66,6 +66,13 @@ cp .env.example .env
 - `SYNC_TIMEOUT`：一次显式同步请求的超时，默认 10 分钟
 - `DOCUMENT_REFRESH_INTERVAL`：调用 Base 同步时，已抓取正文的重新拉取间隔，默认 1 小时
 
+稿件向量配置：
+
+- `BAILIAN_API_KEY`：百炼 Workspace API Key，也可使用 `DASHSCOPE_API_KEY`
+- `BAILIAN_BASE_URL`：Workspace 的 OpenAI 兼容 Base URL
+- `BAILIAN_EMBEDDING_MODEL`：默认 `qwen3.7-text-embedding`
+- `BAILIAN_EMBEDDING_DIMENSIONS`：默认 1024
+
 聚光 OpenAPI 配置：
 
 - `XHS_JG_APP_ID`：聚光开放平台应用 ID
@@ -207,6 +214,22 @@ go run ./cmd/list-tables
 ```bash
 make lark-sync-stop
 ```
+
+## 稿件向量
+
+首次补齐或手动增量刷新稿件向量：
+
+```bash
+make embeddings-refresh
+```
+
+刷新按正文 SHA-256、模型和维度判断变化，未变化的稿件不会调用模型。需要全部重算时使用：
+
+```bash
+make embeddings-force-refresh
+```
+
+每次 `POST /v1/sync/manuscripts` 成功后会自动运行增量刷新。向量保存在 PostgreSQL 的 `service_provider_note_embeddings`，运行记录保存在 `service_provider_note_embedding_runs`。
 
 ## 验证
 

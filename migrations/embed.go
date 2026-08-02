@@ -56,3 +56,8 @@ var MaituoDatedSummaryTablesSQL string
 //
 //go:embed 012_remove_maituo_import_version.sql
 var MaituoRemoveImportVersionSQL string
+
+// SimilarNoteEmbeddingsSQL stores external content embeddings and explicit refresh runs.
+//
+//go:embed 013_similar_note_embeddings.sql
+var SimilarNoteEmbeddingsSQL string

@@ -1,6 +1,7 @@
 .PHONY: run test build frontend-dev frontend-build frontend-deploy xhs-token xhs-refresh xhs-authd-build xhs-authd-start \
 	lark-sync-build lark-sync-start lark-sync-manuscripts lark-sync-dandelion lark-sync-status lark-sync-logs lark-sync-stop \
-	xhs-authd-authorize xhs-authd-status xhs-authd-logs xhs-authd-stop xhs-campaign-sync xhs-sync-status xhs-sync-campaigns xhs-sync-units xhs-sync-creativities
+	xhs-authd-authorize xhs-authd-status xhs-authd-logs xhs-authd-stop xhs-campaign-sync xhs-sync-status xhs-sync-campaigns xhs-sync-units xhs-sync-creativities \
+	embeddings-refresh embeddings-force-refresh
 
 run:
 	@set -a; . ./.env; set +a; go run ./cmd/sync
@@ -19,6 +20,12 @@ lark-sync-dandelion:
 
 lark-sync-status:
 	@curl -sS http://127.0.0.1:18081/v1/sync/manuscripts/status
+
+embeddings-refresh:
+	@set -a; . ./.env; set +a; go run ./cmd/embed-notes
+
+embeddings-force-refresh:
+	@set -a; . ./.env; set +a; go run ./cmd/embed-notes --force
 
 lark-sync-logs:
 	pm2 logs paipai-lark-sync --lines 100

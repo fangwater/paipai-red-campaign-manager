@@ -15,6 +15,10 @@ func TestLoad(t *testing.T) {
 	t.Setenv("LARK_SYNC_LISTEN", "127.0.0.1:19081")
 	t.Setenv("SYNC_TIMEOUT", "30s")
 	t.Setenv("DOCUMENT_REFRESH_INTERVAL", "45m")
+	t.Setenv("BAILIAN_API_KEY", "bailian-key")
+	t.Setenv("BAILIAN_WORKSPACE_ID", "workspace-id")
+	t.Setenv("BAILIAN_EMBEDDING_MODEL", "qwen3.7-text-embedding")
+	t.Setenv("BAILIAN_EMBEDDING_DIMENSIONS", "768")
 
 	cfg, err := Load()
 	if err != nil {
@@ -31,6 +35,9 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.DocumentRefreshInterval != 45*time.Minute {
 		t.Fatalf("DocumentRefreshInterval = %s, want 45m", cfg.DocumentRefreshInterval)
+	}
+	if cfg.BailianAPIKey != "bailian-key" || cfg.BailianWorkspaceID != "workspace-id" || cfg.BailianDimensions != 768 {
+		t.Fatalf("Bailian config = key:%t workspace:%q dimensions:%d", cfg.BailianAPIKey != "", cfg.BailianWorkspaceID, cfg.BailianDimensions)
 	}
 }
 

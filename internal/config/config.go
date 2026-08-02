@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -11,6 +12,8 @@ const (
 	defaultLarkSyncListen          = "127.0.0.1:18081"
 	defaultTimeout                 = 10 * time.Minute
 	defaultDocumentRefreshInterval = time.Hour
+	defaultBailianEmbeddingModel    = "qwen3.7-text-embedding"
+	defaultBailianDimensions        = 1024
 )
 
 type Config struct {
@@ -23,6 +26,11 @@ type Config struct {
 	LarkSyncListen          string
 	SyncTimeout             time.Duration
 	DocumentRefreshInterval time.Duration
+	BailianAPIKey           string
+	BailianWorkspaceID      string
+	BailianBaseURL          string
+	BailianEmbeddingModel   string
+	BailianDimensions       int
 }
 
 func Load() (Config, error) {
@@ -36,6 +44,11 @@ func Load() (Config, error) {
 		LarkSyncListen:          envOrDefault("LARK_SYNC_LISTEN", defaultLarkSyncListen),
 		SyncTimeout:             defaultTimeout,
 		DocumentRefreshInterval: defaultDocumentRefreshInterval,
+		BailianAPIKey:           firstNonEmpty(os.Getenv("BAILIAN_API_KEY"), os.Getenv("DASHSCOPE_API_KEY")),
+		BailianWorkspaceID:      os.Getenv("BAILIAN_WORKSPACE_ID"),
+		BailianBaseURL:          os.Getenv("BAILIAN_BASE_URL"),
+		BailianEmbeddingModel:   envOrDefault("BAILIAN_EMBEDDING_MODEL", defaultBailianEmbeddingModel),
+		BailianDimensions:       defaultBailianDimensions,
 	}
 
 	var err error
@@ -44,6 +57,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.DocumentRefreshInterval, err = positiveDuration("DOCUMENT_REFRESH_INTERVAL", cfg.DocumentRefreshInterval)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.BailianDimensions, err = positiveInt("BAILIAN_EMBEDDING_DIMENSIONS", cfg.BailianDimensions)
 	if err != nil {
 		return Config{}, err
 	}
@@ -88,4 +105,25 @@ func envOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func positiveInt(name string, fallback int) (int, error) {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 0, errors.New(name + " must be a positive integer")
+	}
+	return value, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

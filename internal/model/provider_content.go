@@ -42,10 +42,11 @@ type ProviderContentSnapshot struct {
 }
 
 type ProviderSyncResult struct {
-	Providers  int   `json:"providers"`
-	Fetched    int   `json:"fetched"`
-	Upserted   int   `json:"upserted"`
-	Deleted    int64 `json:"deleted"`
-	Notes      int   `json:"notes"`
-	NoteErrors int   `json:"note_errors"`
+	Providers  int                         `json:"providers"`
+	Fetched    int                         `json:"fetched"`
+	Upserted   int                         `json:"upserted"`
+	Deleted    int64                       `json:"deleted"`
+	Notes      int                         `json:"notes"`
+	NoteErrors int                         `json:"note_errors"`
+	Embeddings *NoteEmbeddingRefreshResult `json:"embeddings,omitempty"`
 }

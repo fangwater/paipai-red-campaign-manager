@@ -39,6 +39,17 @@ func (stub *manuscriptSyncStub) RunProviders(_ context.Context, providerCodes []
 	return stub.result, stub.err
 }
 
+type noteEmbeddingStub struct {
+	calls  int
+	result model.NoteEmbeddingRefreshResult
+	err    error
+}
+
+func (stub *noteEmbeddingStub) Refresh(context.Context, bool) (model.NoteEmbeddingRefreshResult, error) {
+	stub.calls++
+	return stub.result, stub.err
+}
+
 type dandelionStatusStub struct {
 	runs []store.LarkSyncRun
 	err  error
@@ -83,6 +94,27 @@ func TestManuscriptSyncEndpointSelectsProviders(t *testing.T) {
 	}
 	if !strings.Contains(response, `"providers":2`) || !strings.Contains(response, `"upserted":12`) {
 		t.Fatalf("response = %s", response)
+	}
+}
+
+func TestManuscriptSyncEndpointRefreshesEmbeddings(t *testing.T) {
+	manuscripts := &manuscriptSyncStub{result: model.ProviderSyncResult{Providers: 1, Upserted: 3}}
+	embeddings := &noteEmbeddingStub{result: model.NoteEmbeddingRefreshResult{
+		RunID: 7, Model: "test-model", Dimensions: 4, Total: 3, Candidates: 3, Embedded: 3, Requests: 1,
+	}}
+	handler := newAPIHandler(&apiServer{
+		dandelionSync:    &baseSyncStub{},
+		dandelionStatus:  &dandelionStatusStub{},
+		manuscriptSync:   manuscripts,
+		embeddingRefresh: embeddings,
+		statusStore:      &manuscriptStatusStub{},
+		timeout:          time.Second,
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	response := performRequest(t, handler, http.MethodPost, "/v1/sync/manuscripts", "{}", http.StatusOK)
+	if embeddings.calls != 1 || !strings.Contains(response, `"embedded":3`) {
+		t.Fatalf("embedding calls=%d response=%s", embeddings.calls, response)
 	}
 }
 
