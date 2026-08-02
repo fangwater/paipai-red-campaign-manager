@@ -17,6 +17,7 @@ const DataSyncCenter = lazy(() => import("./DataSyncCenter"));
 const SystemSettings = lazy(() => import("./SystemSettings"));
 const BusinessOverview = lazy(() => import("./BusinessOverview"));
 const GuoraiData = lazy(() => import("./GuoraiData"));
+const ContentAnalysis = lazy(() => import("./ContentAnalysis"));
 
 type TableImportResult = {
   key: string;
@@ -79,6 +80,7 @@ const navGroups = [
     label: "分析中心",
     items: [
       { label: "数据总览", icon: LayoutDashboard, path: "/overview" },
+      { label: "内容分析", icon: Rows3, path: "/content-analysis" },
       { label: "笔记计划分析", icon: ChartNoAxesCombined, path: "/note-campaign-analysis" },
       { label: "子账户与计划诊断", icon: Stethoscope, path: "/account-plan-diagnosis" },
       { label: "投流情况对比", icon: GitCompareArrows, path: "/traffic-comparison" },
@@ -146,6 +148,7 @@ function MaituoConsole() {
   const navigate = useNavigate();
   const dashboard = location.pathname === "/";
   const businessOverview = location.pathname === "/overview";
+  const contentAnalysis = location.pathname === "/content-analysis";
   const guoraiData = location.pathname === "/guorai-data";
   const analysis = location.pathname === "/note-campaign-analysis";
   const accountDiagnosis = location.pathname === "/account-plan-diagnosis";
@@ -158,8 +161,8 @@ function MaituoConsole() {
   const dataSyncTarget = location.pathname.endsWith("/manuscripts") ? "manuscripts" : "dandelion";
   const dataSyncTargetLabel = dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
-  const breadcrumbSection = businessOverview || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : sync ? "投放管理" : settings ? "系统" : "数据中心";
-  const breadcrumbPage = businessOverview ? "数据总览" : guoraiData ? "薯量数据" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
+  const breadcrumbSection = businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : sync ? "投放管理" : settings ? "系统" : "数据中心";
+  const breadcrumbPage = businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : guoraiData ? "薯量数据" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
   const inputRef = useRef<HTMLInputElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -332,16 +335,21 @@ function MaituoConsole() {
         </header>
 
         <main className="main-content">
-          {dashboard ? <>
+          {contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : dashboard ? <>
             <section className="page-heading">
               <div><h1>数据中台</h1><p>PaiPai RED · 业务数据工作台</p></div>
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>
             </section>
             <section className="entry-section">
-              <div className="entry-header"><h2>业务入口</h2><span>8 个可用功能</span></div>
+              <div className="entry-header"><h2>业务入口</h2><span>9 个可用功能</span></div>
               <button className="entry-row" onClick={() => navigate("/overview")}>
                 <span className="entry-icon analysis-entry-icon"><LayoutDashboard size={22} /></span>
                 <span className="entry-copy"><strong>查看数据总览</strong><small>辅酶投放趋势与机构每日新增笔记</small></span>
+                <span className="entry-action">进入<ArrowRight size={17} /></span>
+              </button>
+              <button className="entry-row" onClick={() => navigate("/content-analysis")}>
+                <span className="entry-icon analysis-entry-icon"><Rows3 size={22} /></span>
+                <span className="entry-copy"><strong>查看内容分析</strong><small>内容类型、人群与场景表现热力图</small></span>
                 <span className="entry-action">进入<ArrowRight size={17} /></span>
               </button>
               <button className="entry-row" onClick={() => navigate("/maituo-daily-report")}>

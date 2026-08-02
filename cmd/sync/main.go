@@ -54,6 +54,7 @@ type apiServer struct {
 	maituoXHSLinksStore maituoXHSLinkStore
 	guoraiAnalytics     guoraiAnalyticsStore
 	businessOverview    businessOverviewStore
+	contentAnalysis     contentAnalysisStore
 	timeout             time.Duration
 	logger              *slog.Logger
 }
@@ -143,6 +144,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		maituoXHSLinksStore: destination,
 		guoraiAnalytics:     destination,
 		businessOverview:    destination,
+		contentAnalysis:     destination,
 		timeout:             cfg.SyncTimeout,
 		logger:              logger,
 	})
@@ -202,6 +204,7 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/analytics/maituo/xhs-links", server.maituoXHSLinks)
 	mux.HandleFunc("/v1/analytics/guorai/latest", server.guoraiLatest)
 	mux.HandleFunc("/v1/analytics/overview", server.businessOverviewHandler)
+	mux.HandleFunc("/v1/analytics/content-analysis", server.contentAnalysisHandler)
 	mux.HandleFunc("/v1/sync/manuscripts", server.syncManuscripts)
 	mux.HandleFunc("/v1/sync/manuscripts/status", server.manuscriptStatus)
 	return noStoreHeaders(mux)
