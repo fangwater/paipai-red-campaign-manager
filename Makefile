@@ -34,7 +34,7 @@ guorai-login: guorai-build
 	@set -a; . ./.env; set +a; ./bin/paipai-guorai login
 
 guorai-sync: guorai-build
-	@set -a; . ./.env; set +a; ./bin/paipai-guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 7 --timeout 30m
+	@set -a; . ./.env; set +a; ./bin/paipai-guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 14 --timeout 30m
 
 guorai-sync-install: guorai-build
 	systemd-analyze verify deploy/systemd/paipai-guorai-sync.service deploy/systemd/paipai-guorai-sync.timer

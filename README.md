@@ -460,7 +460,7 @@ go run ./cmd/guorai export --type plan --from 2026-07-09 --to 2026-07-16 --outpu
 
 ### Rolling 快照入库
 
-`guorai sync` 默认只刷新平台当前截止日的一份最新快照，同时处理笔记和计划。查询会使用 `GUORAI_MERCHANT_ID` 指定店铺，否则薯量仅返回关注列表维度而不返回投放指标。笔记快照查询含首尾共 14 天的触达窗口，计划快照查询 7 天窗口，并保存平台原始 JSON、类型化原始指标、最新维度和计划-笔记关系。
+`guorai sync` 默认只刷新平台当前截止日的一份最新快照，同时处理笔记和计划。查询会使用 `GUORAI_MERCHANT_ID` 指定店铺，否则薯量仅返回关注列表维度而不返回投放指标。笔记和计划快照均查询含首尾共 14 天的触达窗口，并保存平台原始 JSON、类型化原始指标、最新维度和计划-笔记关系。
 
 ```bash
 set -a; . ./.env; set +a
@@ -470,7 +470,7 @@ go run ./cmd/guorai sync
 等价的显式参数：
 
 ```bash
-go run ./cmd/guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 7 --timeout 30m
+go run ./cmd/guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 14 --timeout 30m
 ```
 
 可使用 `--type note` 或 `--type plan` 只同步一种数据，使用 `--as-of YYYY-MM-DD` 回刷指定截止日期。默认以平台统计截止日期为最新快照日。`--window-days N` 可在临时回刷时统一覆盖笔记和计划窗口。

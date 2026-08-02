@@ -10,7 +10,7 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/paipai-red-campaign-manager
 EnvironmentFile=/home/ubuntu/paipai-red-campaign-manager/.env
 Environment=GUORAI_SESSION_FILE=/home/ubuntu/paipai-red-campaign-manager/.guorai/session.json
-ExecStart=/home/ubuntu/paipai-red-campaign-manager/bin/paipai-guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 7 --timeout 30m
+ExecStart=/home/ubuntu/paipai-red-campaign-manager/bin/paipai-guorai sync --type all --days 1 --note-window-days 14 --plan-window-days 14 --timeout 30m
 TimeoutStartSec=35min
 UMask=0077
 Nice=10

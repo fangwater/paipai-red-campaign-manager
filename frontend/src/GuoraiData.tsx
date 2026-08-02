@@ -167,7 +167,7 @@ function GuoraiData({ serviceState }: { serviceState: ServiceState }) {
 
   return <>
     <section className="page-heading guorai-page-heading">
-      <div><h1>薯量数据</h1><p>最新同步快照 · {entityType === "note" ? "近 14 日笔记" : "近 7 日计划"}</p></div>
+      <div><h1>薯量数据</h1><p>最新同步快照 · {entityType === "note" ? "近 14 日笔记" : "近 14 日计划"}</p></div>
       <div className="heading-status"><span className={"status-dot " + serviceState} />{serviceState === "online" ? "数据服务已连接" : serviceState === "offline" ? "数据服务未连接" : "正在检查连接"}</div>
     </section>
 

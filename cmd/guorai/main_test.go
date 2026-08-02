@@ -32,16 +32,16 @@ func TestRegisterFilterFlagsUpdatesReturnedFilter(t *testing.T) {
 }
 
 func TestGuoraiWindowDays(t *testing.T) {
-	if got := guoraiWindowDays(guorai.BusinessTypeNote, 14, 7, 0); got != 14 {
+	if got := guoraiWindowDays(guorai.BusinessTypeNote, 14, 14, 0); got != 14 {
 		t.Fatalf("note window days = %d", got)
 	}
-	if got := guoraiWindowDays(guorai.BusinessTypePlan, 14, 7, 0); got != 7 {
+	if got := guoraiWindowDays(guorai.BusinessTypePlan, 14, 14, 0); got != 14 {
 		t.Fatalf("plan window days = %d", got)
 	}
-	if got := guoraiWindowDays(guorai.BusinessTypeNote, 14, 7, 10); got != 10 {
+	if got := guoraiWindowDays(guorai.BusinessTypeNote, 14, 14, 10); got != 10 {
 		t.Fatalf("overridden note window days = %d", got)
 	}
-	if got := guoraiWindowDays(guorai.BusinessTypePlan, 14, 7, 10); got != 10 {
+	if got := guoraiWindowDays(guorai.BusinessTypePlan, 14, 14, 10); got != 10 {
 		t.Fatalf("overridden plan window days = %d", got)
 	}
 }

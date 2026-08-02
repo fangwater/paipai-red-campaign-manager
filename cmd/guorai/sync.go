@@ -24,7 +24,7 @@ func runGuoraiSync(ctx context.Context, args []string) error {
 	businessType := flags.String("type", "all", "business type: note, plan, or all")
 	snapshotDays := flags.Int("days", 1, "number of latest rolling snapshot dates to refresh")
 	noteWindowDays := flags.Int("note-window-days", 14, "inclusive days in each note rolling window")
-	planWindowDays := flags.Int("plan-window-days", 7, "inclusive days in each plan rolling window")
+	planWindowDays := flags.Int("plan-window-days", 14, "inclusive days in each plan rolling window")
 	windowDaysOverride := flags.Int("window-days", 0, "override both note and plan rolling windows")
 	asOfRaw := flags.String("as-of", "", "latest snapshot date (YYYY-MM-DD); defaults to the platform cutoff")
 	brandID := flags.String("brand-id", "", "XHS brand ID; defaults to the bound brand")
