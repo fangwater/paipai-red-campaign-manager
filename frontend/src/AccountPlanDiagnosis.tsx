@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ExternalLink, LoaderCircle, Stethoscope, X } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, ExternalLink, LoaderCircle, Minus, Stethoscope, X } from "lucide-react";
 import "./account-plan-diagnosis.css";
 
 type ServiceState = "checking" | "online" | "offline";
@@ -7,7 +7,13 @@ type PlanTab = "over" | "enlarge" | "stop";
 
 type DiagnosisPoint = {
   report_date: string;
+  spend: number | null;
+  search_users: number | null;
   cost: number | null;
+  search_rate_pct: number | null;
+  cpc: number | null;
+  ctr_pct: number | null;
+  note_count: number | null;
 };
 
 type DandelionSupplement = {
@@ -43,7 +49,12 @@ type AccountDiagnosis = {
   account: string;
   placement: string;
   spend: number;
+  search_users: number;
   cost: number | null;
+  search_rate_pct: number | null;
+  cpc: number | null;
+  ctr_pct: number | null;
+  note_count: number;
   cost_metric: string;
   previous_cost: number | null;
   change_pct: number | null;
@@ -135,6 +146,110 @@ function planFilter(plans: PlanDiagnosis[], tab: PlanTab): PlanDiagnosis[] {
   return plans.filter((plan) => plan.action === tab);
 }
 
+type AccountMetricKey = "spend" | "search_users" | "cost" | "search_rate_pct" | "cpc" | "ctr_pct" | "note_count";
+type AccountMetricUnit = "currency" | "count" | "percent";
+type AccountMetric = {
+  key: AccountMetricKey;
+  label: string;
+  unit: AccountMetricUnit;
+  value: number | null;
+  lower_is_better: boolean;
+  points: { report_date: string; value: number | null }[];
+};
+
+function accountMetrics(account: AccountDiagnosis): AccountMetric[] {
+  const metric = (
+    key: AccountMetricKey,
+    label: string,
+    unit: AccountMetricUnit,
+    value: number | null,
+    lowerIsBetter = false
+  ): AccountMetric => ({
+    key, label, unit, value, lower_is_better: lowerIsBetter,
+    points: account.points.map((point) => ({ report_date: point.report_date, value: point[key] }))
+  });
+  return [
+    metric("spend", "当日消耗", "currency", account.spend),
+    metric("search_users", "回搜人数", "count", account.search_users),
+    metric("cost", account.cost_metric, "currency", account.cost, true),
+    metric("search_rate_pct", "回搜率", "percent", account.search_rate_pct),
+    metric("cpc", "CPC", "currency", account.cpc, true),
+    metric("ctr_pct", "CTR", "percent", account.ctr_pct),
+    metric("note_count", "投放笔记数", "count", account.note_count)
+  ];
+}
+
+function accountMetricValue(metric: AccountMetric, value: number | null): string {
+  if (value === null) return "--";
+  if (metric.unit === "currency") return `¥${money.format(value)}`;
+  if (metric.unit === "percent") return `${money.format(value)}%`;
+  return integer.format(value);
+}
+
+function accountMetricChange(metric: AccountMetric): number | null {
+  const previous = metric.points.at(-2)?.value ?? null;
+  if (metric.value === null || previous === null || previous === 0) return null;
+  return (metric.value - previous) / Math.abs(previous);
+}
+
+function AccountMetricSparkline({ metric }: { metric: AccountMetric }) {
+  const values = metric.points.map((point) => point.value).filter((value): value is number => value !== null);
+  if (values.length === 0) return <span className="diagnosis-metric-no-data">暂无趋势</span>;
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const coordinates = metric.points.map((point, index) => point.value === null ? null : {
+    x: 4 + index * (132 / Math.max(metric.points.length - 1, 1)),
+    y: maximum === minimum ? 18 : 4 + ((maximum - point.value) / (maximum - minimum)) * 28
+  });
+  let path = "";
+  let open = false;
+  coordinates.forEach((coordinate) => {
+    if (!coordinate) {
+      open = false;
+      return;
+    }
+    path += `${open ? "L" : "M"}${coordinate.x},${coordinate.y} `;
+    open = true;
+  });
+  return <svg className="diagnosis-metric-sparkline" viewBox="0 0 140 36" role="img" aria-label={`${metric.label}最近7日趋势`}>
+    <path d={path} />
+    {coordinates.map((coordinate, index) => coordinate
+      ? <circle key={metric.points[index].report_date} cx={coordinate.x} cy={coordinate.y} r="2">
+        <title>{metric.points[index].report_date}：{accountMetricValue(metric, metric.points[index].value)}</title>
+      </circle>
+      : null)}
+  </svg>;
+}
+
+function AccountMetricCard({ metric }: { metric: AccountMetric }) {
+  const change = accountMetricChange(metric);
+  const rising = change !== null && change > 0;
+  const favorable = change !== null && change !== 0 && (metric.lower_is_better ? !rising : rising);
+  const ChangeIcon = change === null || change === 0 ? Minus : rising ? ArrowUpRight : ArrowDownRight;
+  const changeClass = change === null || change === 0 ? "neutral" : favorable ? "good" : "bad";
+  return <article className="diagnosis-metric-card">
+    <header>
+      <span>{metric.label}</span>
+      <em className={`diagnosis-metric-change ${changeClass}`}><ChangeIcon size={11} />{change === null ? "较昨日 --" : `较昨日 ${rising ? "+" : ""}${(change * 100).toFixed(1)}%`}</em>
+    </header>
+    <strong>{accountMetricValue(metric, metric.value)}</strong>
+    <div className="diagnosis-metric-trend"><AccountMetricSparkline metric={metric} /><small>7日</small></div>
+  </article>;
+}
+
+function AccountOverview({ account }: { account: AccountDiagnosis }) {
+  const metrics = accountMetrics(account);
+  const startDate = account.points[0]?.report_date;
+  const endDate = account.points.at(-1)?.report_date;
+  return <section className="diagnosis-account-overview" aria-labelledby="diagnosis-account-overview-title">
+    <header>
+      <div><h3 id="diagnosis-account-overview-title">子账户数据总览</h3><p>{startDate && endDate ? `${startDate} - ${endDate}` : "最近 7 个自然日"} · 日报原始指标</p></div>
+      <span>{account.placement}场域</span>
+    </header>
+    <div className="diagnosis-metric-grid">{metrics.map((metric) => <AccountMetricCard key={metric.key} metric={metric} />)}</div>
+  </section>;
+}
+
 function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: () => void }) {
   const [tab, setTab] = useState<PlanTab>("over");
   const counts = {
@@ -162,6 +277,7 @@ function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: 
         {(Object.keys(labels) as PlanTab[]).map((value) => <button type="button" className={tab === value ? "active" : ""} key={value} onClick={() => setTab(value)}>{labels[value]} <span>{counts[value]}</span></button>)}
       </div>
       <div className="diagnosis-drawer-body">
+        <AccountOverview account={account} />
         <div className="diagnosis-drawer-summary">本页展示全部{labels[tab]}计划，不设置消耗门槛；连续 3 个有效报表日成本超标时建议停止。</div>
         {plans.length === 0 ? <div className="diagnosis-drawer-empty">该分类暂无计划</div> : <div className="diagnosis-plan-table-wrap"><table className="diagnosis-plan-table">
           <thead><tr><th>计划名</th><th>蒲公英数据</th><th>消耗</th><th>诊断成本</th><th>KPI</th><th>超标</th><th>动作</th><th>连续天数</th></tr></thead>
@@ -231,7 +347,7 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
           : <div className="diagnosis-table-wrap"><table className="diagnosis-account-table">
             <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>诊断成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>超标计划</th><th>放大</th><th>停止</th><th>7日成本</th></tr></thead>
             <tbody>{result.accounts.map((account) => <tr key={accountKey(account)}>
-              <td><button type="button" className="diagnosis-account-button" onClick={() => setSelectedKey(accountKey(account))}>{account.account}</button></td>
+              <td><button type="button" className="diagnosis-account-button" title="查看子账户数据总览与计划诊断" onClick={() => setSelectedKey(accountKey(account))}>{account.account}</button></td>
               <td><span className={`placement-swatch placement-${account.placement}`}>{account.placement}</span></td>
               <td className="num">¥{money.format(account.spend)}</td>
               <td className="num" title={account.cost_metric}>{account.cost === null ? "-" : `¥${money.format(account.cost)}`}</td>

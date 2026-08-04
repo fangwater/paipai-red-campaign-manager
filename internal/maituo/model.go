@@ -134,25 +134,36 @@ type AccountPlanDiagnosis struct {
 }
 
 type AccountDiagnosisPoint struct {
-	ReportDate string   `json:"report_date"`
-	Cost       *float64 `json:"cost"`
+	ReportDate    string   `json:"report_date"`
+	Spend         *float64 `json:"spend"`
+	SearchUsers   *int64   `json:"search_users"`
+	Cost          *float64 `json:"cost"`
+	SearchRatePct *float64 `json:"search_rate_pct"`
+	CPC           *float64 `json:"cpc"`
+	CTRPct        *float64 `json:"ctr_pct"`
+	NoteCount     *int64   `json:"note_count"`
 }
 
 type AccountDiagnosis struct {
-	Account      string                  `json:"account"`
-	Placement    string                  `json:"placement"`
-	Spend        float64                 `json:"spend"`
-	Cost         *float64                `json:"cost"`
-	CostMetric   string                  `json:"cost_metric"`
-	PreviousCost *float64                `json:"previous_cost"`
-	ChangePct    *float64                `json:"change_pct"`
-	KPI          float64                 `json:"kpi"`
-	Status       string                  `json:"status"`
-	OverPlans    int                     `json:"over_plans"`
-	EnlargePlans int                     `json:"enlarge_plans"`
-	StopPlans    int                     `json:"stop_plans"`
-	Points       []AccountDiagnosisPoint `json:"points"`
-	Plans        []PlanDiagnosis         `json:"plans"`
+	Account       string                  `json:"account"`
+	Placement     string                  `json:"placement"`
+	Spend         float64                 `json:"spend"`
+	SearchUsers   int64                   `json:"search_users"`
+	Cost          *float64                `json:"cost"`
+	SearchRatePct *float64                `json:"search_rate_pct"`
+	CPC           *float64                `json:"cpc"`
+	CTRPct        *float64                `json:"ctr_pct"`
+	NoteCount     int64                   `json:"note_count"`
+	CostMetric    string                  `json:"cost_metric"`
+	PreviousCost  *float64                `json:"previous_cost"`
+	ChangePct     *float64                `json:"change_pct"`
+	KPI           float64                 `json:"kpi"`
+	Status        string                  `json:"status"`
+	OverPlans     int                     `json:"over_plans"`
+	EnlargePlans  int                     `json:"enlarge_plans"`
+	StopPlans     int                     `json:"stop_plans"`
+	Points        []AccountDiagnosisPoint `json:"points"`
+	Plans         []PlanDiagnosis         `json:"plans"`
 }
 
 type DandelionNoteSupplement struct {

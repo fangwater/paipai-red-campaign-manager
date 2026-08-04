@@ -54,11 +54,13 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	}
 	windowStart := latestDate.AddDate(0, 0, -6).Format(time.DateOnly)
 	accountRows, err := p.pool.Query(ctx, `
-		SELECT report_date::TEXT, subaccount, placement, spend::DOUBLE PRECISION,
+		SELECT report_date::TEXT, subaccount, placement, spend::DOUBLE PRECISION, search_users,
 			CASE WHEN placement = '信息流'
 				THEN estimated_postback_cost::DOUBLE PRECISION
 				ELSE search_cost::DOUBLE PRECISION
-			END AS diagnosis_cost
+			END AS diagnosis_cost,
+			search_rate_pct::DOUBLE PRECISION, cpc::DOUBLE PRECISION,
+			ctr_pct::DOUBLE PRECISION, note_count
 		FROM maituo_customer_daily_subaccounts
 		WHERE deleted_at IS NULL AND spu = $1
 		  AND report_date BETWEEN $2::DATE AND $3::DATE
@@ -70,18 +72,31 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	defer accountRows.Close()
 
 	type accountSnapshot struct {
-		Spend float64
-		Cost  *float64
+		Spend         float64
+		SearchUsers   int64
+		Cost          *float64
+		SearchRatePct *float64
+		CPC           *float64
+		CTRPct        *float64
+		NoteCount     int64
 	}
 	history := map[string]map[string]accountSnapshot{}
 	for accountRows.Next() {
 		var reportDate, account, placement string
 		var spend float64
-		var nullableCost pgtype.Float8
-		if err := accountRows.Scan(&reportDate, &account, &placement, &spend, &nullableCost); err != nil {
+		var searchUsers, noteCount int64
+		var nullableCost, searchRatePct, cpc, ctrPct pgtype.Float8
+		if err := accountRows.Scan(
+			&reportDate, &account, &placement, &spend, &searchUsers, &nullableCost,
+			&searchRatePct, &cpc, &ctrPct, &noteCount,
+		); err != nil {
 			return result, fmt.Errorf("scan Maituo account diagnosis history: %w", err)
 		}
-		snapshot := accountSnapshot{Spend: spend, Cost: diagnosisNullableCost(nullableCost)}
+		snapshot := accountSnapshot{
+			Spend: spend, SearchUsers: searchUsers, Cost: diagnosisNullableCost(nullableCost),
+			SearchRatePct: diagnosisNullableCost(searchRatePct), CPC: diagnosisNullableCost(cpc),
+			CTRPct: diagnosisNullableCost(ctrPct), NoteCount: noteCount,
+		}
 		key := diagnosisAccountKey(account, placement)
 		if history[key] == nil {
 			history[key] = map[string]accountSnapshot{}
@@ -102,9 +117,20 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		}
 		account, placement := splitDiagnosisAccountKey(key)
 		item := maituo.AccountDiagnosis{
-			Account: account, Placement: placement, Spend: roundMaituoMoney(current.Spend), Cost: current.Cost,
-			CostMetric: diagnosisCostMetric(placement), KPI: maituoAccountDiagnosisKPI,
-			Status: diagnosisAccountStatus(current.Cost), Points: []maituo.AccountDiagnosisPoint{}, Plans: []maituo.PlanDiagnosis{},
+			Account:       account,
+			Placement:     placement,
+			Spend:         roundMaituoMoney(current.Spend),
+			SearchUsers:   current.SearchUsers,
+			Cost:          current.Cost,
+			SearchRatePct: current.SearchRatePct,
+			CPC:           current.CPC,
+			CTRPct:        current.CTRPct,
+			NoteCount:     current.NoteCount,
+			CostMetric:    diagnosisCostMetric(placement),
+			KPI:           maituoAccountDiagnosisKPI,
+			Status:        diagnosisAccountStatus(current.Cost),
+			Points:        []maituo.AccountDiagnosisPoint{},
+			Plans:         []maituo.PlanDiagnosis{},
 		}
 		if previous, exists := snapshots[previousDate]; exists {
 			item.PreviousCost = previous.Cost
@@ -117,7 +143,16 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 			date := latestDate.AddDate(0, 0, offset).Format(time.DateOnly)
 			point := maituo.AccountDiagnosisPoint{ReportDate: date}
 			if snapshot, exists := snapshots[date]; exists {
+				spend := roundMaituoMoney(snapshot.Spend)
+				searchUsers := snapshot.SearchUsers
+				noteCount := snapshot.NoteCount
+				point.Spend = &spend
+				point.SearchUsers = &searchUsers
 				point.Cost = snapshot.Cost
+				point.SearchRatePct = snapshot.SearchRatePct
+				point.CPC = snapshot.CPC
+				point.CTRPct = snapshot.CTRPct
+				point.NoteCount = &noteCount
 			}
 			item.Points = append(item.Points, point)
 		}

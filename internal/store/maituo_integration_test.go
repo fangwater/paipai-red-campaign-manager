@@ -37,13 +37,21 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM maituo_customer_daily_import_runs WHERE file_name=$1", fileName)
 	}()
 	one := 1.0
+	searchRate := 2.0
+	cpc := 3.0
+	ctr := 4.0
 	firstSnapshot := maituo.Snapshot{
 		FileName: fileName, FileSHA256: prefix + "-first", ReportDate: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), PresentSheets: append([]string(nil), maituo.WorkbookSheets...),
-		KPIs:        []maituo.KPI{{Metric: prefix + "-metric", Value: 1, DataBasis: "test", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "k1"}}},
-		Notes:       []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "信息流", Subaccount: "account", CampaignName: "campaign", Placement: "搜索", Spend: 1, SearchUsers: 1, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "n1"}}},
-		SPUs:        []maituo.SPUOverview{{SPU: prefix + "-spu", AuctionSpend: 1, SearchUsers: 1, SearchCost: 1, SearchRatePct: 1, CPC: 1, CTRPct: 1, NoteCount: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "s1"}}},
-		Subaccounts: []maituo.SubaccountOverview{{SPU: prefix + "-spu", Subaccount: "account-a", Placement: "搜索", SearchCost: &one, Spend: 1, SearchUsers: 1, CPC: &one, CTRPct: &one, NoteCount: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "a1"}}},
-		Trends:      []maituo.SearchTrend{{Date: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), TotalSpend: &one, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "t1"}}},
+		KPIs:  []maituo.KPI{{Metric: prefix + "-metric", Value: 1, DataBasis: "test", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "k1"}}},
+		Notes: []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "信息流", Subaccount: "account", CampaignName: "campaign", Placement: "搜索", Spend: 1, SearchUsers: 1, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "n1"}}},
+		SPUs:  []maituo.SPUOverview{{SPU: prefix + "-spu", AuctionSpend: 1, SearchUsers: 1, SearchCost: 1, SearchRatePct: 1, CPC: 1, CTRPct: 1, NoteCount: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "s1"}}},
+		Subaccounts: []maituo.SubaccountOverview{{
+			SPU: prefix + "-spu", Subaccount: prefix + "-account-a", Placement: "搜索",
+			SearchCost: &one, Spend: 5, SearchUsers: 6, SearchRatePct: &searchRate,
+			CPC: &cpc, CTRPct: &ctr, NoteCount: 7,
+			RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "a1"},
+		}},
+		Trends: []maituo.SearchTrend{{Date: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), TotalSpend: &one, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "t1"}}},
 	}
 	first, err := postgres.ImportMaituoCustomerDaily(ctx, firstSnapshot)
 	if err != nil {
@@ -51,6 +59,27 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	}
 	if first.Fetched != 5 || first.Inserted != 5 || first.Updated != 0 || first.Unchanged != 0 || first.Deleted != 0 {
 		t.Fatalf("first result: %+v", first)
+	}
+	diagnosis, err := postgres.MaituoAccountPlanDiagnosis(ctx, prefix+"-spu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnosis.Accounts) != 1 {
+		t.Fatalf("diagnosis accounts: %+v", diagnosis.Accounts)
+	}
+	account := diagnosis.Accounts[0]
+	if account.Spend != 5 || account.SearchUsers != 6 || account.Cost == nil || *account.Cost != 1 ||
+		account.SearchRatePct == nil || *account.SearchRatePct != 2 || account.CPC == nil || *account.CPC != 3 ||
+		account.CTRPct == nil || *account.CTRPct != 4 || account.NoteCount != 7 {
+		t.Fatalf("diagnosis overview: %+v", account)
+	}
+	if len(account.Points) != 7 {
+		t.Fatalf("diagnosis points: %+v", account.Points)
+	}
+	latestPoint := account.Points[len(account.Points)-1]
+	if latestPoint.Spend == nil || *latestPoint.Spend != 5 || latestPoint.SearchUsers == nil || *latestPoint.SearchUsers != 6 ||
+		latestPoint.NoteCount == nil || *latestPoint.NoteCount != 7 {
+		t.Fatalf("diagnosis latest point: %+v", latestPoint)
 	}
 	secondSnapshot := firstSnapshot
 	secondSnapshot.FileSHA256 = prefix + "-second"

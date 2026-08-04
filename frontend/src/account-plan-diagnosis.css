@@ -46,6 +46,26 @@
 .diagnosis-drawer-tabs button.active { border-color: #252a2e; background: #252a2e; color: #fff; }
 .diagnosis-drawer-tabs button.active span { color: #c9cdd0; }
 .diagnosis-drawer-body { min-height: 0; flex: 1; overflow: auto; padding: 16px 20px 28px; }
+.diagnosis-account-overview { margin-bottom: 16px; }
+.diagnosis-account-overview > header { min-height: 42px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.diagnosis-account-overview h3 { margin: 0; color: #282d31; font-size: 13px; line-height: 19px; }
+.diagnosis-account-overview p { margin: 3px 0 0; color: #8a9196; font-size: 9px; }
+.diagnosis-account-overview > header > span { flex: none; padding: 4px 7px; border: 1px solid #d9e4df; border-radius: 4px; background: #f4f8f6; color: #28725c; font-size: 9px; font-weight: 650; }
+.diagnosis-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.diagnosis-metric-card { min-width: 0; min-height: 122px; overflow: hidden; padding: 10px 11px 8px; border: 1px solid #e1e5e6; border-radius: 7px; background: #fff; }
+.diagnosis-metric-card > header { min-height: 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.diagnosis-metric-card > header > span { min-width: 0; overflow: hidden; color: #747c82; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.diagnosis-metric-card > strong { display: block; margin-top: 2px; overflow: hidden; color: #282d31; font-size: 17px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.diagnosis-metric-change { min-height: 18px; display: inline-flex; flex: none; align-items: center; gap: 2px; padding: 0 4px; border-radius: 4px; font-size: 7px; font-style: normal; font-weight: 650; white-space: nowrap; }
+.diagnosis-metric-change.good { background: #eaf4ef; color: #28735e; }
+.diagnosis-metric-change.bad { background: #faecee; color: #b2444c; }
+.diagnosis-metric-change.neutral { background: #f1f3f4; color: #747c82; }
+.diagnosis-metric-trend { height: 42px; position: relative; margin-top: 5px; }
+.diagnosis-metric-trend small { position: absolute; right: 0; bottom: 0; color: #a0a6aa; font-size: 7px; }
+.diagnosis-metric-sparkline { width: 100%; height: 36px; display: block; overflow: visible; }
+.diagnosis-metric-sparkline path { fill: none; stroke: #2f7d67; stroke-width: 2; }
+.diagnosis-metric-sparkline circle { fill: #2f7d67; stroke: #fff; stroke-width: 1.25; }
+.diagnosis-metric-no-data { display: flex; height: 36px; align-items: center; color: #a0a6aa; font-size: 8px; }
 .diagnosis-drawer-summary { margin-bottom: 13px; padding: 10px 12px; border-left: 3px solid #2f7d67; background: #f5f8f7; color: #687077; font-size: 10px; }
 .diagnosis-drawer-empty { min-height: 220px; display: grid; place-items: center; border: 1px solid #e1e4e6; border-radius: 7px; color: #92989d; font-size: 11px; }
 .diagnosis-plan-table-wrap { overflow-x: auto; border: 1px solid #e1e4e6; border-radius: 7px; }
@@ -76,4 +96,7 @@
   .diagnosis-drawer-head { padding: 15px 14px; }
   .diagnosis-drawer-tabs { padding: 10px 14px; }
   .diagnosis-drawer-body { padding: 13px 14px 24px; }
+  .diagnosis-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diagnosis-metric-card { min-height: 118px; padding: 9px 9px 7px; }
+  .diagnosis-metric-change { max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
 }
