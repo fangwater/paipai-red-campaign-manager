@@ -130,7 +130,29 @@ type AccountPlanDiagnosis struct {
 	DandelionSyncedAt string             `json:"dandelion_synced_at"`
 	DandelionMatched  int                `json:"dandelion_matched"`
 	DandelionMissing  int                `json:"dandelion_missing"`
+	AccountOverviews  []AccountOverview  `json:"account_overviews"`
 	Accounts          []AccountDiagnosis `json:"accounts"`
+}
+
+type AccountOverviewPoint struct {
+	ReportDate        string   `json:"report_date"`
+	TotalSpend        *float64 `json:"total_spend"`
+	SearchSpend       *float64 `json:"search_spend"`
+	SearchCost        *float64 `json:"search_cost"`
+	SearchCPC         *float64 `json:"search_cpc"`
+	SearchCTRPct      *float64 `json:"search_ctr_pct"`
+	SearchRatePct     *float64 `json:"search_rate_pct"`
+	FeedSpend         *float64 `json:"feed_spend"`
+	FeedCost          *float64 `json:"feed_cost"`
+	FeedCPC           *float64 `json:"feed_cpc"`
+	FeedCTRPct        *float64 `json:"feed_ctr_pct"`
+	FeedSearchRatePct *float64 `json:"feed_search_rate_pct"`
+}
+
+type AccountOverview struct {
+	Account           string                 `json:"account"`
+	CurrentTotalSpend float64                `json:"current_total_spend"`
+	Points            []AccountOverviewPoint `json:"points"`
 }
 
 type AccountDiagnosisPoint struct {

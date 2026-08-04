@@ -16,6 +16,7 @@ const (
 	maituoAccountDiagnosisKPI = 70.0
 	maituoSearchPlanKPI       = 30.0
 	maituoFeedPlanKPI         = 70.0
+	maituoAccountOverviewDays = 30
 )
 
 type diagnosisHistoryRow struct {
@@ -32,10 +33,11 @@ type diagnosisHistoryRow struct {
 
 func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (maituo.AccountPlanDiagnosis, error) {
 	result := maituo.AccountPlanDiagnosis{
-		SPU:        spu,
-		AccountKPI: maituoAccountDiagnosisKPI,
-		PlanKPIs:   map[string]float64{"搜索": maituoSearchPlanKPI, "信息流": maituoFeedPlanKPI},
-		Accounts:   []maituo.AccountDiagnosis{},
+		SPU:              spu,
+		AccountKPI:       maituoAccountDiagnosisKPI,
+		PlanKPIs:         map[string]float64{"搜索": maituoSearchPlanKPI, "信息流": maituoFeedPlanKPI},
+		AccountOverviews: []maituo.AccountOverview{},
+		Accounts:         []maituo.AccountDiagnosis{},
 	}
 	if err := p.pool.QueryRow(ctx, `
 		SELECT COALESCE(MAX(report_date)::TEXT, '')
@@ -52,7 +54,7 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	if err != nil {
 		return result, fmt.Errorf("parse Maituo account diagnosis date: %w", err)
 	}
-	windowStart := latestDate.AddDate(0, 0, -6).Format(time.DateOnly)
+	windowStart := latestDate.AddDate(0, 0, -(maituoAccountOverviewDays - 1)).Format(time.DateOnly)
 	accountRows, err := p.pool.Query(ctx, `
 		SELECT report_date::TEXT, subaccount, placement, spend::DOUBLE PRECISION, search_users,
 			CASE WHEN placement = '信息流'
@@ -159,6 +161,61 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		accountIndexes[key] = len(result.Accounts)
 		result.Accounts = append(result.Accounts, item)
 	}
+
+	overviewAccounts := make(map[string]struct{})
+	for _, account := range result.Accounts {
+		overviewAccounts[account.Account] = struct{}{}
+	}
+	for account := range overviewAccounts {
+		overview := maituo.AccountOverview{Account: account, Points: []maituo.AccountOverviewPoint{}}
+		searchSnapshots := history[diagnosisAccountKey(account, "搜索")]
+		feedSnapshots := history[diagnosisAccountKey(account, "信息流")]
+		for offset := -(maituoAccountOverviewDays - 1); offset <= 0; offset++ {
+			date := latestDate.AddDate(0, 0, offset).Format(time.DateOnly)
+			point := maituo.AccountOverviewPoint{ReportDate: date}
+			if snapshot, exists := searchSnapshots[date]; exists {
+				spend := roundMaituoMoney(snapshot.Spend)
+				point.SearchSpend = &spend
+				point.SearchCost = snapshot.Cost
+				point.SearchCPC = snapshot.CPC
+				point.SearchCTRPct = snapshot.CTRPct
+				point.SearchRatePct = snapshot.SearchRatePct
+			}
+			if snapshot, exists := feedSnapshots[date]; exists {
+				spend := roundMaituoMoney(snapshot.Spend)
+				point.FeedSpend = &spend
+				point.FeedCost = snapshot.Cost
+				point.FeedCPC = snapshot.CPC
+				point.FeedCTRPct = snapshot.CTRPct
+				point.FeedSearchRatePct = snapshot.SearchRatePct
+			}
+			totalSpend := 0.0
+			hasSpend := false
+			if point.SearchSpend != nil {
+				totalSpend += *point.SearchSpend
+				hasSpend = true
+			}
+			if point.FeedSpend != nil {
+				totalSpend += *point.FeedSpend
+				hasSpend = true
+			}
+			if hasSpend {
+				totalSpend = roundMaituoMoney(totalSpend)
+				point.TotalSpend = &totalSpend
+				if offset == 0 {
+					overview.CurrentTotalSpend = totalSpend
+				}
+			}
+			overview.Points = append(overview.Points, point)
+		}
+		result.AccountOverviews = append(result.AccountOverviews, overview)
+	}
+	sort.Slice(result.AccountOverviews, func(left, right int) bool {
+		if result.AccountOverviews[left].CurrentTotalSpend == result.AccountOverviews[right].CurrentTotalSpend {
+			return result.AccountOverviews[left].Account < result.AccountOverviews[right].Account
+		}
+		return result.AccountOverviews[left].CurrentTotalSpend > result.AccountOverviews[right].CurrentTotalSpend
+	})
 
 	historyRows, reportDates, err := p.maituoDiagnosisPlanHistory(ctx, result.ReportDate, accountIndexes)
 	if err != nil {

@@ -1,6 +1,26 @@
 import { expect, test } from "@playwright/test";
 
-test("renders account diagnosis and drills into plan actions", async ({ page }) => {
+const overviewPoints = Array.from({ length: 30 }, (_, index) => {
+  const date = new Date(Date.UTC(2026, 5, 28 + index)).toISOString().slice(0, 10);
+  const searchSpend = 4200 + index * 55;
+  const feedSpend = 1100 + index * 18;
+  return {
+    report_date: date,
+    total_spend: searchSpend + feedSpend,
+    search_spend: searchSpend,
+    search_cost: 31 + index * 0.28,
+    search_cpc: 2.18 - index * 0.011,
+    search_ctr_pct: 3.42 + index * 0.031,
+    search_rate_pct: 9.6 + index * 0.09,
+    feed_spend: feedSpend,
+    feed_cost: 68 + index * 0.35,
+    feed_cpc: 2.74 - index * 0.014,
+    feed_ctr_pct: 2.81 + index * 0.026,
+    feed_search_rate_pct: 6.4 + index * 0.07
+  };
+});
+
+test("renders account overview and drills into plan actions", async ({ page }) => {
   await page.route("**/paipai/api/analytics/maituo/account-plan-diagnosis?*", async (route) => {
     await route.fulfill({
       status: 200,
@@ -15,6 +35,10 @@ test("renders account diagnosis and drills into plan actions", async ({ page }) 
           dandelion_synced_at: "2026-08-02T09:15:00+08:00",
           dandelion_matched: 1,
           dandelion_missing: 1,
+          account_overviews: [
+            { account: "Megared脉拓-飓风03", current_total_spend: 7400, points: overviewPoints },
+            { account: "Megared脉拓-智元01", current_total_spend: 6200, points: overviewPoints.map((point) => ({ ...point, total_spend: point.total_spend * 0.84 })) }
+          ],
           accounts: [{
             account: "Megared脉拓-飓风03",
             placement: "搜索",
@@ -54,6 +78,32 @@ test("renders account diagnosis and drills into plan actions", async ({ page }) 
 
   await page.goto("/paipai/account-plan-diagnosis");
   await expect(page.getByRole("heading", { name: "子账户与计划诊断" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "子账户数据总览" })).toBeVisible();
+  const accountSelect = page.getByRole("combobox", { name: "选择子账户" });
+  await expect(accountSelect).toHaveValue("Megared脉拓-飓风03");
+  await expect(accountSelect.locator("option")).toHaveCount(2);
+  await expect(page.locator(".diagnosis-trend-card")).toHaveCount(6);
+  await expect(page.getByRole("img", { name: "总消耗趋势图" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "搜索 / 信息流回搜率趋势图" })).toBeVisible();
+  await expect.poll(async () => page.locator(".diagnosis-trend-canvas canvas").count()).toBe(6);
+  const paintedPixels = await page.locator(".diagnosis-trend-canvas canvas").evaluateAll((canvases) => canvases.map((canvas) => {
+    const context = (canvas as HTMLCanvasElement).getContext("2d");
+    if (!context) return 0;
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] > 0) painted++;
+    }
+    return painted;
+  }));
+  expect(paintedPixels.every((count) => count > 100)).toBe(true);
+  await page.getByRole("button", { name: "14日" }).click();
+  await expect(page.getByRole("button", { name: "14日" })).toHaveClass(/active/);
+  await accountSelect.selectOption("Megared脉拓-智元01");
+  await expect(page.locator(".diagnosis-overview-heading p")).toContainText("Megared脉拓-智元01");
+  await page.getByRole("button", { name: "30日" }).click();
+  await expect(page.getByRole("button", { name: "30日" })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "7日" }).click();
   await expect(page.locator(".diagnosis-account-table tbody tr")).toHaveCount(1);
   await expect(page.getByText("+12.5%", { exact: true })).toBeVisible();
   await expect(page.locator(".diagnosis-sparkline path")).toHaveAttribute("d", /M/);
@@ -62,12 +112,7 @@ test("renders account diagnosis and drills into plan actions", async ({ page }) 
   await page.getByRole("button", { name: "Megared脉拓-飓风03" }).click();
   const drawer = page.getByRole("complementary", { name: /Megared脉拓-飓风03计划诊断/ });
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole("heading", { name: "子账户数据总览" })).toBeVisible();
-  await expect(drawer.locator(".diagnosis-metric-card")).toHaveCount(7);
-  await expect(drawer.getByText("回搜人数", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("148", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("12.45%", { exact: true })).toBeVisible();
-  await expect(drawer.locator(".diagnosis-metric-sparkline path")).toHaveCount(7);
+  await expect(drawer.getByRole("heading", { name: "子账户数据总览" })).toHaveCount(0);
   await expect(page.getByText("连续超标计划", { exact: true })).toBeVisible();
   await expect(page.getByText("辅酶Q10真实体验", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /建议放大 1/ }).click();
