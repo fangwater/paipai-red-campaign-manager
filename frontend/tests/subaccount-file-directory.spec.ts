@@ -62,4 +62,9 @@ test("lists and downloads each historical date without exposing another account"
 
   await page.setViewportSize({ width: 360, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+  const mobileDownload = page.getByRole("link", { name: "下载 2026-08-05 报表" });
+  await expect(mobileDownload).toBeVisible();
+  const box = await mobileDownload.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(360);
 });

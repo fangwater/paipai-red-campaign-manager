@@ -43,4 +43,16 @@
   .public-file-title { align-items: flex-start; }
   .public-file-title h1 { font-size: 21px; }
   .public-file-table-wrap { border-radius: 6px; }
+  .public-file-table { min-width: 0; table-layout: auto; }
+  .public-file-table thead { display: none; }
+  .public-file-table tbody, .public-file-table tr, .public-file-table td { display: block; }
+  .public-file-table tr { position: relative; min-height: 76px; padding: 13px 58px 13px 14px; border-bottom: 1px solid #edf0ee; }
+  .public-file-table td { width: auto; height: auto; padding: 0; overflow: hidden; border: 0; text-overflow: ellipsis; white-space: nowrap; }
+  .public-file-table td:nth-child(2) { margin-top: 8px; }
+  .public-file-table td:nth-child(3) { display: none; }
+  .public-file-table td:nth-child(4) { position: absolute; top: 50%; right: 13px; overflow: visible; transform: translateY(-50%); }
+  .public-file-name { display: block; padding-left: 24px; position: relative; text-overflow: ellipsis; }
+  .public-file-name svg { position: absolute; top: 0; left: 0; }
+  .public-download-button { width: 34px; height: 34px; padding: 0; }
+  .public-download-button span { display: none; }
 }
