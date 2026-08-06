@@ -130,6 +130,31 @@ function NoteStatus({ note }: { note: ContentNote }) {
   </div>;
 }
 
+function ContentNoteTable({ notes, showStatus = true, label }: {
+  notes: ContentNote[];
+  showStatus?: boolean;
+  label: string;
+}) {
+  return <div className="content-note-table-wrap"><table className={"content-note-table" + (showStatus ? "" : " content-note-table-summary")} aria-label={label}>
+    <thead><tr><th>笔记</th><th>机构与标签</th><th>站外成本 15 天</th><th>搜索累计消耗 · 成本</th><th>信息流累计消耗 · 成本</th><th>薯量 ROI</th>{showStatus ? <th>状态</th> : null}</tr></thead>
+    <tbody>{notes.map((note) => {
+      const noteURL = safeURL(note.url);
+      return <tr key={note.note_id}>
+        <td><div className="content-note-identity">
+          {noteURL ? <a href={noteURL} target="_blank" rel="noreferrer" title={note.title}>{note.title}<ExternalLink size={12} /></a> : <strong title={note.title}>{note.title}</strong>}
+          <span>{note.note_id}</span><small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
+        </div></td>
+        <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span></div></td>
+        <td className={note.boom ? "metric-good" : ""}>{note.dandelion_cost === null || note.dandelion_cost <= 0 ? "--" : "¥" + money.format(note.dandelion_cost)}</td>
+        <td className={note.search_qualified ? "metric-good" : ""}>{metricCost(note.search_spend, note.search_cost)}</td>
+        <td className={note.feed_qualified ? "metric-good" : ""}>{metricCost(note.feed_spend, note.feed_cost)}</td>
+        <td className={note.roi_qualified ? "metric-good" : ""}>{note.roi === null ? "--" : decimal.format(note.roi)}</td>
+        {showStatus ? <td><NoteStatus note={note} /></td> : null}
+      </tr>;
+    })}</tbody>
+  </table></div>;
+}
+
 function ContentDetailDrawer({ cell, dimension, onClose }: {
   cell: ContentCell;
   dimension: DimensionOption;
@@ -174,24 +199,7 @@ function ContentDetailDrawer({ cell, dimension, onClose }: {
           <span>ROI 达标 <strong>{cell.roi_qualified}</strong></span>
           <span>三项达标 <strong>{cell.all_qualified}</strong></span>
         </div>
-        {notes.length === 0 ? <div className="content-drawer-empty">当前分类暂无笔记</div> : <div className="content-note-table-wrap"><table className="content-note-table">
-          <thead><tr><th>笔记</th><th>机构与标签</th><th>站外成本 15 天</th><th>搜索累计消耗 · 成本</th><th>信息流累计消耗 · 成本</th><th>薯量 ROI</th><th>状态</th></tr></thead>
-          <tbody>{notes.map((note) => {
-            const noteURL = safeURL(note.url);
-            return <tr key={note.note_id}>
-              <td><div className="content-note-identity">
-                {noteURL ? <a href={noteURL} target="_blank" rel="noreferrer" title={note.title}>{note.title}<ExternalLink size={12} /></a> : <strong title={note.title}>{note.title}</strong>}
-                <span>{note.note_id}</span><small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
-              </div></td>
-              <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span></div></td>
-              <td className={note.boom ? "metric-good" : ""}>{note.dandelion_cost === null || note.dandelion_cost <= 0 ? "--" : "¥" + money.format(note.dandelion_cost)}</td>
-              <td className={note.search_qualified ? "metric-good" : ""}>{metricCost(note.search_spend, note.search_cost)}</td>
-              <td className={note.feed_qualified ? "metric-good" : ""}>{metricCost(note.feed_spend, note.feed_cost)}</td>
-              <td className={note.roi_qualified ? "metric-good" : ""}>{note.roi === null ? "--" : decimal.format(note.roi)}</td>
-              <td><NoteStatus note={note} /></td>
-            </tr>;
-          })}</tbody>
-        </table></div>}
+        {notes.length === 0 ? <div className="content-drawer-empty">当前分类暂无笔记</div> : <ContentNoteTable notes={notes} label="热力图笔记明细" />}
       </div>
     </aside>
   </>;
@@ -232,6 +240,17 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const types = result?.types.filter((value) => includeUnlabeled || value !== "未标注") ?? [];
   const dimensions = result?.dimensions.filter((value) => includeUnlabeled || value !== "未标注") ?? [];
   const cells = useMemo(() => new Map((result?.cells ?? []).map((cell) => [cell.content_type + "\u0000" + cell.dimension, cell])), [result]);
+  const spendSortedNotes = useMemo(() => {
+    const notesByID = new Map<string, ContentNote>();
+    for (const cell of result?.cells ?? []) {
+      if (!includeUnlabeled && (cell.content_type === "未标注" || cell.dimension === "未标注")) continue;
+      for (const note of cell.notes) notesByID.set(note.note_id, note);
+    }
+    return Array.from(notesByID.values()).sort((left, right) => {
+      const spendDifference = right.search_spend + right.feed_spend - left.search_spend - left.feed_spend;
+      return spendDifference || left.note_id.localeCompare(right.note_id);
+    });
+  }, [includeUnlabeled, result]);
   const total = result?.coverage.total_notes ?? 0;
   const qualityItems = result ? [
     { label: "内容类型覆盖", value: result.coverage.content_type_tagged, display: coverageRate(result.coverage.content_type_tagged, total) },
@@ -305,6 +324,11 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
           <span>爆文率</span><i className="legend-rate-1" /><i className="legend-rate-2" /><i className="legend-rate-3" /><i className="legend-rate-4" /><i className="legend-rate-5" /><span>低 → 高</span>
           <em>斜纹：有效成本样本少于 3</em><em>灰色：无有效成本</em>
         </footer>
+      </section>
+
+      <section className="content-note-section">
+        <header><div><h2>笔记表现</h2><p>按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗</p></div><span>{integer.format(spendSortedNotes.length)} 篇笔记</span></header>
+        {spendSortedNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无笔记</div> : <ContentNoteTable notes={spendSortedNotes} showStatus={false} label="按累计消耗排序的笔记" />}
       </section>
     </> : null}
 

@@ -18,7 +18,7 @@ function makeNote(id: string, overrides: Record<string, unknown> = {}) {
     search_spend: id === "note-1" ? 480 : 60,
     search_cost: id === "note-1" ? 24 : 40,
     search_qualified: id === "note-1",
-    feed_spend: 0,
+    feed_spend: id === "note-2" ? 500 : 0,
     feed_cost: null,
     feed_qualified: false,
     flow_evaluated: id === "note-1",
@@ -137,12 +137,19 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(page.getByRole("button", { name: "科普 职场人 爆文率50%" })).toBeVisible();
   await expect(page.getByText("未标注", { exact: true })).toHaveCount(0);
 
+  await expect(page.getByText("按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗")).toBeVisible();
+  const sortedNotes = page.getByRole("table", { name: "按累计消耗排序的笔记" });
+  await expect(sortedNotes.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "搜索累计消耗 · 成本", "信息流累计消耗 · 成本", "薯量 ROI"]);
+  await expect(sortedNotes.locator("tbody tr")).toHaveCount(3);
+  await expect(sortedNotes.locator("tbody tr").first()).toContainText("一周辅酶记录");
+
   await page.getByRole("button", { name: "科普 职场人 爆文率50%" }).click();
   await expect(page.getByRole("heading", { name: "科普 × 职场人" })).toBeVisible();
-  await expect(page.locator(".content-note-table tbody tr")).toHaveCount(2);
-  await expect(page.getByRole("link", { name: /通勤精力管理实测/ })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/note-1");
+  const drawerNotes = page.getByRole("table", { name: "热力图笔记明细" });
+  await expect(drawerNotes.locator("tbody tr")).toHaveCount(2);
+  await expect(drawerNotes.getByRole("link", { name: /通勤精力管理实测/ })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/note-1");
   await page.getByRole("button", { name: "三项达标 1" }).click();
-  await expect(page.locator(".content-note-table tbody tr")).toHaveCount(1);
+  await expect(drawerNotes.locator("tbody tr")).toHaveCount(1);
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
   await page.getByRole("button", { name: "用户场景", exact: true }).click();
@@ -168,5 +175,9 @@ test("content heatmap remains usable on mobile", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "内容分析" })).toBeVisible();
   await expect(page.getByRole("button", { name: "科普 职场人 爆文率50%" })).toBeVisible();
   await expect(page.locator(".content-heatmap-scroll")).toBeVisible();
+  await expect(page.getByRole("table", { name: "按累计消耗排序的笔记" })).toBeVisible();
+  const noteTableScroll = page.locator(".content-note-section .content-note-table-wrap");
+  expect(await noteTableScroll.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   await expect(page.locator("body")).toHaveCSS("overflow-x", "visible");
+  expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
 });
