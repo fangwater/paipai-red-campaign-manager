@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SavedReportHistory, { type SavedImport } from "./SavedReportHistory";
+import SubaccountDirectoryLinks from "./SubaccountDirectoryLinks";
 
 const NoteCampaignAnalysis = lazy(() => import("./NoteCampaignAnalysis"));
 const AccountPlanDiagnosis = lazy(() => import("./AccountPlanDiagnosis"));
@@ -436,6 +437,7 @@ function MaituoConsole() {
             </section>
 
             <SavedReportHistory reports={savedImports} loading={savedLoading} expectedSheets={EXPECTED_SHEETS} />
+            <SubaccountDirectoryLinks refreshKey={savedImports.map((item) => item.file_sha256).join("|")} />
           </>}
         </main>
       </div>

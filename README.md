@@ -92,6 +92,8 @@ sudo -u postgres createdb -O "$USER" paipai_red
 ## 前端中台
 
 前端位于 `frontend/`，使用 React、TypeScript 和 Vite。Maituo 客户日报模块支持一次选择或拖放多个 `.xlsx` 文件，本地解析后按报表日期升序执行，并展示服务器中已保存的报表日期和文件状态。
+系统会为每个非“总体”子账户生成独立文件目录 URL。目录按日期倒序列出该子账户的历史日报，每个日期可单独下载一个只含“笔记明细”和“分子账户”的 Excel；不同子账户不会出现在同一文件中。
+目录 URL 使用可逆的子账户标识，不提供身份鉴权；如需限制访问者查看其他已知子账户，应在网关层增加登录认证。
 
 ```bash
 make frontend-dev
@@ -106,7 +108,7 @@ make frontend-deploy
 
 ## Maituo 客户日报导入 API
 
-`POST /v1/imports/maituo-customer-daily` 接收 `multipart/form-data`，唯一字段 `file` 为不超过 50 MB 的 `.xlsx`。前端多选后按日期逐个调用该接口。`GET /v1/imports/maituo-customer-daily` 返回按报表日期倒序排列的已保存文件。公网入口统一为 `/paipai/api/imports/maituo-customer-daily`。
+`POST /v1/imports/maituo-customer-daily` 接收 `multipart/form-data`，唯一字段 `file` 为不超过 50 MB 的 `.xlsx`。前端多选后按日期逐个调用该接口。`GET /v1/imports/maituo-customer-daily` 返回按报表日期倒序排列的已保存文件。`GET /v1/imports/maituo-subaccount-directories` 返回子账户目录；`GET /v1/downloads/maituo-subaccount/{account_id}` 列出该账户的历史日期，追加 `/{YYYY-MM-DD}.xlsx` 下载单日拆分文件。
 
 系统识别以下 5 张目标表。工作簿至少包含其中一张即可；缺少的目标表会跳过且不会修改该表已有数据，其他未知工作表会被忽略。实际存在的目标表，其表名和表头必须与样本一致：
 

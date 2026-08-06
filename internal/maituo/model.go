@@ -24,6 +24,19 @@ type Snapshot struct {
 	Trends        []SearchTrend
 }
 
+type SubaccountDirectory struct {
+	Subaccount         string `json:"subaccount"`
+	AccountID          string `json:"account_id,omitempty"`
+	ReportCount        int    `json:"report_count"`
+	EarliestReportDate string `json:"earliest_report_date"`
+	LatestReportDate   string `json:"latest_report_date"`
+}
+
+type SubaccountReport struct {
+	ReportDate string `json:"report_date"`
+	FileName   string `json:"file_name"`
+}
+
 func (snapshot Snapshot) HasSheet(name string) bool {
 	for _, sheet := range snapshot.PresentSheets {
 		if sheet == name {

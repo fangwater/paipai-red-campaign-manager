@@ -51,6 +51,7 @@ type apiServer struct {
 	embeddingRefresh     noteEmbeddingService
 	statusStore          manuscriptStatusStore
 	maituoImport         maituoImportStore
+	maituoSubaccounts    maituoSubaccountStore
 	maituoAnalytics      maituoAnalyticsStore
 	maituoXHSLinksStore  maituoXHSLinkStore
 	guoraiAnalytics      guoraiAnalyticsStore
@@ -142,6 +143,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		embeddingRefresh:     embeddingRefresher,
 		statusStore:          destination,
 		maituoImport:         destination,
+		maituoSubaccounts:    destination,
 		maituoAnalytics:      destination,
 		maituoXHSLinksStore:  destination,
 		guoraiAnalytics:      destination,
@@ -199,6 +201,8 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
 	mux.HandleFunc("/v1/imports/dandelion-excel", server.importDandelionExcel)
 	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
+	mux.HandleFunc("/v1/imports/maituo-subaccount-directories", server.listMaituoSubaccountDirectories)
+	mux.HandleFunc(maituoSubaccountDownloadPrefix, server.maituoSubaccountDownload)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
 	mux.HandleFunc("/v1/analytics/maituo/note-content", server.maituoNoteContent)
 	mux.HandleFunc("/v1/analytics/maituo/account-plan-diagnosis", server.maituoAccountPlanDiagnosis)

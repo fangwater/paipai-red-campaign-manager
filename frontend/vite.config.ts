@@ -21,6 +21,10 @@ export default defineConfig({
         target: "http://127.0.0.1:18081",
         rewrite: (path) => path.replace(/^\/paipai\/api/, "/v1")
       },
+      "/paipai/api/downloads": {
+        target: "http://127.0.0.1:18081",
+        rewrite: (path) => path.replace(/^\/paipai\/api/, "/v1")
+      },
       "/paipai/api/xhs-jg/sync": {
         target: "http://127.0.0.1:18080",
         rewrite: (path) => path.replace(/^\/paipai\/api\/xhs-jg/, "/v1")
