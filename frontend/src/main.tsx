@@ -11,6 +11,7 @@ import "./data-sync.css";
 import "./system-settings.css";
 import "./business-overview.css";
 import "./guorai-data.css";
+import "./dandelion-update.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

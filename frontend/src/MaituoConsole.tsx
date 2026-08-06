@@ -18,6 +18,7 @@ const SystemSettings = lazy(() => import("./SystemSettings"));
 const BusinessOverview = lazy(() => import("./BusinessOverview"));
 const GuoraiData = lazy(() => import("./GuoraiData"));
 const ContentAnalysis = lazy(() => import("./ContentAnalysis"));
+const DandelionUpdate = lazy(() => import("./DandelionUpdate"));
 
 type TableImportResult = {
   key: string;
@@ -72,7 +73,7 @@ const navGroups = [
     items: [
       { label: "Maituo 客户日报", icon: UploadCloud, path: "/maituo-daily-report" },
       { label: "薯量数据", icon: ChartNoAxesCombined, path: "/guorai-data" },
-      { label: "蒲公英数据", icon: Database, path: "/data-sync/dandelion" },
+      { label: "蒲公英数据更新", icon: UploadCloud, path: "/dandelion-upload" },
       { label: "稿件数据", icon: FileText, path: "/data-sync/manuscripts" }
     ]
   },
@@ -150,6 +151,7 @@ function MaituoConsole() {
   const businessOverview = location.pathname === "/overview";
   const contentAnalysis = location.pathname === "/content-analysis";
   const guoraiData = location.pathname === "/guorai-data";
+  const dandelionUpload = location.pathname === "/dandelion-upload";
   const analysis = location.pathname === "/note-campaign-analysis";
   const accountDiagnosis = location.pathname === "/account-plan-diagnosis";
   const trafficComparison = location.pathname === "/traffic-comparison";
@@ -162,7 +164,7 @@ function MaituoConsole() {
   const dataSyncTargetLabel = dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
   const breadcrumbSection = businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : sync ? "投放管理" : settings ? "系统" : "数据中心";
-  const breadcrumbPage = businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : guoraiData ? "薯量数据" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
+  const breadcrumbPage = businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
   const inputRef = useRef<HTMLInputElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -335,7 +337,7 @@ function MaituoConsole() {
         </header>
 
         <main className="main-content">
-          {contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : dashboard ? <>
+          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : dashboard ? <>
             <section className="page-heading">
               <div><h1>数据中台</h1><p>PaiPai RED · 业务数据工作台</p></div>
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>

@@ -44,19 +44,20 @@ type manuscriptStatusStore interface {
 }
 
 type apiServer struct {
-	dandelionSync       baseSyncService
-	dandelionStatus     dandelionStatusStore
-	manuscriptSync      manuscriptSyncService
-	embeddingRefresh    noteEmbeddingService
-	statusStore         manuscriptStatusStore
-	maituoImport        maituoImportStore
-	maituoAnalytics     maituoAnalyticsStore
-	maituoXHSLinksStore maituoXHSLinkStore
-	guoraiAnalytics     guoraiAnalyticsStore
-	businessOverview    businessOverviewStore
-	contentAnalysis     contentAnalysisStore
-	timeout             time.Duration
-	logger              *slog.Logger
+	dandelionSync        baseSyncService
+	dandelionStatus      dandelionStatusStore
+	dandelionExcelImport dandelionExcelImportStore
+	manuscriptSync       manuscriptSyncService
+	embeddingRefresh     noteEmbeddingService
+	statusStore          manuscriptStatusStore
+	maituoImport         maituoImportStore
+	maituoAnalytics      maituoAnalyticsStore
+	maituoXHSLinksStore  maituoXHSLinkStore
+	guoraiAnalytics      guoraiAnalyticsStore
+	businessOverview     businessOverviewStore
+	contentAnalysis      contentAnalysisStore
+	timeout              time.Duration
+	logger               *slog.Logger
 }
 
 type apiResponse struct {
@@ -134,19 +135,20 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		cfg.LarkDandelionTableID,
 	)
 	handler := newAPIHandler(&apiServer{
-		dandelionSync:       syncer.New(dandelionSource, dandelionDestination, cfg.DocumentRefreshInterval),
-		dandelionStatus:     dandelionDestination,
-		manuscriptSync:      syncer.NewProvider(source, destination),
-		embeddingRefresh:    embeddingRefresher,
-		statusStore:         destination,
-		maituoImport:        destination,
-		maituoAnalytics:     destination,
-		maituoXHSLinksStore: destination,
-		guoraiAnalytics:     destination,
-		businessOverview:    destination,
-		contentAnalysis:     destination,
-		timeout:             cfg.SyncTimeout,
-		logger:              logger,
+		dandelionSync:        syncer.New(dandelionSource, dandelionDestination, cfg.DocumentRefreshInterval),
+		dandelionStatus:      dandelionDestination,
+		dandelionExcelImport: destination,
+		manuscriptSync:       syncer.NewProvider(source, destination),
+		embeddingRefresh:     embeddingRefresher,
+		statusStore:          destination,
+		maituoImport:         destination,
+		maituoAnalytics:      destination,
+		maituoXHSLinksStore:  destination,
+		guoraiAnalytics:      destination,
+		businessOverview:     destination,
+		contentAnalysis:      destination,
+		timeout:              cfg.SyncTimeout,
+		logger:               logger,
 	})
 	listener, err := net.Listen("tcp", cfg.LarkSyncListen)
 	if err != nil {
@@ -195,6 +197,7 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/healthz", server.health)
 	mux.HandleFunc("/v1/sync/dandelion", server.syncDandelion)
 	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
+	mux.HandleFunc("/v1/imports/dandelion-excel", server.importDandelionExcel)
 	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
 	mux.HandleFunc("/v1/analytics/maituo/note-content", server.maituoNoteContent)
