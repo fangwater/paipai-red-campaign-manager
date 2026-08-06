@@ -34,6 +34,11 @@ function makeResult(spu: string, agency: string, dimension: Dimension) {
   const primaryDimension = dimension === "audience" ? "职场人" : "精力疲惫";
   const secondDimension = dimension === "audience" ? "健身人" : "运动恢复";
   const notes = [makeNote("note-1"), makeNote("note-2")];
+  const paginationNotes = Array.from({ length: 21 }, (_, index) => makeNote("page-" + String(index + 1).padStart(2, "0"), {
+    title: "分页笔记 " + (index + 1),
+    content_type: "经验分享",
+    search_spend: 39 - index
+  }));
   return {
     spu,
     agency,
@@ -48,14 +53,14 @@ function makeResult(spu: string, agency: string, dimension: Dimension) {
       manuscript_synced_at: "2026-08-02T08:00:00+08:00"
     },
     coverage: {
-      total_notes: 4,
-      content_type_tagged: 3,
-      audience_tagged: 3,
-      scenario_tagged: 3,
-      dandelion_cost_notes: 3,
-      flow_evaluated_notes: 2,
-      roi_evaluated_notes: 2,
-      all_metrics_notes: 2
+      total_notes: 25,
+      content_type_tagged: 24,
+      audience_tagged: 24,
+      scenario_tagged: 24,
+      dandelion_cost_notes: 24,
+      flow_evaluated_notes: 1,
+      roi_evaluated_notes: 23,
+      all_metrics_notes: 1
     },
     types: ["科普", "经验分享", "未标注"],
     dimensions: [primaryDimension, secondDimension, "未标注"],
@@ -87,6 +92,20 @@ function makeResult(spu: string, agency: string, dimension: Dimension) {
         roi_qualified: 0,
         all_qualified: 0,
         notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", roi: null, roi_qualified: false, all_qualified: false })]
+      },
+      {
+        content_type: "经验分享",
+        dimension: primaryDimension,
+        total_notes: paginationNotes.length,
+        dandelion_eligible: paginationNotes.length,
+        boom_count: 0,
+        boom_rate: 0,
+        flow_evaluated: 0,
+        flow_qualified: 0,
+        roi_evaluated: paginationNotes.length,
+        roi_qualified: 0,
+        all_qualified: 0,
+        notes: paginationNotes
       },
       {
         content_type: "未标注",
@@ -140,8 +159,18 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(page.getByText("按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗")).toBeVisible();
   const sortedNotes = page.getByRole("table", { name: "按累计消耗排序的笔记" });
   await expect(sortedNotes.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "搜索累计消耗 · 成本", "信息流累计消耗 · 成本", "薯量 ROI"]);
-  await expect(sortedNotes.locator("tbody tr")).toHaveCount(3);
+  await expect(sortedNotes.locator("tbody tr")).toHaveCount(20);
   await expect(sortedNotes.locator("tbody tr").first()).toContainText("一周辅酶记录");
+  await expect(page.getByText("共 24 篇 · 每页 20 篇")).toBeVisible();
+  const pageSelect = page.getByLabel("选择笔记页码");
+  await expect(pageSelect).toHaveValue("1");
+  await expect(pageSelect.locator("option")).toHaveCount(2);
+  const nextPage = page.getByRole("button", { name: "下一页" });
+  await nextPage.click();
+  await expect(pageSelect).toHaveValue("2");
+  await expect(sortedNotes.locator("tbody tr")).toHaveCount(4);
+  await expect(nextPage).toBeDisabled();
+  await expect(page.getByRole("button", { name: "上一页" })).toBeEnabled();
 
   await page.getByRole("button", { name: "科普 职场人 爆文率50%" }).click();
   await expect(page.getByRole("heading", { name: "科普 × 职场人" })).toBeVisible();
@@ -155,6 +184,8 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await page.getByRole("button", { name: "用户场景", exact: true }).click();
   await expect.poll(() => requested).toContain("辅酶:全部:scenario");
   await expect(page.getByRole("button", { name: "科普 精力疲惫 爆文率50%" })).toBeVisible();
+  await expect(pageSelect).toHaveValue("1");
+  await expect(sortedNotes.locator("tbody tr")).toHaveCount(20);
 
   await page.getByRole("button", { name: "曼杰", exact: true }).click();
   await expect.poll(() => requested).toContain("辅酶:曼杰:scenario");

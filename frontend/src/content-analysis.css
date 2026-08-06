@@ -88,7 +88,7 @@ button.content-heat-cell:focus-visible { outline: 2px solid #2f7d67; outline-off
 .content-heat-legend i { width: 22px; height: 10px; border-radius: 2px; }
 .content-heat-legend em { margin-left: 12px; color: #969ca1; font-style: normal; }
 
-.content-note-section { margin-top: 16px; }
+.content-note-section { margin-top: 16px; scroll-margin-top: 76px; }
 .content-note-section > header {
   min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 0 2px;
@@ -97,6 +97,24 @@ button.content-heat-cell:focus-visible { outline: 2px solid #2f7d67; outline-off
 .content-note-section header p { margin: 4px 0 0; color: #858c92; font-size: 9px; }
 .content-note-section header > span { color: #777f85; font-size: 10px; white-space: nowrap; }
 .content-note-section-empty { min-height: 180px; display: grid; place-items: center; border: 1px solid #e1e4e6; border-radius: 7px; background: #fff; color: #92989d; font-size: 11px; }
+.content-note-section > .content-note-table-wrap { border-radius: 7px 7px 0 0; }
+.content-note-pagination {
+  min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 8px 10px; border: 1px solid #e1e4e6; border-top: 0; border-radius: 0 0 7px 7px; background: #fff;
+}
+.content-note-pagination > span { color: #7b8389; font-size: 9px; white-space: nowrap; }
+.content-note-pagination-controls { display: flex; align-items: center; gap: 6px; }
+.content-note-pagination-controls button {
+  width: 30px; height: 30px; display: grid; flex: none; place-items: center;
+  padding: 0; border: 1px solid #dce0e2; border-radius: 5px; background: #fff; color: #596167;
+}
+.content-note-pagination-controls button:hover:not(:disabled) { border-color: #8a9297; background: #f7f9f9; }
+.content-note-pagination-controls button:disabled { color: #c3c8cb; cursor: not-allowed; }
+.content-note-pagination-controls button:focus-visible, .content-note-pagination-controls select:focus-visible { outline: 2px solid #2f7d67; outline-offset: 2px; }
+.content-note-pagination-controls select {
+  width: 104px; height: 30px; padding: 0 8px; border: 1px solid #dce0e2; border-radius: 5px;
+  background: #fff; color: #555d63; font-size: 9px;
+}
 
 .content-drawer-backdrop { position: fixed; inset: 0; z-index: 49; border: 0; background: rgba(17, 29, 39, .34); }
 .content-drawer {
@@ -176,6 +194,9 @@ button.content-heat-cell:focus-visible { outline: 2px solid #2f7d67; outline-off
   .content-heat-legend { flex-wrap: wrap; }
   .content-heat-legend em { width: 100%; margin-left: 0; }
   .content-note-section > header { align-items: flex-start; flex-direction: column; gap: 5px; padding: 10px 2px; }
+  .content-note-pagination { align-items: stretch; flex-direction: column; gap: 8px; }
+  .content-note-pagination-controls { width: 100%; }
+  .content-note-pagination-controls select { width: auto; flex: 1; }
   .content-drawer { width: 100vw; }
   .content-drawer-head { padding: 15px 14px; }
   .content-drawer-tabs { padding: 10px 14px; }

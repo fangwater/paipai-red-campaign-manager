@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ExternalLink, LoaderCircle, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, X } from "lucide-react";
 import "./content-analysis.css";
 
 type ServiceState = "checking" | "online" | "offline";
@@ -85,6 +85,7 @@ const DETAIL_FILTERS: Array<{ value: DetailFilter; label: string }> = [
   { value: "roi", label: "ROI 达标" },
   { value: "qualified", label: "三项达标" }
 ];
+const NOTE_PAGE_SIZE = 20;
 const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const decimal = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -210,6 +211,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const [agency, setAgency] = useState<AgencyOption>("全部");
   const [dimension, setDimension] = useState<DimensionOption>("audience");
   const [includeUnlabeled, setIncludeUnlabeled] = useState(false);
+  const [notePage, setNotePage] = useState(1);
+  const noteSectionRef = useRef<HTMLElement>(null);
   const [result, setResult] = useState<ContentResult | null>(null);
   const [selectedCell, setSelectedCell] = useState<ContentCell | null>(null);
   const [loading, setLoading] = useState(true);
@@ -251,6 +254,26 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
       return spendDifference || left.note_id.localeCompare(right.note_id);
     });
   }, [includeUnlabeled, result]);
+  const notePageCount = Math.max(1, Math.ceil(spendSortedNotes.length / NOTE_PAGE_SIZE));
+  const pagedSpendSortedNotes = useMemo(() => {
+    const start = (notePage - 1) * NOTE_PAGE_SIZE;
+    return spendSortedNotes.slice(start, start + NOTE_PAGE_SIZE);
+  }, [notePage, spendSortedNotes]);
+
+  useEffect(() => {
+    setNotePage(1);
+  }, [agency, dimension, includeUnlabeled, spu]);
+
+  useEffect(() => {
+    setNotePage((current) => Math.min(current, notePageCount));
+  }, [notePageCount]);
+
+  const changeNotePage = (page: number) => {
+    setNotePage(page);
+    window.requestAnimationFrame(() => {
+      noteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
   const total = result?.coverage.total_notes ?? 0;
   const qualityItems = result ? [
     { label: "内容类型覆盖", value: result.coverage.content_type_tagged, display: coverageRate(result.coverage.content_type_tagged, total) },
@@ -326,9 +349,21 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
         </footer>
       </section>
 
-      <section className="content-note-section">
+      <section className="content-note-section" ref={noteSectionRef}>
         <header><div><h2>笔记表现</h2><p>按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗</p></div><span>{integer.format(spendSortedNotes.length)} 篇笔记</span></header>
-        {spendSortedNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无笔记</div> : <ContentNoteTable notes={spendSortedNotes} showStatus={false} label="按累计消耗排序的笔记" />}
+        {spendSortedNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无笔记</div> : <>
+          <ContentNoteTable notes={pagedSpendSortedNotes} showStatus={false} label="按累计消耗排序的笔记" />
+          <nav className="content-note-pagination" aria-label="笔记分页">
+            <span>共 {integer.format(spendSortedNotes.length)} 篇 · 每页 {NOTE_PAGE_SIZE} 篇</span>
+            <div className="content-note-pagination-controls">
+              <button type="button" title="上一页" aria-label="上一页" disabled={notePage === 1} onClick={() => changeNotePage(notePage - 1)}><ChevronLeft size={15} /></button>
+              <select aria-label="选择笔记页码" value={notePage} onChange={(event) => changeNotePage(Number(event.target.value))}>
+                {Array.from({ length: notePageCount }, (_, index) => <option value={index + 1} key={index + 1}>第 {index + 1} / {notePageCount} 页</option>)}
+              </select>
+              <button type="button" title="下一页" aria-label="下一页" disabled={notePage === notePageCount} onClick={() => changeNotePage(notePage + 1)}><ChevronRight size={15} /></button>
+            </div>
+          </nav>
+        </>}
       </section>
     </> : null}
 
