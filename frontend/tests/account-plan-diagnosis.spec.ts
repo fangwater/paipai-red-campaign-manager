@@ -16,7 +16,7 @@ const overviewPoints = Array.from({ length: 30 }, (_, index) => {
     feed_cost: 68 + index * 0.35,
     feed_cpc: 2.74 - index * 0.014,
     feed_ctr_pct: 2.81 + index * 0.026,
-    feed_search_rate_pct: 6.4 + index * 0.07
+    feed_search_rate_pct: 6.4 + index * 0.07,
   };
 });
 
@@ -37,38 +37,47 @@ test("renders account overview and drills into plan actions", async ({ page }) =
           dandelion_missing: 1,
           account_overviews: [
             { account: "Megared脉拓-飓风03", current_total_spend: 7400, points: overviewPoints },
-            { account: "Megared脉拓-智元01", current_total_spend: 6200, points: overviewPoints.map((point) => ({ ...point, total_spend: point.total_spend * 0.84 })) }
+            {
+              account: "Megared脉拓-智元01",
+              current_total_spend: 6200,
+              points: overviewPoints.map((point) => ({
+                ...point,
+                total_spend: point.total_spend * 0.84,
+              }))
+            }
           ],
           accounts: [{
             account: "Megared脉拓-飓风03",
             placement: "搜索",
             spend: 5804.76,
             search_users: 148,
-            cost: 39.22,
+            original_cost: 39.22,
+            correction_coefficient: 2,
+            cost: 78.44,
             search_rate_pct: 12.45,
             cpc: 1.86,
             ctr_pct: 4.32,
             note_count: 17,
             cost_metric: "回搜成本",
-            previous_cost: 34.86,
+            previous_cost: 69.72,
             change_pct: 0.125,
             kpi: 70,
-            status: "good",
+            status: "over",
             over_plans: 1,
             enlarge_plans: 1,
             stop_plans: 1,
             points: [
-              { report_date: "2026-07-21", spend: 5010.12, search_users: 109, cost: 45.74, search_rate_pct: 10.21, cpc: 2.12, ctr_pct: 3.71, note_count: 14 },
-              { report_date: "2026-07-22", spend: 5232.44, search_users: 154, cost: 33.98, search_rate_pct: 11.08, cpc: 2.03, ctr_pct: 3.92, note_count: 15 },
-              { report_date: "2026-07-23", spend: 5483.91, search_users: 148, cost: 37.05, search_rate_pct: 11.63, cpc: 1.98, ctr_pct: 4.01, note_count: 15 },
-              { report_date: "2026-07-24", spend: null, search_users: null, cost: null, search_rate_pct: null, cpc: null, ctr_pct: null, note_count: null },
-              { report_date: "2026-07-25", spend: null, search_users: null, cost: null, search_rate_pct: null, cpc: null, ctr_pct: null, note_count: null },
-              { report_date: "2026-07-26", spend: 5612.77, search_users: 161, cost: 34.86, search_rate_pct: 12.02, cpc: 1.92, ctr_pct: 4.13, note_count: 16 },
-              { report_date: "2026-07-27", spend: 5804.76, search_users: 148, cost: 39.22, search_rate_pct: 12.45, cpc: 1.86, ctr_pct: 4.32, note_count: 17 }
+              { report_date: "2026-07-21", spend: 5010.12, search_users: 109, original_cost: 45.74, correction_coefficient: 2, cost: 91.48, search_rate_pct: 10.21, cpc: 2.12, ctr_pct: 3.71, note_count: 14 },
+              { report_date: "2026-07-22", spend: 5232.44, search_users: 154, original_cost: 33.98, correction_coefficient: 2, cost: 67.96, search_rate_pct: 11.08, cpc: 2.03, ctr_pct: 3.92, note_count: 15 },
+              { report_date: "2026-07-23", spend: 5483.91, search_users: 148, original_cost: 37.05, correction_coefficient: 2, cost: 74.1, search_rate_pct: 11.63, cpc: 1.98, ctr_pct: 4.01, note_count: 15 },
+              { report_date: "2026-07-24", spend: null, search_users: null, original_cost: null, correction_coefficient: null, cost: null, search_rate_pct: null, cpc: null, ctr_pct: null, note_count: null },
+              { report_date: "2026-07-25", spend: null, search_users: null, original_cost: null, correction_coefficient: null, cost: null, search_rate_pct: null, cpc: null, ctr_pct: null, note_count: null },
+              { report_date: "2026-07-26", spend: 5612.77, search_users: 161, original_cost: 34.86, correction_coefficient: 2, cost: 69.72, search_rate_pct: 12.02, cpc: 1.92, ctr_pct: 4.13, note_count: 16 },
+              { report_date: "2026-07-27", spend: 5804.76, search_users: 148, original_cost: 39.22, correction_coefficient: 2, cost: 78.44, search_rate_pct: 12.45, cpc: 1.86, ctr_pct: 4.32, note_count: 17 }
             ],
             plans: [
-              { note_id: "note-stop", note_url: "https://www.xiaohongshu.com/explore/note-stop", campaign_name: "连续超标计划", spend: 200.26, cost: 33.38, cost_metric: "回搜成本", kpi: 30, over_kpi: true, action: "stop", consecutive_over_kpi: 3, dandelion: { title: "辅酶Q10真实体验", author: "测试达人", note_type: "图文", content_tag: "单品", published_date: "2026-07-20", data_updated_date: "2026-08-01", dandelion_amount: 220, impressions: 12000, reads: 1800, interactions: 75, read_cost: 0.12, interaction_cost: 2.93 } },
-              { note_id: "note-grow", note_url: "https://www.xiaohongshu.com/explore/note-grow", campaign_name: "低成本放大计划", spend: 100.34, cost: 12.54, cost_metric: "回搜成本", kpi: 30, over_kpi: false, action: "enlarge", consecutive_over_kpi: 0 }
+              { note_id: "note-stop", note_url: "https://www.xiaohongshu.com/explore/note-stop", campaign_name: "连续超标计划", spend: 200.26, original_cost: 33.38, correction_coefficient: 2.5, cost: 83.45, cost_metric: "回搜成本", kpi: 30, over_kpi: true, action: "stop", consecutive_over_kpi: 3, dandelion: { title: "辅酶Q10真实体验", author: "测试达人", note_type: "图文", content_tag: "单品", published_date: "2026-07-20", data_updated_date: "2026-08-01", dandelion_amount: 220, impressions: 12000, reads: 1800, interactions: 75, read_cost: 0.12, interaction_cost: 2.93 } },
+              { note_id: "note-grow", note_url: "https://www.xiaohongshu.com/explore/note-grow", campaign_name: "低成本放大计划", spend: 100.34, original_cost: 10, correction_coefficient: 2.5, cost: 25, cost_metric: "回搜成本", kpi: 30, over_kpi: false, action: "enlarge", consecutive_over_kpi: 0 }
             ]
           }]
         }
@@ -83,6 +92,7 @@ test("renders account overview and drills into plan actions", async ({ page }) =
   await expect(accountSelect).toHaveValue("Megared脉拓-飓风03");
   await expect(accountSelect.locator("option")).toHaveCount(2);
   await expect(page.locator(".diagnosis-trend-card")).toHaveCount(6);
+  await expect(page.getByRole("heading", { name: "综合加权回搜重合系数" })).toHaveCount(0);
   await expect(page.getByRole("img", { name: "总消耗趋势图" })).toBeVisible();
   await expect(page.getByRole("img", { name: "搜索 / 信息流回搜率趋势图" })).toBeVisible();
   await expect.poll(async () => page.locator(".diagnosis-trend-canvas canvas").count()).toBe(6);
@@ -106,15 +116,22 @@ test("renders account overview and drills into plan actions", async ({ page }) =
   await page.getByRole("button", { name: "7日" }).click();
   await expect(page.locator(".diagnosis-account-table tbody tr")).toHaveCount(1);
   await expect(page.getByText("+12.5%", { exact: true })).toBeVisible();
-  await expect(page.locator(".diagnosis-sparkline path")).toHaveAttribute("d", /M/);
+  await expect(page.getByText("KPI 均按修正后成本判断", { exact: false })).toBeVisible();
+  await expect(page.getByText("修正后诊断成本", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("¥78.44", { exact: true })).toBeVisible();
+  await expect(page.getByText("原 ¥39.22 × 2.00", { exact: true })).toBeVisible();
+  const sparklinePath = await page.locator(".diagnosis-sparkline path").getAttribute("d");
+  expect(sparklinePath?.match(/M/g)).toHaveLength(1);
   await expect(page.getByText("蒲公英 1/2 · 更新 8月2日", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Megared脉拓-飓风03" }).click();
   const drawer = page.getByRole("complementary", { name: /Megared脉拓-飓风03计划诊断/ });
   await expect(drawer).toBeVisible();
+  await expect(drawer.getByText("修正后诊断成本 = 原始成本 × 笔记/SPU 综合重合系数", { exact: false })).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "子账户数据总览" })).toHaveCount(0);
   await expect(page.getByText("连续超标计划", { exact: true })).toBeVisible();
   await expect(page.getByText("辅酶Q10真实体验", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("原 ¥33.38 × 2.50", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /建议放大 1/ }).click();
   await expect(page.getByText("低成本放大计划", { exact: true })).toBeVisible();
   await expect(page.getByText("未匹配", { exact: true })).toBeVisible();

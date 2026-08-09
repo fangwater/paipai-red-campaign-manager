@@ -18,6 +18,8 @@ type DiagnosisPoint = {
   spend: number | null;
   search_users: number | null;
   cost: number | null;
+  original_cost: number | null;
+  correction_coefficient: number | null;
   search_rate_pct: number | null;
   cpc: number | null;
   ctr_pct: number | null;
@@ -45,6 +47,8 @@ type PlanDiagnosis = {
   campaign_name: string;
   spend: number;
   cost: number | null;
+  original_cost: number | null;
+  correction_coefficient: number | null;
   cost_metric: string;
   kpi: number;
   over_kpi: boolean;
@@ -59,6 +63,8 @@ type AccountDiagnosis = {
   spend: number;
   search_users: number;
   cost: number | null;
+  original_cost: number | null;
+  correction_coefficient: number | null;
   search_rate_pct: number | null;
   cpc: number | null;
   ctr_pct: number | null;
@@ -145,29 +151,19 @@ function actionLabel(action: PlanDiagnosis["action"]): string {
 }
 
 function Sparkline({ points }: { points: DiagnosisPoint[] }) {
-  const values = points.map((point) => point.cost).filter((value): value is number => value !== null);
-  if (values.length === 0) return <span className="diagnosis-no-trend">无数据</span>;
+  const validPoints = points.filter((point): point is DiagnosisPoint & { cost: number } => point.cost !== null);
+  if (validPoints.length === 0) return <span className="diagnosis-no-trend">无数据</span>;
+  const values = validPoints.map((point) => point.cost);
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
-  const coordinates = points.map((point, index) => point.cost === null ? null : {
-    x: 3 + index * (86 / Math.max(points.length - 1, 1)),
+  const coordinates = validPoints.map((point, index) => ({
+    x: 3 + index * (86 / Math.max(validPoints.length - 1, 1)),
     y: maximum === minimum ? 14 : 3 + ((maximum - point.cost) / (maximum - minimum)) * 22
-  });
-  let path = "";
-  let open = false;
-  coordinates.forEach((coordinate) => {
-    if (!coordinate) {
-      open = false;
-      return;
-    }
-    path += `${open ? "L" : "M"}${coordinate.x},${coordinate.y} `;
-    open = true;
-  });
+  }));
+  const path = coordinates.map((coordinate, index) => `${index === 0 ? "M" : "L"}${coordinate.x},${coordinate.y}`).join(" ");
   return <svg className="diagnosis-sparkline" viewBox="0 0 92 28" role="img" aria-label="7日成本趋势">
     <path d={path} />
-    {coordinates.map((coordinate, index) => coordinate
-      ? <circle key={points[index].report_date} cx={coordinate.x} cy={coordinate.y} r="2"><title>{points[index].report_date}：¥{money.format(points[index].cost ?? 0)}</title></circle>
-      : null)}
+    {coordinates.map((coordinate, index) => <circle key={validPoints[index].report_date} cx={coordinate.x} cy={coordinate.y} r="2"><title>{validPoints[index].report_date}：¥{money.format(validPoints[index].cost)}</title></circle>)}
   </svg>;
 }
 
@@ -202,7 +198,8 @@ function compactNumber(value: number): string {
 
 function trendValue(unit: TrendUnit, value: number | null): string {
   if (value === null) return "--";
-  return unit === "currency" ? `¥${money.format(value)}` : `${money.format(value)}%`;
+  if (unit === "currency") return `¥${money.format(value)}`;
+  return `${money.format(value)}%`;
 }
 
 function pointLabel(unit: TrendUnit, value: number): string {
@@ -228,18 +225,18 @@ function accountTrendCharts(points: AccountOverviewPoint[]): TrendChartConfig[] 
     },
     {
       key: "search-delivery",
-      title: "搜索消耗与回搜成本",
+      title: "搜索消耗与修正后回搜成本",
       metrics: [
         metric("search-spend", "搜索消耗", "currency", "#36765f", 0, "search_spend"),
-        metric("search-cost", "回搜成本", "currency", "#c34f57", 1, "search_cost")
+        metric("search-cost", "修正后回搜成本", "currency", "#c34f57", 1, "search_cost")
       ]
     },
     {
       key: "feed-delivery",
-      title: "信息流消耗与回搜成本",
+      title: "信息流消耗与修正后成本",
       metrics: [
         metric("feed-spend", "信息流消耗", "currency", "#3d6f9e", 0, "feed_spend"),
-        metric("feed-cost", "预计回流后成本", "currency", "#a66a2c", 1, "feed_cost")
+        metric("feed-cost", "修正后预计回流成本", "currency", "#a66a2c", 1, "feed_cost")
       ]
     },
     {
@@ -269,11 +266,14 @@ function accountTrendCharts(points: AccountOverviewPoint[]): TrendChartConfig[] 
   ];
 }
 
-function AccountTrendChart({ config, points, days }: { config: TrendChartConfig; points: AccountOverviewPoint[]; days: PeriodDays }) {
+function AccountTrendChart({ config, points, days }: { config: TrendChartConfig; points: Array<{ report_date: string }>; days: PeriodDays }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const hasData = config.metrics.some((metric) => metric.values.some((value) => value !== null));
   const hasRightAxis = config.metrics.some((metric) => metric.axis === 1);
   const option = useMemo<EChartsCoreOption>(() => {
+    const visiblePointIndexes = points
+      .map((_, index) => index)
+      .filter((index) => config.metrics.some((metric) => typeof metric.values[index] === "number"));
     const axisFor = (axis: 0 | 1) => config.metrics.find((metric) => metric.axis === axis) ?? config.metrics[0];
     const yAxis = ([0, ...(hasRightAxis ? [1] : [])] as Array<0 | 1>).map((axis) => {
       const metric = axisFor(axis);
@@ -312,7 +312,7 @@ function AccountTrendChart({ config, points, days }: { config: TrendChartConfig;
       xAxis: {
         type: "category",
         boundaryGap: false,
-        data: points.map((point) => point.report_date.slice(5)),
+        data: visiblePointIndexes.map((index) => points[index].report_date.slice(5)),
         axisLine: { lineStyle: { color: "#dfe3e5" } },
         axisTick: { show: false },
         axisLabel: { color: "#858c92", fontSize: 9, interval: days === 7 ? 0 : "auto" }
@@ -322,8 +322,8 @@ function AccountTrendChart({ config, points, days }: { config: TrendChartConfig;
         name: metric.label,
         type: "line",
         yAxisIndex: metric.axis,
-        data: metric.values,
-        connectNulls: false,
+        data: visiblePointIndexes.map((pointIndex) => metric.values[pointIndex]),
+        connectNulls: true,
         smooth: 0.16,
         showSymbol: days === 7,
         symbol: "circle",
@@ -359,12 +359,30 @@ function AccountTrendChart({ config, points, days }: { config: TrendChartConfig;
   return <article className="diagnosis-trend-card">
     <header>
       <h3>{config.title}</h3>
-      <dl>{config.metrics.map((metric) => <div key={metric.key}><dt><i style={{ background: metric.color }} />{metric.label}</dt><dd>{trendValue(metric.unit, metric.values.at(-1) ?? null)}</dd></div>)}</dl>
+      <dl>
+        {config.metrics.map((metric) => <div key={metric.key}><dt><i style={{ background: metric.color }} />{metric.label}</dt><dd>{trendValue(metric.unit, metric.values.at(-1) ?? null)}</dd></div>)}
+      </dl>
     </header>
     {hasData
       ? <div ref={chartRef} className="diagnosis-trend-canvas" role="img" aria-label={`${config.title}趋势图`} />
       : <div className="diagnosis-trend-empty">当前周期暂无数据</div>}
   </article>;
+}
+
+function CorrectedCostValue({ originalCost, coefficient, correctedCost, metric }: {
+  originalCost: number | null;
+  coefficient: number | null;
+  correctedCost: number | null;
+  metric: string;
+}) {
+  if (correctedCost === null) return <span title={originalCost === null ? metric : `${metric}缺少当日修正系数`}>-</span>;
+  const detail = originalCost !== null && coefficient !== null
+    ? `原 ¥${money.format(originalCost)} × ${coefficient.toFixed(2)}`
+    : "";
+  return <span className="diagnosis-cost-comparison" title={`${metric}（修正后）`}>
+    <strong>¥{money.format(correctedCost)}</strong>
+    {detail ? <small>{detail}</small> : null}
+  </span>;
 }
 
 function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: () => void }) {
@@ -387,16 +405,16 @@ function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: 
     <button className="diagnosis-drawer-backdrop" type="button" aria-label="关闭计划明细" onClick={onClose} />
     <aside className="diagnosis-drawer" aria-label={`${account.account}计划诊断`}>
       <header className="diagnosis-drawer-head">
-        <div><h2>{account.account}</h2><p>{account.placement} · {account.cost_metric} · 计划 KPI {money.format(account.placement === "信息流" ? 70 : 30)}</p></div>
+        <div><h2>{account.account}</h2><p>{account.placement} · 修正后{account.cost_metric} · 计划 KPI {money.format(account.placement === "信息流" ? 70 : 30)}</p></div>
         <button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={onClose}><X size={19} /></button>
       </header>
       <div className="diagnosis-drawer-tabs" aria-label="计划诊断分类">
         {(Object.keys(labels) as PlanTab[]).map((value) => <button type="button" className={tab === value ? "active" : ""} key={value} onClick={() => setTab(value)}>{labels[value]} <span>{counts[value]}</span></button>)}
       </div>
       <div className="diagnosis-drawer-body">
-        <div className="diagnosis-drawer-summary">本页展示全部{labels[tab]}计划，不设置消耗门槛；连续 3 个有效报表日成本超标时建议停止。</div>
+        <div className="diagnosis-drawer-summary">以下 KPI 均按修正后诊断成本判断；修正后诊断成本 = 原始成本 × 笔记/SPU 综合重合系数。连续 3 个有效报表日超标时建议停止。</div>
         {plans.length === 0 ? <div className="diagnosis-drawer-empty">该分类暂无计划</div> : <div className="diagnosis-plan-table-wrap"><table className="diagnosis-plan-table">
-          <thead><tr><th>计划名</th><th>蒲公英数据</th><th>消耗</th><th>诊断成本</th><th>KPI</th><th>超标</th><th>动作</th><th>连续天数</th></tr></thead>
+          <thead><tr><th>计划名</th><th>蒲公英数据</th><th>消耗</th><th>修正后诊断成本</th><th>KPI</th><th>超标</th><th>动作</th><th>连续天数</th></tr></thead>
           <tbody>{plans.map((plan) => {
             const noteURL = normalizeNoteURL(plan.note_url);
             const excess = plan.cost === null ? null : (plan.cost / plan.kpi - 1) * 100;
@@ -408,7 +426,7 @@ function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: 
                 <small>曝光 {integer.format(plan.dandelion.impressions)} · 阅读 {integer.format(plan.dandelion.reads)} · 互动 {integer.format(plan.dandelion.interactions)} · 合作 ¥{money.format(plan.dandelion.dandelion_amount)}</small>
               </div> : <span className="diagnosis-dandelion-missing">未匹配</span>}</td>
               <td className="num">¥{money.format(plan.spend)}</td>
-              <td className="num" title={plan.cost_metric}>{plan.cost === null ? "-" : `¥${money.format(plan.cost)}`}</td>
+              <td className="num"><CorrectedCostValue originalCost={plan.original_cost} coefficient={plan.correction_coefficient} correctedCost={plan.cost} metric={plan.cost_metric} /></td>
               <td className="num">¥{money.format(plan.kpi)}</td>
               <td className={`num ${excess !== null && excess >= 0 ? "diagnosis-over-value" : ""}`}>{excess === null ? "-" : `${excess >= 0 ? "+" : ""}${excess.toFixed(0)}%`}</td>
               <td><span className={`diagnosis-action ${plan.action}`}>{actionLabel(plan.action)}</span></td>
@@ -461,7 +479,7 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
 
   return <>
     <section className="page-heading diagnosis-page-heading">
-      <div><h1>子账户与计划诊断</h1><p>辅酶Q10 · 子账户 KPI 70 · 计划 KPI：搜索 30、信息流 70</p></div>
+      <div><h1>子账户与计划诊断</h1><p>辅酶Q10 · 子账户 KPI 70 · 计划 KPI：搜索 30、信息流 70 · KPI 均按修正后成本判断</p></div>
       <div className="heading-status"><span className={`status-dot ${serviceState}`} />{result.report_date ? `数据截至 ${shortDate(result.report_date)}` : "等待日报数据"}</div>
     </section>
     {error ? <div className="analysis-error"><AlertCircle size={16} />{error}</div> : null}
@@ -477,19 +495,21 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
       </div>
     </section>
     {loading ? <div className="analysis-loading"><LoaderCircle size={19} className="spin" />正在读取子账户趋势</div>
-      : overview ? <section className="diagnosis-trend-grid">{overviewCharts.map((chart) => <AccountTrendChart key={chart.key} config={chart} points={overviewPoints} days={days} />)}</section>
+      : overview ? <section className="diagnosis-trend-grid">
+        {overviewCharts.map((chart) => <AccountTrendChart key={chart.key} config={chart} points={overviewPoints} days={days} />)}
+      </section>
         : <div className="analysis-loading">当前 SPU 暂无子账户趋势数据</div>}
     <section className="diagnosis-table-section">
       <header><div><Stethoscope size={18} /><span><strong>子账户诊断</strong><small>{result.accounts.length} 个子账户场域 · {totalPlans} 条计划明细</small></span></div><p>蒲公英 {result.dandelion_matched}/{dandelionTotal} · 更新 {dandelionDate}</p></header>
       {loading ? <div className="diagnosis-loading"><LoaderCircle size={19} className="spin" />正在生成诊断</div>
         : result.accounts.length === 0 ? <div className="diagnosis-loading">当前 SPU 暂无可诊断数据</div>
           : <div className="diagnosis-table-wrap"><table className="diagnosis-account-table">
-            <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>诊断成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>超标计划</th><th>放大</th><th>停止</th><th>7日成本</th></tr></thead>
+            <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>修正后诊断成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>超标计划</th><th>放大</th><th>停止</th><th>7日修正后成本</th></tr></thead>
             <tbody>{result.accounts.map((account) => <tr key={accountKey(account)}>
               <td><button type="button" className="diagnosis-account-button" title="查看计划诊断" onClick={() => setSelectedKey(accountKey(account))}>{account.account}</button></td>
               <td><span className={`placement-swatch placement-${account.placement}`}>{account.placement}</span></td>
               <td className="num">¥{money.format(account.spend)}</td>
-              <td className="num" title={account.cost_metric}>{account.cost === null ? "-" : `¥${money.format(account.cost)}`}</td>
+              <td className="num"><CorrectedCostValue originalCost={account.original_cost} coefficient={account.correction_coefficient} correctedCost={account.cost} metric={account.cost_metric} /></td>
               <td className={`num ${account.change_pct !== null && account.change_pct > 0 ? "diagnosis-over-value" : account.change_pct !== null ? "diagnosis-good-value" : ""}`}>{account.change_pct === null ? "-" : `${account.change_pct >= 0 ? "+" : ""}${(account.change_pct * 100).toFixed(1)}%`}</td>
               <td className="num">¥{money.format(account.kpi)}</td>
               <td><span className={`diagnosis-status ${account.status}`}>{statusLabel(account.status)}</span></td>

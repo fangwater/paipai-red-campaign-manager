@@ -50,7 +50,7 @@ func (p *Postgres) Close() {
 }
 
 func (p *Postgres) Migrate(ctx context.Context) error {
-	if _, err := p.pool.Exec(ctx, migrations.InitSQL+"\n"+migrations.ProviderContentSQL+"\n"+migrations.GuoraiSQL+"\n"+migrations.XHSJGCampaignsSQL+"\n"+migrations.XHSJGDeliverySQL+"\n"+migrations.XHSJGManualSyncSQL+"\n"+migrations.MaituoCustomerDailySQL+"\n"+migrations.MaituoNoteReportDatesSQL+"\n"+migrations.MaituoPartialWorkbooksSQL+"\n"+migrations.MaituoDatedSummaryTablesSQL+"\n"+migrations.MaituoRemoveImportVersionSQL+"\n"+migrations.SimilarNoteEmbeddingsSQL+"\n"+migrations.GuoraiCredentialsSQL); err != nil {
+	if _, err := p.pool.Exec(ctx, migrations.InitSQL+"\n"+migrations.ProviderContentSQL+"\n"+migrations.GuoraiSQL+"\n"+migrations.XHSJGCampaignsSQL+"\n"+migrations.XHSJGDeliverySQL+"\n"+migrations.XHSJGManualSyncSQL+"\n"+migrations.MaituoCustomerDailySQL+"\n"+migrations.MaituoNoteReportDatesSQL+"\n"+migrations.MaituoPartialWorkbooksSQL+"\n"+migrations.MaituoDatedSummaryTablesSQL+"\n"+migrations.MaituoRemoveImportVersionSQL+"\n"+migrations.SimilarNoteEmbeddingsSQL+"\n"+migrations.GuoraiCredentialsSQL+"\n"+migrations.MaituoSearchUserOverlapSQL); err != nil {
 		return fmt.Errorf("apply PostgreSQL migration: %w", err)
 	}
 	return nil

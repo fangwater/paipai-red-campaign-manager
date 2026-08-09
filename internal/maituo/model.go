@@ -169,36 +169,40 @@ type AccountOverview struct {
 }
 
 type AccountDiagnosisPoint struct {
-	ReportDate    string   `json:"report_date"`
-	Spend         *float64 `json:"spend"`
-	SearchUsers   *int64   `json:"search_users"`
-	Cost          *float64 `json:"cost"`
-	SearchRatePct *float64 `json:"search_rate_pct"`
-	CPC           *float64 `json:"cpc"`
-	CTRPct        *float64 `json:"ctr_pct"`
-	NoteCount     *int64   `json:"note_count"`
+	ReportDate            string   `json:"report_date"`
+	Spend                 *float64 `json:"spend"`
+	SearchUsers           *int64   `json:"search_users"`
+	OriginalCost          *float64 `json:"original_cost"`
+	CorrectionCoefficient *float64 `json:"correction_coefficient"`
+	Cost                  *float64 `json:"cost"`
+	SearchRatePct         *float64 `json:"search_rate_pct"`
+	CPC                   *float64 `json:"cpc"`
+	CTRPct                *float64 `json:"ctr_pct"`
+	NoteCount             *int64   `json:"note_count"`
 }
 
 type AccountDiagnosis struct {
-	Account       string                  `json:"account"`
-	Placement     string                  `json:"placement"`
-	Spend         float64                 `json:"spend"`
-	SearchUsers   int64                   `json:"search_users"`
-	Cost          *float64                `json:"cost"`
-	SearchRatePct *float64                `json:"search_rate_pct"`
-	CPC           *float64                `json:"cpc"`
-	CTRPct        *float64                `json:"ctr_pct"`
-	NoteCount     int64                   `json:"note_count"`
-	CostMetric    string                  `json:"cost_metric"`
-	PreviousCost  *float64                `json:"previous_cost"`
-	ChangePct     *float64                `json:"change_pct"`
-	KPI           float64                 `json:"kpi"`
-	Status        string                  `json:"status"`
-	OverPlans     int                     `json:"over_plans"`
-	EnlargePlans  int                     `json:"enlarge_plans"`
-	StopPlans     int                     `json:"stop_plans"`
-	Points        []AccountDiagnosisPoint `json:"points"`
-	Plans         []PlanDiagnosis         `json:"plans"`
+	Account               string                  `json:"account"`
+	Placement             string                  `json:"placement"`
+	Spend                 float64                 `json:"spend"`
+	SearchUsers           int64                   `json:"search_users"`
+	OriginalCost          *float64                `json:"original_cost"`
+	CorrectionCoefficient *float64                `json:"correction_coefficient"`
+	Cost                  *float64                `json:"cost"`
+	SearchRatePct         *float64                `json:"search_rate_pct"`
+	CPC                   *float64                `json:"cpc"`
+	CTRPct                *float64                `json:"ctr_pct"`
+	NoteCount             int64                   `json:"note_count"`
+	CostMetric            string                  `json:"cost_metric"`
+	PreviousCost          *float64                `json:"previous_cost"`
+	ChangePct             *float64                `json:"change_pct"`
+	KPI                   float64                 `json:"kpi"`
+	Status                string                  `json:"status"`
+	OverPlans             int                     `json:"over_plans"`
+	EnlargePlans          int                     `json:"enlarge_plans"`
+	StopPlans             int                     `json:"stop_plans"`
+	Points                []AccountDiagnosisPoint `json:"points"`
+	Plans                 []PlanDiagnosis         `json:"plans"`
 }
 
 type DandelionNoteSupplement struct {
@@ -217,17 +221,19 @@ type DandelionNoteSupplement struct {
 }
 
 type PlanDiagnosis struct {
-	NoteID             string                   `json:"note_id"`
-	NoteURL            string                   `json:"note_url"`
-	CampaignName       string                   `json:"campaign_name"`
-	Spend              float64                  `json:"spend"`
-	Cost               *float64                 `json:"cost"`
-	CostMetric         string                   `json:"cost_metric"`
-	KPI                float64                  `json:"kpi"`
-	OverKPI            bool                     `json:"over_kpi"`
-	Action             string                   `json:"action"`
-	ConsecutiveOverKPI int                      `json:"consecutive_over_kpi"`
-	Dandelion          *DandelionNoteSupplement `json:"dandelion,omitempty"`
+	NoteID                string                   `json:"note_id"`
+	NoteURL               string                   `json:"note_url"`
+	CampaignName          string                   `json:"campaign_name"`
+	Spend                 float64                  `json:"spend"`
+	OriginalCost          *float64                 `json:"original_cost"`
+	CorrectionCoefficient *float64                 `json:"correction_coefficient"`
+	Cost                  *float64                 `json:"cost"`
+	CostMetric            string                   `json:"cost_metric"`
+	KPI                   float64                  `json:"kpi"`
+	OverKPI               bool                     `json:"over_kpi"`
+	Action                string                   `json:"action"`
+	ConsecutiveOverKPI    int                      `json:"consecutive_over_kpi"`
+	Dandelion             *DandelionNoteSupplement `json:"dandelion,omitempty"`
 }
 
 type TableResult struct {

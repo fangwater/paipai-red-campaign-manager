@@ -59,9 +59,23 @@ type OverviewNewNotes struct {
 	SourceSyncedAt *time.Time           `json:"source_synced_at"`
 }
 
+type SearchUserOverlapPoint struct {
+	ReportDate              string   `json:"report_date"`
+	SPUSearchUsers          *int64   `json:"spu_search_users"`
+	SubaccountSearchUsers   *int64   `json:"subaccount_search_users"`
+	OverlapUsers            *int64   `json:"overlap_users"`
+	OverlapCoefficient      *float64 `json:"overlap_coefficient"`
+	DeduplicationFactor     *float64 `json:"deduplication_factor"`
+	NoteSearchUsers         *int64   `json:"note_search_users"`
+	NoteOverlapUsers        *int64   `json:"note_overlap_users"`
+	NoteOverlapCoefficient  *float64 `json:"note_overlap_coefficient"`
+	NoteDeduplicationFactor *float64 `json:"note_deduplication_factor"`
+}
+
 type BusinessOverview struct {
-	Days     int              `json:"days"`
-	SPU      string           `json:"spu"`
-	Trend    OverviewTrend    `json:"trend"`
-	NewNotes OverviewNewNotes `json:"new_notes"`
+	Days          int                      `json:"days"`
+	SPU           string                   `json:"spu"`
+	OverlapPoints []SearchUserOverlapPoint `json:"overlap_points"`
+	Trend         OverviewTrend            `json:"trend"`
+	NewNotes      OverviewNewNotes         `json:"new_notes"`
 }

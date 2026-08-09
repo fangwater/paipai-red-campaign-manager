@@ -27,6 +27,12 @@ type OverviewMetric = {
   points: MetricPoint[];
 };
 
+type SearchUserOverlapPoint = {
+  report_date: string;
+  overlap_coefficient: number | null;
+  note_overlap_coefficient: number | null;
+};
+
 type OverviewNote = {
   note_id: string;
   title: string;
@@ -49,6 +55,7 @@ type OverviewAgency = {
 type OverviewResult = {
   days: PeriodDays;
   spu: SPUOption;
+  overlap_points: SearchUserOverlapPoint[];
   trend: {
     start_date: string;
     end_date: string;
@@ -75,6 +82,10 @@ const METRIC_COLORS: Record<string, string> = {
   search_uv: "#2e6f9e",
   order_uv: "#b17b27"
 };
+const OVERLAP_SERIES = [
+  { key: "overlap_coefficient", label: "子账户 ÷ SPU", color: "#276f7c" },
+  { key: "note_overlap_coefficient", label: "笔记 ÷ SPU", color: "#c45a62" }
+] as const;
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const moneyFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -173,6 +184,83 @@ function TrendChart({ metric, days }: { metric: OverviewMetric; days: PeriodDays
       <ChangeBadge metric={metric} />
     </header>
     <div ref={chartRef} className="overview-chart-canvas" role="img" aria-label={metric.label + "折线图"} />
+  </article>;
+}
+
+function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[]; days: PeriodDays }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const visiblePoints = useMemo(() => points.filter((point) => OVERLAP_SERIES.some((series) => typeof point[series.key] === "number")), [points]);
+  const option = useMemo<EChartsCoreOption>(() => ({
+    animationDuration: 320,
+    grid: { left: 54, right: 22, top: days === 7 ? 46 : 26, bottom: 38 },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "rgba(31, 35, 38, 0.94)",
+      borderWidth: 0,
+      padding: [8, 10],
+      textStyle: { color: "#fff", fontSize: 11 }
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: visiblePoints.map((point) => point.report_date.slice(5)),
+      axisLine: { lineStyle: { color: "#dfe3e5" } },
+      axisTick: { show: false },
+      axisLabel: { color: "#858c92", fontSize: 10, interval: days === 7 ? 0 : "auto" }
+    },
+    yAxis: {
+      type: "value",
+      scale: true,
+      splitNumber: 4,
+      axisLabel: { color: "#858c92", fontSize: 10, formatter: (value: number) => `${value.toFixed(2)}×` },
+      splitLine: { lineStyle: { color: "#edf0f1", type: "dashed" } }
+    },
+    series: OVERLAP_SERIES.map((series, index) => ({
+      name: series.label,
+      type: "line",
+      data: visiblePoints.map((point) => point[series.key]),
+      connectNulls: true,
+      smooth: 0.16,
+      showSymbol: days === 7,
+      symbol: "circle",
+      symbolSize: 7,
+      lineStyle: { width: 2.5, color: series.color },
+      itemStyle: { color: series.color, borderColor: "#fff", borderWidth: 2 },
+      tooltip: { valueFormatter: (value: number) => `${value.toFixed(2)}×` },
+      label: {
+        show: days === 7,
+        position: index === 0 ? "bottom" : "top",
+        distance: 6,
+        color: series.color,
+        fontSize: 9,
+        formatter: (params: { value: number | null }) => params.value === null ? "" : `${params.value.toFixed(2)}×`
+      },
+      emphasis: { focus: "series", scale: 1.15 }
+    }))
+  }), [days, visiblePoints]);
+
+  useEffect(() => {
+    if (!chartRef.current || visiblePoints.length === 0) return;
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
+    chart.setOption(option);
+    const observer = new ResizeObserver(() => chart.resize());
+    observer.observe(chartRef.current);
+    return () => {
+      observer.disconnect();
+      chart.dispose();
+    };
+  }, [option, visiblePoints.length]);
+
+  return <article className="overview-overlap-card">
+    <header>
+      <div><h3>综合加权回搜重合系数</h3><p>聚合回搜人数 ÷ SPU 去重回搜人数</p></div>
+      <div className="overview-overlap-legend">
+        {OVERLAP_SERIES.map((series) => <span key={series.key}><i style={{ background: series.color }} />{series.label}</span>)}
+      </div>
+    </header>
+    {visiblePoints.length > 0
+      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label="综合加权回搜重合系数折线图" />
+      : <div className="overview-overlap-empty">当前周期暂无重合系数</div>}
   </article>;
 }
 
@@ -285,6 +373,13 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
     {error ? <div className="analysis-error"><AlertCircle size={16} />{error}</div> : null}
 
     {loading && !result ? <div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在读取业务数据</div> : result ? <>
+      <section className="overview-overlap-section">
+        <header className="overview-section-heading">
+          <div><h2>整体回搜重合</h2><p>{result.spu} · SPU 级综合加权口径，所有子账户共用</p></div>
+        </header>
+        <OverlapTrendChart points={result.overlap_points ?? []} days={result.days} />
+      </section>
+
       <section className="overview-section-heading">
         <div><h2>投放趋势</h2><p>{result.trend.start_date} - {result.trend.end_date} · 有效数据 {result.trend.available_days}/{result.days} 日</p></div>
         {loading ? <LoaderCircle size={17} className="spin" /> : <span>对比 {result.trend.previous_start_date} - {result.trend.previous_end_date}</span>}

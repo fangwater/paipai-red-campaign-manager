@@ -47,7 +47,7 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	firstSnapshot := maituo.Snapshot{
 		FileName: fileName, FileSHA256: prefix + "-first", ReportDate: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), PresentSheets: append([]string(nil), maituo.WorkbookSheets...),
 		KPIs:  []maituo.KPI{{Metric: prefix + "-metric", Value: 1, DataBasis: "test", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "k1"}}},
-		Notes: []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "信息流", Subaccount: "account", CampaignName: "campaign", Placement: "搜索", Spend: 1, SearchUsers: 1, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "n1"}}},
+		Notes: []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "信息流", Subaccount: prefix + "-account-a", CampaignName: "campaign", Placement: "搜索", Spend: 1, SearchUsers: 12, SearchCost: &one, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "n1"}}},
 		SPUs:  []maituo.SPUOverview{{SPU: prefix + "-spu", AuctionSpend: 1, SearchUsers: 1, SearchCost: 1, SearchRatePct: 1, CPC: 1, CTRPct: 1, NoteCount: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "s1"}}},
 		Subaccounts: []maituo.SubaccountOverview{
 			{
@@ -87,7 +87,9 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		}
 	}
 	if searchAccount == nil || searchAccount.Spend != 5 || searchAccount.SearchUsers != 6 ||
-		searchAccount.Cost == nil || *searchAccount.Cost != 1 ||
+		searchAccount.OriginalCost == nil || *searchAccount.OriginalCost != 1 ||
+		searchAccount.CorrectionCoefficient == nil || *searchAccount.CorrectionCoefficient != 14 ||
+		searchAccount.Cost == nil || *searchAccount.Cost != 14 ||
 		searchAccount.SearchRatePct == nil || *searchAccount.SearchRatePct != 2 ||
 		searchAccount.CPC == nil || *searchAccount.CPC != 3 ||
 		searchAccount.CTRPct == nil || *searchAccount.CTRPct != 4 || searchAccount.NoteCount != 7 {
@@ -98,22 +100,48 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	}
 	latestPoint := searchAccount.Points[len(searchAccount.Points)-1]
 	if latestPoint.Spend == nil || *latestPoint.Spend != 5 || latestPoint.SearchUsers == nil || *latestPoint.SearchUsers != 6 ||
+		latestPoint.OriginalCost == nil || *latestPoint.OriginalCost != 1 ||
+		latestPoint.CorrectionCoefficient == nil || *latestPoint.CorrectionCoefficient != 14 ||
+		latestPoint.Cost == nil || *latestPoint.Cost != 14 ||
 		latestPoint.NoteCount == nil || *latestPoint.NoteCount != 7 {
 		t.Fatalf("diagnosis latest point: %+v", latestPoint)
 	}
 	if len(diagnosis.AccountOverviews) != 1 || len(diagnosis.AccountOverviews[0].Points) != maituoAccountOverviewDays {
 		t.Fatalf("account overviews: %+v", diagnosis.AccountOverviews)
 	}
+	if len(searchAccount.Plans) != 1 ||
+		searchAccount.Plans[0].OriginalCost == nil || *searchAccount.Plans[0].OriginalCost != 1 ||
+		searchAccount.Plans[0].CorrectionCoefficient == nil || *searchAccount.Plans[0].CorrectionCoefficient != 12 ||
+		searchAccount.Plans[0].Cost == nil || *searchAccount.Plans[0].Cost != 12 {
+		t.Fatalf("search plans: %+v", searchAccount.Plans)
+	}
+	businessOverview, err := postgres.BusinessOverview(ctx, 7, prefix+"-spu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(businessOverview.OverlapPoints) != 7 {
+		t.Fatalf("overview overlap points: %+v", businessOverview.OverlapPoints)
+	}
+	overlapPoint := businessOverview.OverlapPoints[len(businessOverview.OverlapPoints)-1]
+	if overlapPoint.SPUSearchUsers == nil || *overlapPoint.SPUSearchUsers != 1 ||
+		overlapPoint.SubaccountSearchUsers == nil || *overlapPoint.SubaccountSearchUsers != 14 ||
+		overlapPoint.OverlapUsers == nil || *overlapPoint.OverlapUsers != 13 ||
+		overlapPoint.OverlapCoefficient == nil || *overlapPoint.OverlapCoefficient != 14 ||
+		overlapPoint.NoteSearchUsers == nil || *overlapPoint.NoteSearchUsers != 12 ||
+		overlapPoint.NoteOverlapUsers == nil || *overlapPoint.NoteOverlapUsers != 11 ||
+		overlapPoint.NoteOverlapCoefficient == nil || *overlapPoint.NoteOverlapCoefficient != 12 {
+		t.Fatalf("overlap latest point: %+v", overlapPoint)
+	}
 	overview := diagnosis.AccountOverviews[0]
 	overviewPoint := overview.Points[len(overview.Points)-1]
 	if overview.CurrentTotalSpend != 12 || overviewPoint.TotalSpend == nil || *overviewPoint.TotalSpend != 12 ||
 		overviewPoint.SearchSpend == nil || *overviewPoint.SearchSpend != 5 ||
-		overviewPoint.SearchCost == nil || *overviewPoint.SearchCost != 1 ||
+		overviewPoint.SearchCost == nil || *overviewPoint.SearchCost != 14 ||
 		overviewPoint.SearchCPC == nil || *overviewPoint.SearchCPC != 3 ||
 		overviewPoint.SearchCTRPct == nil || *overviewPoint.SearchCTRPct != 4 ||
 		overviewPoint.SearchRatePct == nil || *overviewPoint.SearchRatePct != 2 ||
 		overviewPoint.FeedSpend == nil || *overviewPoint.FeedSpend != 7 ||
-		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 8 ||
+		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 112 ||
 		overviewPoint.FeedCPC == nil || *overviewPoint.FeedCPC != 10 ||
 		overviewPoint.FeedCTRPct == nil || *overviewPoint.FeedCTRPct != 11 ||
 		overviewPoint.FeedSearchRatePct == nil || *overviewPoint.FeedSearchRatePct != 9 {

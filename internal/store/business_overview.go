@@ -28,12 +28,18 @@ func (p *Postgres) BusinessOverview(ctx context.Context, days int, spu string) (
 	if spu == "" {
 		spu = overviewSPU
 	}
-	result := model.BusinessOverview{Days: days, SPU: spu}
+	result := model.BusinessOverview{Days: days, SPU: spu, OverlapPoints: []model.SearchUserOverlapPoint{}}
 	trend, err := p.loadBusinessOverviewTrend(ctx, days, spu)
 	if err != nil {
 		return result, err
 	}
 	result.Trend = trend
+	if trend.StartDate != "" {
+		result.OverlapPoints, err = p.maituoSearchUserOverlapPoints(ctx, spu, trend.StartDate, trend.EndDate)
+		if err != nil {
+			return result, err
+		}
+	}
 	newNotes, err := p.loadBusinessOverviewNotes(ctx, days, spu)
 	if err != nil {
 		return result, err

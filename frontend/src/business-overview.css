@@ -16,6 +16,17 @@
 }
 .overview-section-heading > span { color: #858c92; font-size: 10px; }
 
+.overview-overlap-section { margin-bottom: 22px; }
+.overview-overlap-card { min-width: 0; overflow: hidden; background: #fff; border: 1px solid #e1e4e6; border-radius: 8px; }
+.overview-overlap-card > header { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 16px; border-bottom: 1px solid #eceeef; }
+.overview-overlap-card h3 { margin: 0; color: #30363a; font-size: 13px; line-height: 19px; }
+.overview-overlap-card p { margin: 3px 0 0; color: #858c92; font-size: 9px; }
+.overview-overlap-legend { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
+.overview-overlap-legend span { display: flex; align-items: center; gap: 5px; color: #697177; font-size: 9px; white-space: nowrap; }
+.overview-overlap-legend i { width: 8px; height: 8px; flex: none; border-radius: 2px; }
+.overview-overlap-canvas, .overview-overlap-empty { width: 100%; height: 258px; }
+.overview-overlap-empty { display: grid; place-items: center; color: #969ca1; font-size: 10px; }
+
 .overview-metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .overview-metric-card {
   min-width: 0; overflow: hidden; background: #fff; border: 1px solid #e1e4e6; border-radius: 8px;
@@ -114,6 +125,9 @@
   .overview-spu { width: 100%; grid-template-columns: repeat(2, 1fr); }
   .overview-period { width: 100%; grid-template-columns: repeat(3, 1fr); }
   .overview-section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .overview-overlap-card > header { align-items: flex-start; flex-direction: column; }
+  .overview-overlap-legend { width: 100%; justify-content: flex-start; }
+  .overview-overlap-canvas, .overview-overlap-empty { height: 238px; }
   .overview-metric-card > header { align-items: flex-start; }
   .overview-change { margin-top: 3px; }
   .overview-chart-canvas { height: 210px; }

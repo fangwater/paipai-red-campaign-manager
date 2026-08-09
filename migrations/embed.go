@@ -66,3 +66,8 @@ var SimilarNoteEmbeddingsSQL string
 //
 //go:embed 014_guorai_credentials.sql
 var GuoraiCredentialsSQL string
+
+// MaituoSearchUserOverlapSQL calculates daily attribution overlap against SPU totals.
+//
+//go:embed 017_maituo_search_user_overlap.sql
+var MaituoSearchUserOverlapSQL string

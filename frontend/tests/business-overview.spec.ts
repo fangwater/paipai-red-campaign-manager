@@ -17,6 +17,11 @@ function makeOverview(days: number, spu: "辅酶" | "磷虾油") {
   return {
     days,
     spu,
+    overlap_points: dates.map((date, index) => ({
+      report_date: date,
+      overlap_coefficient: index === 1 ? null : 1.8 + index * 0.02,
+      note_overlap_coefficient: index === 1 ? null : 2.3 + index * 0.03
+    })),
     trend: {
       start_date: dates[0],
       end_date: dates[dates.length - 1],
@@ -78,20 +83,25 @@ test("renders overview trends and agency note details", async ({ page }) => {
 
   await page.goto("/paipai/overview");
   await expect(page.getByRole("heading", { name: "数据总览" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "整体回搜重合" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "综合加权回搜重合系数" })).toBeVisible();
+  await expect(page.getByText("子账户 ÷ SPU", { exact: true })).toBeVisible();
+  await expect(page.getByText("笔记 ÷ SPU", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "综合加权回搜重合系数折线图" })).toBeVisible();
   await expect(page.locator(".overview-metric-card")).toHaveCount(4);
   await expect.poll(() => requestedQueries).toContain("辅酶:7");
   await expect(page.getByText("较前周期 +25.0%")).toBeVisible();
   await expect(page.getByText("辅酶选购", { exact: true })).toBeVisible();
   await expect(page.locator(".agency-table tbody tr")).toHaveCount(2);
 
-  await expect.poll(async () => page.locator(".overview-metric-card canvas, .new-notes-chart canvas").evaluateAll((canvases) => canvases.map((canvas) => {
+  await expect.poll(async () => page.locator(".overview-overlap-card canvas, .overview-metric-card canvas, .new-notes-chart canvas").evaluateAll((canvases) => canvases.map((canvas) => {
     const element = canvas as HTMLCanvasElement;
     const context = element.getContext("2d");
     if (!context || element.width === 0 || element.height === 0) return false;
     const pixels = context.getImageData(0, 0, element.width, element.height).data;
     for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 0) return true;
     return false;
-  }))).toEqual([true, true, true, true, true]);
+  }))).toEqual([true, true, true, true, true, true]);
 
   await page.getByRole("button", { name: /曼杰/ }).click();
   await expect(page.getByRole("heading", { name: "曼杰 · 笔记详情" })).toBeVisible();
@@ -113,6 +123,7 @@ test("overview remains usable on mobile", async ({ page }) => {
   await page.goto("/paipai/overview");
 
   await expect(page.getByRole("heading", { name: "数据总览" })).toBeVisible();
+  await expect(page.locator(".overview-overlap-card")).toBeVisible();
   await expect(page.locator(".overview-metric-card").first()).toBeVisible();
   await expect(page.getByRole("button", { name: /智元/ })).toBeVisible();
   await expect(page.locator("body")).toHaveCSS("overflow-x", "visible");
