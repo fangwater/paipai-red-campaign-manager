@@ -14,6 +14,8 @@ import (
 
 var ErrUnknownProvider = errors.New("unknown or disabled service provider")
 
+const providerNoteBatchSize = 1
+
 type ProviderSource interface {
 	FetchProviderContent(context.Context, model.ProviderContentTable) (model.ProviderContentSnapshot, error)
 	FetchProviderNotes(context.Context, []model.DocumentRef) ([]model.ProviderNote, int, error)
@@ -24,6 +26,7 @@ type ProviderDestination interface {
 	ProviderNotesToFetch(context.Context, []model.DocumentRef) ([]model.DocumentRef, error)
 	MarkProviderContentSyncStarted(context.Context, string) error
 	MarkProviderContentSyncFailed(context.Context, string, error) error
+	UpsertProviderNotes(context.Context, []model.ProviderNote) error
 	ReplaceProviderContentSnapshot(context.Context, model.ProviderContentSnapshot) (model.ProviderSyncResult, error)
 }
 
@@ -85,18 +88,39 @@ func (s *ProviderSyncer) RunProviders(ctx context.Context, providerCodes []strin
 			syncErrors = append(syncErrors, syncErr)
 			continue
 		}
-		notes, noteErrors, fetchErr := s.source.FetchProviderNotes(ctx, noteRefs)
-		if fetchErr != nil {
-			syncErr := fmt.Errorf("fetch incremental notes for provider %s: %w", table.ProviderName, fetchErr)
-			if markErr := s.markFailed(table.ProviderCode, fetchErr); markErr != nil {
-				syncErr = errors.Join(syncErr, markErr)
+		noteCount := 0
+		noteErrors := snapshot.NoteErrors
+		noteSyncFailed := false
+		for start := 0; start < len(noteRefs); start += providerNoteBatchSize {
+			end := min(start+providerNoteBatchSize, len(noteRefs))
+			notes, batchErrors, fetchErr := s.source.FetchProviderNotes(ctx, noteRefs[start:end])
+			if fetchErr != nil {
+				syncErr := fmt.Errorf("fetch incremental notes for provider %s: %w", table.ProviderName, fetchErr)
+				if markErr := s.markFailed(table.ProviderCode, fetchErr); markErr != nil {
+					syncErr = errors.Join(syncErr, markErr)
+				}
+				syncErrors = append(syncErrors, syncErr)
+				noteSyncFailed = true
+				break
 			}
-			syncErrors = append(syncErrors, syncErr)
+			if persistErr := s.destination.UpsertProviderNotes(ctx, notes); persistErr != nil {
+				syncErr := fmt.Errorf("persist incremental notes for provider %s: %w", table.ProviderName, persistErr)
+				if markErr := s.markFailed(table.ProviderCode, persistErr); markErr != nil {
+					syncErr = errors.Join(syncErr, markErr)
+				}
+				syncErrors = append(syncErrors, syncErr)
+				noteSyncFailed = true
+				break
+			}
+			noteCount += len(notes)
+			noteErrors += batchErrors
+		}
+		if noteSyncFailed {
 			continue
 		}
 		snapshot.NoteRefs = noteRefs
-		snapshot.Notes = notes
-		snapshot.NoteErrors += noteErrors
+		snapshot.Notes = nil
+		snapshot.NoteErrors = noteErrors
 
 		providerResult, replaceErr := s.destination.ReplaceProviderContentSnapshot(ctx, snapshot)
 		if replaceErr != nil {
@@ -107,6 +131,7 @@ func (s *ProviderSyncer) RunProviders(ctx context.Context, providerCodes []strin
 			syncErrors = append(syncErrors, syncErr)
 			continue
 		}
+		providerResult.Notes += noteCount
 		result.Providers += providerResult.Providers
 		result.Fetched += providerResult.Fetched
 		result.Upserted += providerResult.Upserted

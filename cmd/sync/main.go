@@ -18,6 +18,7 @@ import (
 	"paipai-red-campaign-manager/internal/config"
 	"paipai-red-campaign-manager/internal/embedding"
 	larksource "paipai-red-campaign-manager/internal/lark"
+	"paipai-red-campaign-manager/internal/maituo"
 	"paipai-red-campaign-manager/internal/model"
 	"paipai-red-campaign-manager/internal/store"
 	"paipai-red-campaign-manager/internal/syncer"
@@ -43,6 +44,10 @@ type manuscriptStatusStore interface {
 	ProviderContentTables(context.Context) ([]model.ProviderContentTable, error)
 }
 
+type manuscriptAssetStore interface {
+	ManuscriptAsset(context.Context, string) (maituo.ManuscriptAsset, bool, error)
+}
+
 type apiServer struct {
 	dandelionSync        baseSyncService
 	dandelionStatus      dandelionStatusStore
@@ -50,6 +55,7 @@ type apiServer struct {
 	manuscriptSync       manuscriptSyncService
 	embeddingRefresh     noteEmbeddingService
 	statusStore          manuscriptStatusStore
+	manuscriptAssets     manuscriptAssetStore
 	maituoImport         maituoImportStore
 	maituoSubaccounts    maituoSubaccountStore
 	maituoAnalytics      maituoAnalyticsStore
@@ -142,6 +148,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		manuscriptSync:       syncer.NewProvider(source, destination),
 		embeddingRefresh:     embeddingRefresher,
 		statusStore:          destination,
+		manuscriptAssets:     destination,
 		maituoImport:         destination,
 		maituoSubaccounts:    destination,
 		maituoAnalytics:      destination,
@@ -205,6 +212,9 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc(maituoSubaccountDownloadPrefix, server.maituoSubaccountDownload)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
 	mux.HandleFunc("/v1/analytics/maituo/note-content", server.maituoNoteContent)
+	mux.HandleFunc("/v1/analytics/maituo/reference-materials", server.maituoReferenceMaterials)
+	mux.HandleFunc("/v1/analytics/maituo/reference-material-content", server.maituoReferenceMaterialContent)
+	mux.HandleFunc(manuscriptAssetPrefix, server.manuscriptAsset)
 	mux.HandleFunc("/v1/analytics/maituo/account-plan-diagnosis", server.maituoAccountPlanDiagnosis)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparisons", server.maituoTrafficComparison)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparison-delivery", server.maituoTrafficDeliveryComparison)

@@ -117,9 +117,10 @@ test("renders account overview and drills into plan actions", async ({ page }) =
   await expect(page.locator(".diagnosis-account-table tbody tr")).toHaveCount(1);
   await expect(page.getByText("+12.5%", { exact: true })).toBeVisible();
   await expect(page.getByText("KPI 均按修正后成本判断", { exact: false })).toBeVisible();
-  await expect(page.getByText("修正后诊断成本", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("¥78.44", { exact: true })).toBeVisible();
-  await expect(page.getByText("原 ¥39.22 × 2.00", { exact: true })).toBeVisible();
+  await expect(page.getByText("原始日报成本", { exact: true })).toBeVisible();
+  const accountCost = page.locator(".diagnosis-account-table .diagnosis-cost-comparison");
+  await expect(accountCost.locator("strong")).toHaveText("¥39.22");
+  await expect(accountCost.locator("small")).toHaveText("修正后 ¥78.44");
   const sparklinePath = await page.locator(".diagnosis-sparkline path").getAttribute("d");
   expect(sparklinePath?.match(/M/g)).toHaveLength(1);
   await expect(page.getByText("蒲公英 1/2 · 更新 8月2日", { exact: true })).toBeVisible();

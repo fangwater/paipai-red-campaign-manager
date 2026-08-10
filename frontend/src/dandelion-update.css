@@ -138,6 +138,21 @@
 .dandelion-update-result > div > span:first-child { border-left: 0; }
 .dandelion-update-result small { color: #8a9196; font-size: 10px; }
 .dandelion-update-result strong { color: #2d3438; font-size: 20px; font-variant-numeric: tabular-nums; }
+.dandelion-history-table { min-width: 930px; }
+.dandelion-history-table th:nth-child(1), .dandelion-history-table td:nth-child(1) { width: 125px; }
+.dandelion-history-table th:nth-child(3), .dandelion-history-table td:nth-child(3) { width: 130px; }
+.dandelion-history-table th:nth-child(4), .dandelion-history-table td:nth-child(4) { width: 90px; text-align: right; }
+.dandelion-history-table th:nth-child(5), .dandelion-history-table td:nth-child(5) { width: 150px; }
+.dandelion-history-table th:nth-child(6), .dandelion-history-table td:nth-child(6) { width: 120px; }
+.dandelion-history-table th:nth-child(7), .dandelion-history-table td:nth-child(7) { width: 110px; }
+.dandelion-change-count {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #5f676d;
+  white-space: nowrap;
+}
+.dandelion-change-count small { font-size: 10px; }
 
 @media (max-width: 680px) {
   .dandelion-update-dropzone { min-height: 220px; flex-direction: column; gap: 12px; text-align: center; }

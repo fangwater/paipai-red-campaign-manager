@@ -12,6 +12,9 @@ import (
 type maituoAnalyticsStore interface {
 	MaituoNoteCampaignAnalysis(context.Context, maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error)
 	MaituoNoteContent(context.Context, string) (maituo.NoteContent, error)
+	MaituoReferenceMaterials(context.Context, maituo.ReferenceMaterialsQuery) (maituo.ReferenceMaterials, error)
+	MaituoReferenceMaterialContent(context.Context, string) (maituo.ReferenceMaterialContent, error)
+	SaveMaituoReferenceMaterialContent(context.Context, maituo.ReferenceMaterialContentInput) (maituo.ReferenceMaterialContent, bool, error)
 	MaituoTrafficComparison(context.Context, maituo.TrafficComparisonQuery) (maituo.TrafficComparison, error)
 	MaituoTrafficDeliveryComparison(context.Context, maituo.TrafficDeliveryComparisonQuery) (maituo.TrafficDeliveryComparison, error)
 	MaituoAccountPlanDiagnosis(context.Context, string) (maituo.AccountPlanDiagnosis, error)

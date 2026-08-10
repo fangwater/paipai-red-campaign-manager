@@ -116,6 +116,9 @@ func Parse(reader io.Reader, fileName string) (Snapshot, error) {
 		}
 		seen[record.RecordID] = sourceRow
 		snapshot.Records = append(snapshot.Records, record)
+		if snapshot.ReportDate.IsZero() || record.DataUpdated.After(snapshot.ReportDate) {
+			snapshot.ReportDate = record.DataUpdated
+		}
 	}
 	if len(snapshot.Records) == 0 {
 		return Snapshot{}, invalid("工作表 %q 没有可导入的数据行", candidate.name)

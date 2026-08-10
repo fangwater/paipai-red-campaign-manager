@@ -12,27 +12,54 @@ import (
 )
 
 type maituoAnalyticsStub struct {
-	query            maituo.NoteCampaignAnalysisQuery
-	result           maituo.NoteCampaignAnalysis
-	contentNoteID    string
-	contentResult    maituo.NoteContent
-	comparisonQuery  maituo.TrafficComparisonQuery
-	comparisonResult maituo.TrafficComparison
-	deliveryQuery    maituo.TrafficDeliveryComparisonQuery
-	deliveryResult   maituo.TrafficDeliveryComparison
-	diagnosisSPU     string
-	diagnosisResult  maituo.AccountPlanDiagnosis
-	calls            int
-	contentCalls     int
-	comparisonCalls  int
-	deliveryCalls    int
-	diagnosisCalls   int
+	query                     maituo.NoteCampaignAnalysisQuery
+	result                    maituo.NoteCampaignAnalysis
+	contentNoteID             string
+	contentResult             maituo.NoteContent
+	materialsQuery            maituo.ReferenceMaterialsQuery
+	materialsResult           maituo.ReferenceMaterials
+	referenceContentNoteID    string
+	referenceContentInput     maituo.ReferenceMaterialContentInput
+	referenceContentResult    maituo.ReferenceMaterialContent
+	referenceContentFound     bool
+	comparisonQuery           maituo.TrafficComparisonQuery
+	comparisonResult          maituo.TrafficComparison
+	deliveryQuery             maituo.TrafficDeliveryComparisonQuery
+	deliveryResult            maituo.TrafficDeliveryComparison
+	diagnosisSPU              string
+	diagnosisResult           maituo.AccountPlanDiagnosis
+	calls                     int
+	contentCalls              int
+	materialsCalls            int
+	referenceContentCalls     int
+	referenceContentSaveCalls int
+	comparisonCalls           int
+	deliveryCalls             int
+	diagnosisCalls            int
 }
 
 func (stub *maituoAnalyticsStub) MaituoNoteContent(_ context.Context, noteID string) (maituo.NoteContent, error) {
 	stub.contentCalls++
 	stub.contentNoteID = noteID
 	return stub.contentResult, nil
+}
+
+func (stub *maituoAnalyticsStub) MaituoReferenceMaterials(_ context.Context, query maituo.ReferenceMaterialsQuery) (maituo.ReferenceMaterials, error) {
+	stub.materialsCalls++
+	stub.materialsQuery = query
+	return stub.materialsResult, nil
+}
+
+func (stub *maituoAnalyticsStub) MaituoReferenceMaterialContent(_ context.Context, noteID string) (maituo.ReferenceMaterialContent, error) {
+	stub.referenceContentCalls++
+	stub.referenceContentNoteID = noteID
+	return stub.referenceContentResult, nil
+}
+
+func (stub *maituoAnalyticsStub) SaveMaituoReferenceMaterialContent(_ context.Context, input maituo.ReferenceMaterialContentInput) (maituo.ReferenceMaterialContent, bool, error) {
+	stub.referenceContentSaveCalls++
+	stub.referenceContentInput = input
+	return stub.referenceContentResult, stub.referenceContentFound, nil
 }
 
 func (stub *maituoAnalyticsStub) MaituoAccountPlanDiagnosis(_ context.Context, spu string) (maituo.AccountPlanDiagnosis, error) {

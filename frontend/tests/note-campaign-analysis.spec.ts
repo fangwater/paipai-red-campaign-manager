@@ -6,6 +6,9 @@ const points = [
   { report_date: "2026-07-23", spend: 20, search_users: 4, search_cost: 5, cumulative_spend: 30, cumulative_search_users: 6 }
 ];
 
+const manuscriptAssetID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const transparentPNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+
 test("renders cumulative ECharts and switches the note campaign key", async ({ page }) => {
   const requestedWindows: string[] = [];
   const requestedSorts: string[] = [];
@@ -36,9 +39,13 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
       })
     });
   });
+  await page.route("**/paipai/api/manuscript-assets/*", (route) => {
+    void route.fulfill({ status: 200, contentType: "image/png", body: transparentPNG });
+  });
   await page.route("**/paipai/api/analytics/maituo/note-content?*", async (route) => {
     const url = new URL(route.request().url());
     const noteID = url.searchParams.get("note_id") || "";
+    const tagsComplete = noteID === "note-a";
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -49,7 +56,22 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
           note_url: `https://www.xiaohongshu.com/explore/${noteID}`,
           found: true,
           note_content: "这是从稿件库查询到的真实笔记内容。",
-          providers: ["智元"]
+          blocks: [
+            { type: "paragraph", text: "这是从稿件库查询到的真实笔记内容。" },
+            { type: "image", asset_id: manuscriptAssetID, width: 1, height: 1, caption: "定稿配图" },
+            { type: "paragraph", text: "图片后的正文。" }
+          ],
+          providers: ["智元"],
+          tags: {
+            note_type: ["科普", "经验分享"],
+            cover_type: ["大字报"],
+            commercial_intensity: ["软广"],
+            audience: ["职场人"],
+            user_scenario: tagsComplete ? ["精力疲惫"] : [],
+            progress: ["已发布"],
+            complete: tagsComplete,
+            missing_fields: tagsComplete ? [] : ["user_scenario"]
+          }
         }
       })
     });
@@ -70,6 +92,20 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   const contentDialog = page.getByRole("dialog", { name: "笔记内容" });
   await expect(contentDialog).toContainText("这是从稿件库查询到的真实笔记内容。");
   await expect(contentDialog).toContainText("智元");
+  const tags = contentDialog.getByRole("region", { name: "稿件标签" });
+  await expect(tags).toContainText("标签完整");
+  await expect(tags).toContainText("科普");
+  await expect(tags).toContainText("精力疲惫");
+  await expect(contentDialog.getByRole("img", { name: "定稿配图" })).toBeVisible();
+  await expect(contentDialog.locator(".manuscript-blocks")).toContainText("图片后的正文。");
+  await expect(contentDialog.locator(".manuscript-blocks > :nth-child(2) img")).toHaveAttribute(
+    "src",
+    `/paipai/api/manuscript-assets/${manuscriptAssetID}`
+  );
+  await contentDialog.getByRole("button", { name: "查看大图：定稿配图" }).click();
+  const lightbox = page.getByRole("dialog", { name: "稿件大图" });
+  await expect(lightbox.getByRole("img", { name: "定稿配图" })).toBeVisible();
+  await lightbox.getByRole("button", { name: "关闭稿件大图" }).click();
   await expect(contentDialog.getByRole("link", { name: "打开小红书笔记" })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/note-a");
   await contentDialog.getByRole("button", { name: "关闭笔记内容" }).click();
   await expect(contentDialog).toHaveCount(0);
@@ -85,6 +121,13 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
 
   await page.locator(".analysis-table tbody tr").nth(1).click();
   await expect(page.locator(".focus-identity")).toContainText("辅酶信息流计划");
+  await page.getByRole("button", { name: "查询内容" }).click();
+  const incompleteDialog = page.getByRole("dialog", { name: "笔记内容" });
+  const incompleteTags = incompleteDialog.getByRole("region", { name: "稿件标签" });
+  await expect(incompleteTags).toContainText("标签待补充");
+  await expect(incompleteTags.locator("dl > div.missing")).toContainText("用户场景");
+  await expect(incompleteTags.locator("dl > div.missing")).toContainText("待补充");
+  await incompleteDialog.getByRole("button", { name: "关闭笔记内容" }).click();
   await page.getByRole("button", { name: "3D" }).click();
   await expect.poll(() => requestedWindows).toContain("3d");
   await page.getByRole("button", { name: "当天消耗" }).click();

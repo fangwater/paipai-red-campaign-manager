@@ -1,6 +1,7 @@
 package lark
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -137,14 +138,50 @@ func TestProviderNoteDocumentRefAndContent(t *testing.T) {
 		t.Fatalf("providerNoteDocumentRef() = %+v", ref)
 	}
 
+	referenceID := "69b1039d00000000080316ae"
 	notes, errorsCount := providerNotes([]model.DocumentRef{ref}, []model.Document{{
 		Provider: ref.Provider, ResourceKey: ref.ResourceKey, Content: "笔记正文", Status: documentSucceeded,
+		ReferenceNoteIDs: []string{ref.RecordID, referenceID},
 	}})
 	if errorsCount != 0 || len(notes) != 1 {
 		t.Fatalf("providerNotes() notes=%+v errors=%d", notes, errorsCount)
 	}
-	if notes[0].NoteID != "6a59e5d700000000010016cf" || notes[0].NoteContent != "笔记正文" {
+	if notes[0].NoteID != "6a59e5d700000000010016cf" || notes[0].NoteContent != "笔记正文" ||
+		!slices.Equal(notes[0].ReferenceNoteIDs, []string{referenceID}) {
 		t.Fatalf("providerNotes() = %+v", notes)
+	}
+}
+
+func TestProviderNoteDocumentRefPrefersLabeledFinalDraft(t *testing.T) {
+	row := []interface{}{[]interface{}{
+		map[string]interface{}{
+			"text": "初稿",
+			"link": "https://example.feishu.cn/docx/draft-token",
+		},
+		map[string]interface{}{
+			"text": "定稿",
+			"link": "https://example.feishu.cn/docx/final-token",
+		},
+	}}
+	ref, ok := providerNoteDocumentRef(row, map[string]int{"稿件": 0}, 0, "6a59e5d700000000010016cf")
+	if !ok || ref.ResourceKey != "docx:final-token" || ref.Label != "定稿" {
+		t.Fatalf("providerNoteDocumentRef() = %+v, ok=%v", ref, ok)
+	}
+}
+
+func TestProviderNoteDocumentRefRejectsAmbiguousMultipleDrafts(t *testing.T) {
+	row := []interface{}{[]interface{}{
+		map[string]interface{}{
+			"text": "版本一",
+			"link": "https://example.feishu.cn/docx/one-token",
+		},
+		map[string]interface{}{
+			"text": "版本二",
+			"link": "https://example.feishu.cn/docx/two-token",
+		},
+	}}
+	if ref, ok := providerNoteDocumentRef(row, map[string]int{"稿件": 0}, 0, "6a59e5d700000000010016cf"); ok {
+		t.Fatalf("providerNoteDocumentRef() accepted ambiguous links: %+v", ref)
 	}
 }
 

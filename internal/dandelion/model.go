@@ -33,6 +33,7 @@ type Record struct {
 type Snapshot struct {
 	FileName      string
 	FileSHA256    string
+	ReportDate    time.Time
 	SheetName     string
 	HeaderRow     int
 	MatchedFields []string
@@ -43,6 +44,7 @@ type ImportResult struct {
 	RunID       int64  `json:"run_id"`
 	FileName    string `json:"file_name"`
 	FileSHA256  string `json:"file_sha256"`
+	ReportDate  string `json:"report_date"`
 	SheetName   string `json:"sheet_name"`
 	HeaderRow   int    `json:"header_row"`
 	Fetched     int    `json:"fetched"`
@@ -51,4 +53,17 @@ type ImportResult struct {
 	Unchanged   int    `json:"unchanged"`
 	Deleted     int    `json:"deleted"`
 	CompletedAt string `json:"completed_at,omitempty"`
+}
+
+type SavedImport struct {
+	RunID       int64     `json:"run_id"`
+	FileName    string    `json:"file_name"`
+	FileSHA256  string    `json:"file_sha256"`
+	ReportDate  string    `json:"report_date"`
+	SheetName   string    `json:"sheet_name"`
+	Fetched     int       `json:"fetched"`
+	Inserted    int       `json:"inserted"`
+	Updated     int       `json:"updated"`
+	Unchanged   int       `json:"unchanged"`
+	CompletedAt time.Time `json:"completed_at"`
 }

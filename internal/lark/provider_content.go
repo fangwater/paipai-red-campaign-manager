@@ -127,9 +127,26 @@ func (c *Client) FetchProviderContent(ctx context.Context, table model.ProviderC
 }
 
 func (c *Client) FetchProviderNotes(ctx context.Context, refs []model.DocumentRef) ([]model.ProviderNote, int, error) {
-	documents, err := c.FetchDocuments(ctx, refs)
-	if err != nil {
-		return nil, 0, err
+	documents := make([]model.Document, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
+		key := ref.Provider + "\x00" + ref.ResourceKey
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if ref.Provider == "feishu" {
+			documents = append(documents, c.fetchFeishuManuscript(ctx, ref))
+			continue
+		}
+		documents = append(documents, model.Document{
+			Provider: ref.Provider, ResourceKey: ref.ResourceKey, SourceURL: ref.SourceURL,
+			DocumentType: "sheet", Content: "nan", Status: documentAuthNeeded,
+			ErrorMessage: "non-Feishu manuscript content fetch is disabled",
+		})
 	}
 	notes, fetchErrors := providerNotes(refs, documents)
 	return notes, fetchErrors, nil
@@ -322,6 +339,11 @@ func normalizeProviderNoteID(value string) string {
 	return value
 }
 
+type providerDocumentLink struct {
+	URL   string
+	Label string
+}
+
 func providerNoteDocumentRef(row []interface{}, columns map[string]int, offset int, noteID string) (model.DocumentRef, bool) {
 	column, ok := columns["稿件"]
 	if !ok {
@@ -331,40 +353,95 @@ func providerNoteDocumentRef(row []interface{}, columns map[string]int, offset i
 	if index < 0 || index >= len(row) {
 		return model.DocumentRef{}, false
 	}
-	links := make([]string, 0, 1)
-	collectLinks(row[index], &links)
+	links := make([]providerDocumentLink, 0, 2)
+	collectProviderDocumentLinks(row[index], "", &links)
+	candidates := make([]model.DocumentRef, 0, len(links))
+	seen := make(map[string]struct{}, len(links))
 	for _, link := range links {
-		provider, resourceKey, ok := parseDocumentLink(link)
+		provider, resourceKey, ok := parseDocumentLink(link.URL)
 		if !ok || provider != "feishu" {
 			continue
 		}
-		return model.DocumentRef{
-			RecordID: noteID, FieldName: "稿件", Provider: provider,
-			ResourceKey: resourceKey, SourceURL: link,
-		}, true
+		key := provider + "\x00" + resourceKey
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		candidates = append(candidates, model.DocumentRef{
+			RecordID: noteID, FieldName: "稿件", Label: link.Label, Provider: provider,
+			ResourceKey: resourceKey, SourceURL: link.URL,
+		})
+	}
+	if len(candidates) == 1 {
+		return candidates[0], true
+	}
+	for index := len(candidates) - 1; index >= 0; index-- {
+		if isFinalLinkLabel(candidates[index].Label) {
+			return candidates[index], true
+		}
 	}
 	return model.DocumentRef{}, false
 }
 
+func collectProviderDocumentLinks(value interface{}, inheritedLabel string, links *[]providerDocumentLink) {
+	switch typed := value.(type) {
+	case string:
+		if strings.HasPrefix(typed, "http://") || strings.HasPrefix(typed, "https://") {
+			*links = append(*links, providerDocumentLink{URL: typed, Label: inheritedLabel})
+		}
+	case []interface{}:
+		for _, item := range typed {
+			collectProviderDocumentLinks(item, inheritedLabel, links)
+		}
+	case map[string]interface{}:
+		label := inheritedLabel
+		if text, ok := typed["text"]; ok {
+			if candidate := strings.TrimSpace(cellString(text)); candidate != "" {
+				label = candidate
+			}
+		}
+		for _, key := range []string{"link", "url"} {
+			if rawLink, ok := typed[key]; ok {
+				collectProviderDocumentLinks(rawLink, label, links)
+			}
+		}
+		for key, item := range typed {
+			if key == "link" || key == "url" || key == "text" {
+				continue
+			}
+			collectProviderDocumentLinks(item, label, links)
+		}
+	}
+}
+
+func isFinalLinkLabel(value string) bool {
+	normalized := normalizeHeader(value)
+	return strings.Contains(normalized, "定稿") || strings.Contains(normalized, "终稿") ||
+		strings.Contains(normalized, "最终稿")
+}
+
 func providerNotes(refs []model.DocumentRef, documents []model.Document) ([]model.ProviderNote, int) {
-	contents := make(map[string]string, len(documents))
+	contents := make(map[string]model.Document, len(documents))
 	for _, document := range documents {
-		if document.Status != documentSucceeded || document.Content == "" {
+		if document.Status != documentSucceeded || (document.Content == "" && len(document.Blocks) == 0) {
 			continue
 		}
-		contents[document.Provider+"\x00"+document.ResourceKey] = document.Content
+		contents[document.Provider+"\x00"+document.ResourceKey] = document
 	}
 
 	notes := make([]model.ProviderNote, 0, len(refs))
 	errorsCount := 0
 	for _, ref := range refs {
-		content, ok := contents[ref.Provider+"\x00"+ref.ResourceKey]
+		document, ok := contents[ref.Provider+"\x00"+ref.ResourceKey]
 		if !ok {
 			errorsCount++
 			continue
 		}
 		notes = append(notes, model.ProviderNote{
-			NoteID: ref.RecordID, NoteContent: content,
+			NoteID: ref.RecordID, NoteContent: document.Content,
+			ContentBlocks: document.Blocks, ReferenceNoteIDs: excludeReferenceNoteID(document.ReferenceNoteIDs, ref.RecordID),
+			Assets: document.Assets, SourceURL: ref.SourceURL, SourceResourceKey: ref.ResourceKey,
+			SourceRevision: document.RevisionID, ExtractorVersion: model.ManuscriptExtractorVersion,
 		})
 	}
 	return notes, errorsCount

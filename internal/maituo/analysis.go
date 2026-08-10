@@ -1,5 +1,11 @@
 package maituo
 
+import (
+	"time"
+
+	"paipai-red-campaign-manager/internal/model"
+)
+
 type NoteCampaignAnalysisQuery struct {
 	Window   string
 	Search   string
@@ -10,11 +16,78 @@ type NoteCampaignAnalysisQuery struct {
 }
 
 type NoteContent struct {
-	NoteID      string   `json:"note_id"`
-	NoteURL     string   `json:"note_url"`
-	Found       bool     `json:"found"`
-	NoteContent string   `json:"note_content"`
-	Providers   []string `json:"providers"`
+	NoteID           string                  `json:"note_id"`
+	NoteURL          string                  `json:"note_url"`
+	Found            bool                    `json:"found"`
+	NoteContent      string                  `json:"note_content"`
+	Blocks           []model.ManuscriptBlock `json:"blocks"`
+	ReferenceNoteIDs []string                `json:"reference_note_ids"`
+	Providers        []string                `json:"providers"`
+	Tags             NoteTags                `json:"tags"`
+}
+
+type ReferenceMaterialsQuery struct {
+	Search   string
+	Page     int
+	PageSize int
+}
+
+type ReferenceMaterialItem struct {
+	ReferenceNoteID string   `json:"reference_note_id"`
+	NoteURL         string   `json:"note_url"`
+	SourceNoteIDs   []string `json:"source_note_ids"`
+	Providers       []string `json:"providers"`
+	UsageCount      int      `json:"usage_count"`
+	HasContent      bool     `json:"has_content"`
+	ContentSource   string   `json:"content_source"`
+}
+
+type ReferenceMaterialContent struct {
+	ReferenceNoteID string     `json:"note_id"`
+	NoteURL         string     `json:"note_url"`
+	Found           bool       `json:"found"`
+	NoteContent     string     `json:"note_content"`
+	Source          string     `json:"source"`
+	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
+}
+
+type ReferenceMaterialContentInput struct {
+	ReferenceNoteID string
+	NoteContent     string
+}
+
+type ReferenceMaterialStats struct {
+	MaterialCount   int `json:"material_count"`
+	SourceNoteCount int `json:"source_note_count"`
+	ReferenceCount  int `json:"reference_count"`
+	ProviderCount   int `json:"provider_count"`
+}
+
+type ReferenceMaterials struct {
+	Search   string                  `json:"search"`
+	Stats    ReferenceMaterialStats  `json:"stats"`
+	Total    int                     `json:"total"`
+	Page     int                     `json:"page"`
+	PageSize int                     `json:"page_size"`
+	Items    []ReferenceMaterialItem `json:"items"`
+}
+
+type NoteTags struct {
+	NoteType            []string `json:"note_type"`
+	CoverType           []string `json:"cover_type"`
+	CommercialIntensity []string `json:"commercial_intensity"`
+	Audience            []string `json:"audience"`
+	UserScenario        []string `json:"user_scenario"`
+	Progress            []string `json:"progress"`
+	Complete            bool     `json:"complete"`
+	MissingFields       []string `json:"missing_fields"`
+}
+
+type ManuscriptAsset struct {
+	AssetID     string
+	ContentType string
+	Content     []byte
+	CreatedAt   time.Time
 }
 
 type NoteCampaignPoint struct {

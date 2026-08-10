@@ -385,6 +385,25 @@ function CorrectedCostValue({ originalCost, coefficient, correctedCost, metric }
   </span>;
 }
 
+function AccountCostValue({ originalCost, coefficient, correctedCost, metric }: {
+  originalCost: number | null;
+  coefficient: number | null;
+  correctedCost: number | null;
+  metric: string;
+}) {
+  if (originalCost === null) return <span title={metric}>-</span>;
+  const correction = correctedCost !== null
+    ? `修正后 ¥${money.format(correctedCost)}`
+    : "暂无修正值";
+  const title = correctedCost !== null && coefficient !== null
+    ? `${metric}原始值；修正后 ¥${money.format(correctedCost)}（× ${coefficient.toFixed(2)}）`
+    : `${metric}原始值`;
+  return <span className="diagnosis-cost-comparison" title={title}>
+    <strong>¥{money.format(originalCost)}</strong>
+    <small>{correction}</small>
+  </span>;
+}
+
 function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: () => void }) {
   const [tab, setTab] = useState<PlanTab>("over");
   const counts = {
@@ -504,12 +523,12 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
       {loading ? <div className="diagnosis-loading"><LoaderCircle size={19} className="spin" />正在生成诊断</div>
         : result.accounts.length === 0 ? <div className="diagnosis-loading">当前 SPU 暂无可诊断数据</div>
           : <div className="diagnosis-table-wrap"><table className="diagnosis-account-table">
-            <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>修正后诊断成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>超标计划</th><th>放大</th><th>停止</th><th>7日修正后成本</th></tr></thead>
+            <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>原始日报成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>超标计划</th><th>放大</th><th>停止</th><th>7日修正后成本</th></tr></thead>
             <tbody>{result.accounts.map((account) => <tr key={accountKey(account)}>
               <td><button type="button" className="diagnosis-account-button" title="查看计划诊断" onClick={() => setSelectedKey(accountKey(account))}>{account.account}</button></td>
               <td><span className={`placement-swatch placement-${account.placement}`}>{account.placement}</span></td>
               <td className="num">¥{money.format(account.spend)}</td>
-              <td className="num"><CorrectedCostValue originalCost={account.original_cost} coefficient={account.correction_coefficient} correctedCost={account.cost} metric={account.cost_metric} /></td>
+              <td className="num"><AccountCostValue originalCost={account.original_cost} coefficient={account.correction_coefficient} correctedCost={account.cost} metric={account.cost_metric} /></td>
               <td className={`num ${account.change_pct !== null && account.change_pct > 0 ? "diagnosis-over-value" : account.change_pct !== null ? "diagnosis-good-value" : ""}`}>{account.change_pct === null ? "-" : `${account.change_pct >= 0 ? "+" : ""}${(account.change_pct * 100).toFixed(1)}%`}</td>
               <td className="num">¥{money.format(account.kpi)}</td>
               <td><span className={`diagnosis-status ${account.status}`}>{statusLabel(account.status)}</span></td>

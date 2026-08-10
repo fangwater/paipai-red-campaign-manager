@@ -69,6 +69,7 @@ button { cursor: pointer; }
 .entry-row + .entry-row { border-top: 1px solid #eceeef; }
 .analysis-entry-icon { background: #f7eee5; color: #a86628; }
 .sync-entry-icon { background: #f0eded; color: #9f3d44; }
+.material-entry-icon { background: #f7e9ea; color: #ad444b; }
 .entry-icon { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 7px; background: #eaf3ef; color: #23765e; }
 .entry-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 5px; }
 .entry-copy strong { font-size: 13px; }.entry-copy small { color: #858b90; font-size: 11px; }

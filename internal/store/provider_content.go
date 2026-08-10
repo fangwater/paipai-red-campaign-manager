@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -60,7 +61,7 @@ func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.Docume
 		noteIDs = append(noteIDs, ref.RecordID)
 	}
 	rows, err := p.pool.Query(ctx, `
-		SELECT note_id
+		SELECT note_id, COALESCE(source_resource_key, ''), extractor_version
 		FROM service_provider_notes
 		WHERE note_id = ANY($1::text[])
 	`, noteIDs)
@@ -68,13 +69,18 @@ func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.Docume
 		return nil, fmt.Errorf("query existing provider notes: %w", err)
 	}
 	defer rows.Close()
-	existing := make(map[string]struct{}, len(noteIDs))
+	type savedNote struct {
+		resourceKey      string
+		extractorVersion int
+	}
+	existing := make(map[string]savedNote, len(noteIDs))
 	for rows.Next() {
 		var noteID string
-		if err := rows.Scan(&noteID); err != nil {
+		var saved savedNote
+		if err := rows.Scan(&noteID, &saved.resourceKey, &saved.extractorVersion); err != nil {
 			return nil, fmt.Errorf("scan existing provider note: %w", err)
 		}
-		existing[noteID] = struct{}{}
+		existing[noteID] = saved
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate existing provider notes: %w", err)
@@ -82,7 +88,9 @@ func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.Docume
 
 	candidates := make([]model.DocumentRef, 0, len(refs))
 	for _, ref := range refs {
-		if _, ok := existing[ref.RecordID]; !ok {
+		saved, ok := existing[ref.RecordID]
+		if !ok || saved.resourceKey != ref.ResourceKey ||
+			saved.extractorVersion < model.ManuscriptExtractorVersion {
 			candidates = append(candidates, ref)
 		}
 	}
@@ -127,6 +135,45 @@ func (p *Postgres) MarkProviderContentSyncFailed(ctx context.Context, providerCo
 	`, providerCode, syncErr.Error())
 	if err != nil {
 		return fmt.Errorf("mark provider sync failed: %w", err)
+	}
+	return nil
+}
+
+func (p *Postgres) UpsertProviderNotes(ctx context.Context, notes []model.ProviderNote) error {
+	if len(notes) == 0 {
+		return nil
+	}
+	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin provider note transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+
+	batch := &pgx.Batch{}
+	if err := queueProviderNotes(batch, notes); err != nil {
+		return err
+	}
+	results := tx.SendBatch(ctx, batch)
+	for index := 0; index < batch.Len(); index++ {
+		if _, err := results.Exec(); err != nil {
+			_ = results.Close()
+			return fmt.Errorf("execute provider note batch item %d: %w", index+1, err)
+		}
+	}
+	if err := results.Close(); err != nil {
+		return fmt.Errorf("close provider note batch: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM manuscript_assets AS assets
+		WHERE NOT EXISTS (
+			SELECT 1 FROM service_provider_note_assets AS links
+			WHERE links.asset_id = assets.asset_id
+		)
+	`); err != nil {
+		return fmt.Errorf("delete unreferenced manuscript assets: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit provider note transaction: %w", err)
 	}
 	return nil
 }
@@ -190,13 +237,8 @@ func (p *Postgres) ReplaceProviderContentSnapshot(ctx context.Context, snapshot 
 			record.SubmissionDate, record.NoteID, record.CoverType, record.CommercialIntensity,
 			record.Audience, record.UserScenario, record.NoteType, record.Progress)
 	}
-	for _, note := range snapshot.Notes {
-		batch.Queue(`
-			INSERT INTO service_provider_notes (note_id, note_content)
-			VALUES ($1, $2)
-			ON CONFLICT (note_id) DO UPDATE SET
-				note_content = EXCLUDED.note_content
-		`, note.NoteID, note.NoteContent)
+	if err := queueProviderNotes(batch, snapshot.Notes); err != nil {
+		return result, err
 	}
 	if batch.Len() > 0 {
 		results := tx.SendBatch(ctx, batch)
@@ -209,6 +251,15 @@ func (p *Postgres) ReplaceProviderContentSnapshot(ctx context.Context, snapshot 
 		if err := results.Close(); err != nil {
 			return result, fmt.Errorf("close provider snapshot batch: %w", err)
 		}
+	}
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM manuscript_assets AS assets
+		WHERE NOT EXISTS (
+			SELECT 1 FROM service_provider_note_assets AS links
+			WHERE links.asset_id = assets.asset_id
+		)
+	`); err != nil {
+		return result, fmt.Errorf("delete unreferenced manuscript assets: %w", err)
 	}
 
 	commandTag, err := tx.Exec(ctx, `
@@ -239,4 +290,61 @@ func (p *Postgres) ReplaceProviderContentSnapshot(ctx context.Context, snapshot 
 		return result, fmt.Errorf("commit provider sync transaction: %w", err)
 	}
 	return result, nil
+}
+
+func queueProviderNotes(batch *pgx.Batch, notes []model.ProviderNote) error {
+	for _, note := range notes {
+		blocks := note.ContentBlocks
+		if blocks == nil {
+			blocks = []model.ManuscriptBlock{}
+		}
+		referenceNoteIDs := note.ReferenceNoteIDs
+		if referenceNoteIDs == nil {
+			referenceNoteIDs = []string{}
+		}
+		blocksJSON, err := json.Marshal(blocks)
+		if err != nil {
+			return fmt.Errorf("encode provider note %s blocks: %w", note.NoteID, err)
+		}
+		for _, asset := range note.Assets {
+			batch.Queue(`
+				INSERT INTO manuscript_assets (
+					asset_id, content_type, byte_size, width, height, content
+				) VALUES ($1, $2, $3, $4, $5, $6)
+				ON CONFLICT (asset_id) DO NOTHING
+			`, asset.AssetID, asset.ContentType, len(asset.Content), asset.Width, asset.Height, asset.Content)
+		}
+		extractorVersion := note.ExtractorVersion
+		if extractorVersion <= 0 {
+			extractorVersion = 1
+		}
+		batch.Queue(`
+			INSERT INTO service_provider_notes (
+				note_id, note_content, content_blocks, reference_note_ids, source_url,
+				source_resource_key, source_revision, extractor_version, updated_at
+			) VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, NOW())
+			ON CONFLICT (note_id) DO UPDATE SET
+				note_content = EXCLUDED.note_content,
+				content_blocks = EXCLUDED.content_blocks,
+				reference_note_ids = EXCLUDED.reference_note_ids,
+				source_url = EXCLUDED.source_url,
+				source_resource_key = EXCLUDED.source_resource_key,
+				source_revision = EXCLUDED.source_revision,
+				extractor_version = EXCLUDED.extractor_version,
+				updated_at = NOW()
+		`, note.NoteID, note.NoteContent, blocksJSON, referenceNoteIDs, note.SourceURL,
+			note.SourceResourceKey, note.SourceRevision, extractorVersion)
+		batch.Queue("DELETE FROM service_provider_note_assets WHERE note_id = $1", note.NoteID)
+		for position, block := range blocks {
+			if block.Type != "image" || block.AssetID == "" {
+				continue
+			}
+			batch.Queue(`
+				INSERT INTO service_provider_note_assets (
+					note_id, position, asset_id, width, height, caption
+				) VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
+			`, note.NoteID, position, block.AssetID, block.Width, block.Height, block.Caption)
+		}
+	}
+	return nil
 }

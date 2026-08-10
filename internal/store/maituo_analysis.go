@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,21 +10,64 @@ import (
 	"strings"
 
 	"paipai-red-campaign-manager/internal/maituo"
+	"paipai-red-campaign-manager/internal/model"
 
 	"github.com/jackc/pgx/v5"
 )
 
 func (p *Postgres) MaituoNoteContent(ctx context.Context, noteID string) (maituo.NoteContent, error) {
 	result := maituo.NoteContent{
-		NoteID:    noteID,
-		NoteURL:   "https://www.xiaohongshu.com/explore/" + url.PathEscape(noteID),
-		Providers: []string{},
+		NoteID:           noteID,
+		NoteURL:          "https://www.xiaohongshu.com/explore/" + url.PathEscape(noteID),
+		Blocks:           []model.ManuscriptBlock{},
+		ReferenceNoteIDs: []string{},
+		Providers:        []string{},
+		Tags: maituo.NoteTags{
+			NoteType:            []string{},
+			CoverType:           []string{},
+			CommercialIntensity: []string{},
+			Audience:            []string{},
+			UserScenario:        []string{},
+			Progress:            []string{},
+			MissingFields:       []string{},
+		},
 	}
+	var blocksJSON string
 	err := p.pool.QueryRow(ctx, `
-		SELECT notes.note_content,
+		SELECT notes.note_content, notes.content_blocks::TEXT, notes.reference_note_ids,
 			COALESCE(
 				ARRAY_AGG(DISTINCT tables.provider_name ORDER BY tables.provider_name)
 					FILTER (WHERE tables.provider_name IS NOT NULL),
+				'{}'::TEXT[]
+			),
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.note_type) ORDER BY BTRIM(executions.note_type))
+					FILTER (WHERE NULLIF(BTRIM(executions.note_type), '') IS NOT NULL),
+				'{}'::TEXT[]
+			),
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.cover_type) ORDER BY BTRIM(executions.cover_type))
+					FILTER (WHERE NULLIF(BTRIM(executions.cover_type), '') IS NOT NULL),
+				'{}'::TEXT[]
+			),
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.commercial_intensity) ORDER BY BTRIM(executions.commercial_intensity))
+					FILTER (WHERE NULLIF(BTRIM(executions.commercial_intensity), '') IS NOT NULL),
+				'{}'::TEXT[]
+			),
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.audience) ORDER BY BTRIM(executions.audience))
+					FILTER (WHERE NULLIF(BTRIM(executions.audience), '') IS NOT NULL),
+				'{}'::TEXT[]
+			),
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.user_scenario) ORDER BY BTRIM(executions.user_scenario))
+					FILTER (WHERE NULLIF(BTRIM(executions.user_scenario), '') IS NOT NULL),
+				'{}'::TEXT[]
+			),
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.progress) ORDER BY BTRIM(executions.progress))
+					FILTER (WHERE NULLIF(BTRIM(executions.progress), '') IS NOT NULL),
 				'{}'::TEXT[]
 			)
 		FROM service_provider_notes notes
@@ -32,16 +76,45 @@ func (p *Postgres) MaituoNoteContent(ctx context.Context, noteID string) (maituo
 		LEFT JOIN service_provider_content_tables tables
 		  ON tables.provider_code=executions.provider_code
 		WHERE notes.note_id=$1
-		GROUP BY notes.note_id, notes.note_content
-	`, noteID).Scan(&result.NoteContent, &result.Providers)
+		GROUP BY notes.note_id, notes.note_content, notes.content_blocks, notes.reference_note_ids
+	`, noteID).Scan(
+		&result.NoteContent, &blocksJSON, &result.ReferenceNoteIDs, &result.Providers,
+		&result.Tags.NoteType, &result.Tags.CoverType, &result.Tags.CommercialIntensity,
+		&result.Tags.Audience, &result.Tags.UserScenario, &result.Tags.Progress,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, nil
 	}
 	if err != nil {
 		return result, fmt.Errorf("query Maituo note content: %w", err)
 	}
+	if err := json.Unmarshal([]byte(blocksJSON), &result.Blocks); err != nil {
+		return result, fmt.Errorf("decode Maituo note content blocks: %w", err)
+	}
+	completeNoteTags(&result.Tags)
 	result.Found = true
 	return result, nil
+}
+
+func completeNoteTags(tags *maituo.NoteTags) {
+	tags.MissingFields = []string{}
+	fields := []struct {
+		key    string
+		values []string
+	}{
+		{key: "note_type", values: tags.NoteType},
+		{key: "cover_type", values: tags.CoverType},
+		{key: "commercial_intensity", values: tags.CommercialIntensity},
+		{key: "audience", values: tags.Audience},
+		{key: "user_scenario", values: tags.UserScenario},
+		{key: "progress", values: tags.Progress},
+	}
+	for _, field := range fields {
+		if len(field.values) == 0 {
+			tags.MissingFields = append(tags.MissingFields, field.key)
+		}
+	}
+	tags.Complete = len(tags.MissingFields) == 0
 }
 
 func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.NoteCampaignAnalysisQuery) (maituo.NoteCampaignAnalysis, error) {

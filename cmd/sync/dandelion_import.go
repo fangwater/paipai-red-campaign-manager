@@ -16,9 +16,14 @@ import (
 
 type dandelionExcelImportStore interface {
 	ImportDandelionExcel(context.Context, dandelion.Snapshot) (dandelion.ImportResult, error)
+	SavedDandelionExcelImports(context.Context) ([]dandelion.SavedImport, error)
 }
 
 func (server *apiServer) importDandelionExcel(writer http.ResponseWriter, request *http.Request) {
+	if request.Method == http.MethodGet {
+		server.listSavedDandelionExcelImports(writer, request)
+		return
+	}
 	if request.Method != http.MethodPost {
 		methodNotAllowed(writer, http.MethodPost)
 		return
@@ -98,4 +103,15 @@ func (server *apiServer) importDandelionExcel(writer http.ResponseWriter, reques
 		status = http.StatusServiceUnavailable
 	}
 	writeJSON(writer, status, apiResponse{Success: false, Data: result, Error: err.Error()})
+}
+
+func (server *apiServer) listSavedDandelionExcelImports(writer http.ResponseWriter, request *http.Request) {
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	items, err := server.dandelionExcelImport.SavedDandelionExcelImports(ctx)
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: items})
 }

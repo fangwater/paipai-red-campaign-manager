@@ -11,8 +11,8 @@ export type SavedImport = {
   completed_at: string;
 };
 
-type CalendarEntry =
-  | { kind: "report"; date: string; report: SavedImport }
+export type CalendarEntry<T> =
+  | { kind: "report"; date: string; report: T }
   | { kind: "weekend" | "missing"; date: string };
 
 const WEEKDAY_LABELS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
@@ -26,17 +26,17 @@ function dateToISO(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-function weekdayLabel(value: string): string {
+export function weekdayLabel(value: string): string {
   return WEEKDAY_LABELS[dateFromISO(value).getUTCDay()];
 }
 
-export function buildReportCalendar(reports: SavedImport[]): CalendarEntry[] {
+export function buildHistoryCalendar<T extends { report_date: string }>(reports: T[]): CalendarEntry<T>[] {
   if (reports.length === 0) return [];
   const reportsByDate = new Map(reports.map((report) => [report.report_date, report]));
   const dates = [...reportsByDate.keys()].sort();
   const current = dateFromISO(dates[dates.length - 1]);
   const earliest = dateFromISO(dates[0]);
-  const entries: CalendarEntry[] = [];
+  const entries: CalendarEntry<T>[] = [];
 
   while (current >= earliest) {
     const date = dateToISO(current);
@@ -51,7 +51,11 @@ export function buildReportCalendar(reports: SavedImport[]): CalendarEntry[] {
   return entries;
 }
 
-function formatSavedTime(value: string): string {
+export function buildReportCalendar(reports: SavedImport[]): CalendarEntry<SavedImport>[] {
+  return buildHistoryCalendar(reports);
+}
+
+export function formatSavedTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return new Intl.DateTimeFormat("zh-CN", {

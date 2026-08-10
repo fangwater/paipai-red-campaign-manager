@@ -67,7 +67,27 @@ var SimilarNoteEmbeddingsSQL string
 //go:embed 014_guorai_credentials.sql
 var GuoraiCredentialsSQL string
 
+// DandelionExcelHistorySQL stores dated Dandelion Excel upload runs.
+//
+//go:embed 015_dandelion_excel_history.sql
+var DandelionExcelHistorySQL string
+
+// ManuscriptAssetsSQL stores ordered manuscript blocks and deduplicated image assets.
+//
+//go:embed 016_manuscript_assets.sql
+var ManuscriptAssetsSQL string
+
 // MaituoSearchUserOverlapSQL calculates daily attribution overlap against SPU totals.
 //
 //go:embed 017_maituo_search_user_overlap.sql
 var MaituoSearchUserOverlapSQL string
+
+// ReferenceNoteIDsSQL stores valid note IDs referenced by final manuscripts.
+//
+//go:embed 019_reference_note_ids.sql
+var ReferenceNoteIDsSQL string
+
+// ReferenceMaterialContentsSQL stores manually maintained reference-note content.
+//
+//go:embed 020_reference_material_contents.sql
+var ReferenceMaterialContentsSQL string

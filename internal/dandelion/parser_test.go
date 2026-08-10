@@ -53,6 +53,9 @@ func TestParseMapsExportHeadersToLarkFieldShape(t *testing.T) {
 	if snapshot.SheetName != "蒲公英导出" || snapshot.HeaderRow != 2 || len(snapshot.Records) != 1 {
 		t.Fatalf("snapshot = %+v", snapshot)
 	}
+	if got := snapshot.ReportDate.Format("2006-01-02"); got != "2026-08-05" {
+		t.Fatalf("report date = %q", got)
+	}
 	record := snapshot.Records[0]
 	if !strings.HasPrefix(record.RecordID, "excel_") || record.NoteID != "0123456789abcdef01234567" {
 		t.Fatalf("record = %+v", record)

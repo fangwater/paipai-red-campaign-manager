@@ -19,9 +19,19 @@ const (
 var ErrDandelionExcelImportLocked = errors.New("another Dandelion Excel import is already running")
 
 func (p *Postgres) ImportDandelionExcel(ctx context.Context, snapshot dandelion.Snapshot) (result dandelion.ImportResult, err error) {
+	reportDate := snapshot.ReportDate
+	for _, record := range snapshot.Records {
+		if reportDate.IsZero() || record.DataUpdated.After(reportDate) {
+			reportDate = record.DataUpdated
+		}
+	}
+	if reportDate.IsZero() {
+		return result, errors.New("Dandelion Excel import has no data update date")
+	}
 	result = dandelion.ImportResult{
 		FileName: snapshot.FileName, FileSHA256: snapshot.FileSHA256,
-		SheetName: snapshot.SheetName, HeaderRow: snapshot.HeaderRow, Fetched: len(snapshot.Records),
+		ReportDate: reportDate.Format("2006-01-02"),
+		SheetName:  snapshot.SheetName, HeaderRow: snapshot.HeaderRow, Fetched: len(snapshot.Records),
 	}
 	if err := p.pool.QueryRow(ctx, `
 		INSERT INTO sync_runs (app_token,table_id,status)
@@ -36,15 +46,30 @@ func (p *Postgres) ImportDandelionExcel(ctx context.Context, snapshot dandelion.
 		if err != nil {
 			status, errorMessage = "failed", err.Error()
 		}
+		completedAt := time.Now()
 		if status == "succeeded" {
-			result.CompletedAt = time.Now().Format(time.RFC3339)
+			result.CompletedAt = completedAt.Format(time.RFC3339)
 		}
 		_, _ = p.pool.Exec(finishCtx, `
 			UPDATE sync_runs SET status=$2,fetched_count=$3,upserted_count=$4,deleted_count=0,
-				tables_count=1,completed_at=NOW(),error_message=NULLIF($5,'')
+				tables_count=1,completed_at=$5,error_message=NULLIF($6,'')
 			WHERE id=$1
-		`, result.RunID, status, result.Fetched, result.Inserted+result.Updated, errorMessage)
+		`, result.RunID, status, result.Fetched, result.Inserted+result.Updated, completedAt, errorMessage)
+		_, _ = p.pool.Exec(finishCtx, `
+			UPDATE dandelion_excel_import_runs SET
+				status=$2,fetched_count=$3,inserted_count=$4,updated_count=$5,
+				unchanged_count=$6,deleted_count=$7,completed_at=$8,error_message=NULLIF($9,'')
+			WHERE run_id=$1
+		`, result.RunID, status, result.Fetched, result.Inserted, result.Updated,
+			result.Unchanged, result.Deleted, completedAt, errorMessage)
 	}()
+	if _, err := p.pool.Exec(ctx, `
+		INSERT INTO dandelion_excel_import_runs (
+			run_id,file_name,file_sha256,report_date,sheet_name,header_row,status,fetched_count
+		) VALUES ($1,$2,$3,$4,$5,$6,'running',$7)
+	`, result.RunID, snapshot.FileName, snapshot.FileSHA256, reportDate, snapshot.SheetName, snapshot.HeaderRow, len(snapshot.Records)); err != nil {
+		return result, fmt.Errorf("start Dandelion Excel import history: %w", err)
+	}
 
 	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -121,6 +146,36 @@ func (p *Postgres) ImportDandelionExcel(ctx context.Context, snapshot dandelion.
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return result, fmt.Errorf("commit Dandelion Excel import: %w", err)
+	}
+	return result, nil
+}
+
+func (p *Postgres) SavedDandelionExcelImports(ctx context.Context) ([]dandelion.SavedImport, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT DISTINCT ON (report_date)
+			run_id,file_name,file_sha256,report_date::TEXT,sheet_name,fetched_count,
+			inserted_count,updated_count,unchanged_count,COALESCE(completed_at,started_at)
+		FROM dandelion_excel_import_runs
+		WHERE status='succeeded'
+		ORDER BY report_date DESC,completed_at DESC,run_id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list saved Dandelion Excel imports: %w", err)
+	}
+	defer rows.Close()
+	result := make([]dandelion.SavedImport, 0)
+	for rows.Next() {
+		var item dandelion.SavedImport
+		if err := rows.Scan(
+			&item.RunID, &item.FileName, &item.FileSHA256, &item.ReportDate, &item.SheetName,
+			&item.Fetched, &item.Inserted, &item.Updated, &item.Unchanged, &item.CompletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan saved Dandelion Excel import: %w", err)
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate saved Dandelion Excel imports: %w", err)
 	}
 	return result, nil
 }

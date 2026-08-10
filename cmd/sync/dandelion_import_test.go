@@ -20,11 +20,16 @@ import (
 type dandelionExcelImportStub struct {
 	snapshot dandelion.Snapshot
 	result   dandelion.ImportResult
+	saved    []dandelion.SavedImport
 }
 
 func (stub *dandelionExcelImportStub) ImportDandelionExcel(_ context.Context, snapshot dandelion.Snapshot) (dandelion.ImportResult, error) {
 	stub.snapshot = snapshot
 	return stub.result, nil
+}
+
+func (stub *dandelionExcelImportStub) SavedDandelionExcelImports(context.Context) ([]dandelion.SavedImport, error) {
+	return stub.saved, nil
 }
 
 func dandelionUploadBody(t *testing.T) (*bytes.Buffer, string) {
@@ -85,7 +90,33 @@ func TestDandelionExcelImportEndpoint(t *testing.T) {
 	if len(stub.snapshot.Records) != 1 || stub.snapshot.Records[0].NoteID != "0123456789abcdef01234567" {
 		t.Fatalf("snapshot = %+v", stub.snapshot)
 	}
+	if got := stub.snapshot.ReportDate.Format("2006-01-02"); got != "2026-08-05" {
+		t.Fatalf("report date = %q", got)
+	}
 	for _, expected := range []string{`"run_id":9`, `"fetched":1`, `"inserted":1`} {
+		if !strings.Contains(recorder.Body.String(), expected) {
+			t.Fatalf("response missing %s: %s", expected, recorder.Body.String())
+		}
+	}
+}
+
+func TestDandelionExcelImportEndpointListsSavedUploads(t *testing.T) {
+	stub := &dandelionExcelImportStub{saved: []dandelion.SavedImport{{
+		RunID: 7, FileName: "蒲公英-2026-08-05.xlsx", FileSHA256: "abc",
+		ReportDate: "2026-08-05", SheetName: "笔记批量数据", Fetched: 275,
+		CompletedAt: time.Date(2026, 8, 6, 7, 0, 0, 0, time.UTC),
+	}}}
+	handler := newAPIHandler(&apiServer{
+		dandelionExcelImport: stub,
+		timeout:              time.Second,
+		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/imports/dandelion-excel", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	for _, expected := range []string{`"report_date":"2026-08-05"`, `"file_sha256":"abc"`, `"fetched":275`} {
 		if !strings.Contains(recorder.Body.String(), expected) {
 			t.Fatalf("response missing %s: %s", expected, recorder.Body.String())
 		}
@@ -94,7 +125,7 @@ func TestDandelionExcelImportEndpoint(t *testing.T) {
 
 func TestDandelionExcelImportEndpointRequiresPost(t *testing.T) {
 	handler := newAPIHandler(&apiServer{})
-	request := httptest.NewRequest(http.MethodGet, "/v1/imports/dandelion-excel", nil)
+	request := httptest.NewRequest(http.MethodPut, "/v1/imports/dandelion-excel", nil)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusMethodNotAllowed {

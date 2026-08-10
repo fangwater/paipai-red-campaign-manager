@@ -3,6 +3,8 @@ package syncer
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,24 +12,37 @@ import (
 )
 
 type providerSourceStub struct {
-	failedCode string
+	failedCode         string
+	noteCount          int
+	fetchedNoteBatches *[]int
 }
 
 func (s providerSourceStub) FetchProviderContent(_ context.Context, table model.ProviderContentTable) (model.ProviderContentSnapshot, error) {
 	if table.ProviderCode == s.failedCode {
 		return model.ProviderContentSnapshot{}, errors.New("source unavailable")
 	}
+	noteCount := s.noteCount
+	if noteCount == 0 {
+		noteCount = 1
+	}
+	refs := make([]model.DocumentRef, 0, noteCount)
+	for index := 0; index < noteCount; index++ {
+		refs = append(refs, model.DocumentRef{RecordID: fmt.Sprintf("note-%d", index+1)})
+	}
 	return model.ProviderContentSnapshot{
 		Table: table,
 		Records: []model.ProviderNoteExecution{{
 			RecordKey: "row:2", SourceRowNumber: 2, NoteID: "note-1",
 		}},
-		NoteRefs:   []model.DocumentRef{{RecordID: "note-1"}},
+		NoteRefs:   refs,
 		NoteErrors: 1,
 	}, nil
 }
 
 func (s providerSourceStub) FetchProviderNotes(_ context.Context, refs []model.DocumentRef) ([]model.ProviderNote, int, error) {
+	if s.fetchedNoteBatches != nil {
+		*s.fetchedNoteBatches = append(*s.fetchedNoteBatches, len(refs))
+	}
 	notes := make([]model.ProviderNote, 0, len(refs))
 	for _, ref := range refs {
 		notes = append(notes, model.ProviderNote{NoteID: ref.RecordID, NoteContent: "正文"})
@@ -36,10 +51,11 @@ func (s providerSourceStub) FetchProviderNotes(_ context.Context, refs []model.D
 }
 
 type providerDestinationStub struct {
-	tables  []model.ProviderContentTable
-	started []string
-	failed  []string
-	saved   []string
+	tables      []model.ProviderContentTable
+	started     []string
+	failed      []string
+	saved       []string
+	noteBatches []int
 }
 
 func (d *providerDestinationStub) ProviderContentTables(context.Context) ([]model.ProviderContentTable, error) {
@@ -57,6 +73,11 @@ func (d *providerDestinationStub) MarkProviderContentSyncStarted(_ context.Conte
 
 func (d *providerDestinationStub) MarkProviderContentSyncFailed(_ context.Context, providerCode string, _ error) error {
 	d.failed = append(d.failed, providerCode)
+	return nil
+}
+
+func (d *providerDestinationStub) UpsertProviderNotes(_ context.Context, notes []model.ProviderNote) error {
+	d.noteBatches = append(d.noteBatches, len(notes))
 	return nil
 }
 
@@ -122,6 +143,28 @@ func TestProviderRunProvidersRejectsUnknownTargetBeforeSync(t *testing.T) {
 	}
 	if len(destination.started) != 0 || len(destination.saved) != 0 {
 		t.Fatalf("sync started for unknown target: started=%v saved=%v", destination.started, destination.saved)
+	}
+}
+
+func TestProviderRunPersistsNotesInBoundedBatches(t *testing.T) {
+	var fetchedBatches []int
+	destination := &providerDestinationStub{tables: []model.ProviderContentTable{{
+		ProviderCode: "zhiyuan", ProviderName: "智元",
+	}}}
+	service := NewProvider(providerSourceStub{
+		noteCount: providerNoteBatchSize*2 + 1, fetchedNoteBatches: &fetchedBatches,
+	}, destination)
+
+	result, err := service.Run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []int{providerNoteBatchSize, providerNoteBatchSize, 1}
+	if !slices.Equal(fetchedBatches, want) || !slices.Equal(destination.noteBatches, want) {
+		t.Fatalf("fetched batches=%v persisted batches=%v want=%v", fetchedBatches, destination.noteBatches, want)
+	}
+	if result.Notes != providerNoteBatchSize*2+1 {
+		t.Fatalf("Run() result = %+v", result)
 	}
 }
 

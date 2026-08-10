@@ -4,7 +4,7 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, FileSearch, Link2, LoaderCircle, Search, X } from "lucide-react";
+import { AlertCircle, ArrowDownWideNarrow, CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, FileSearch, Image as ImageIcon, Link2, LoaderCircle, Search, Tags as TagsIcon, X, ZoomIn } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
@@ -45,13 +45,38 @@ type AnalysisResult = {
   items: AnalysisItem[];
 };
 
+type ManuscriptBlock = {
+  type: "paragraph" | "heading" | "bullet" | "ordered" | "quote" | "code" | "todo" | "equation" | "divider" | "image";
+  text?: string;
+  level?: number;
+  asset_id?: string;
+  width?: number;
+  height?: number;
+  caption?: string;
+};
+
+type NoteTags = {
+  note_type: string[];
+  cover_type: string[];
+  commercial_intensity: string[];
+  audience: string[];
+  user_scenario: string[];
+  progress: string[];
+  complete: boolean;
+  missing_fields: string[];
+};
+
 type NoteContentResult = {
   note_id: string;
   note_url: string;
   found: boolean;
   note_content: string;
+  blocks?: ManuscriptBlock[];
   providers: string[];
+  tags?: NoteTags;
 };
+
+type ZoomedImage = { src: string; caption: string };
 
 type ServiceState = "checking" | "online" | "offline";
 
@@ -146,6 +171,98 @@ function MetricChart({ title, value, color, dates, values }: MetricChartProps) {
   </article>;
 }
 
+function manuscriptAssetURL(assetID: string | undefined): string | null {
+  if (!assetID || !/^[0-9a-f]{64}$/.test(assetID)) return null;
+  return `${import.meta.env.BASE_URL}api/manuscript-assets/${assetID}`;
+}
+
+function ManuscriptImage({ block, onZoom }: { block: ManuscriptBlock; onZoom: (image: ZoomedImage) => void }) {
+  const [failed, setFailed] = useState(false);
+  const src = manuscriptAssetURL(block.asset_id);
+  const caption = block.caption?.trim() ?? "";
+  if (!src || failed) {
+    return <div className="manuscript-image-error" role="status"><ImageIcon size={18} /><span>图片加载失败</span></div>;
+  }
+  return <figure className="manuscript-image">
+    <button type="button" aria-label={caption ? `查看大图：${caption}` : "查看稿件大图"} onClick={() => onZoom({ src, caption })}>
+      <img
+        src={src}
+        alt={caption || "稿件图片"}
+        loading="lazy"
+        decoding="async"
+        width={block.width && block.width > 0 ? block.width : undefined}
+        height={block.height && block.height > 0 ? block.height : undefined}
+        onError={() => setFailed(true)}
+      />
+      <span className="manuscript-image-zoom" aria-hidden="true"><ZoomIn size={15} /></span>
+    </button>
+    {caption ? <figcaption>{caption}</figcaption> : null}
+  </figure>;
+}
+
+function ManuscriptContent({ blocks, fallback, onZoom }: {
+  blocks: ManuscriptBlock[];
+  fallback: string;
+  onZoom: (image: ZoomedImage) => void;
+}) {
+  if (blocks.length === 0) return <pre>{fallback}</pre>;
+  return <div className="manuscript-blocks">{blocks.map((block, index) => {
+    const key = `${index}-${block.type}-${block.asset_id ?? ""}`;
+    switch (block.type) {
+    case "image":
+      return <ManuscriptImage key={key} block={block} onZoom={onZoom} />;
+    case "heading":
+      return <h3 className={`manuscript-heading level-${block.level ?? 0}`} key={key}>{block.text}</h3>;
+    case "bullet":
+    case "ordered":
+    case "todo":
+      return <div className={`manuscript-list-item ${block.type}`} key={key}><span aria-hidden="true" /><p>{block.text}</p></div>;
+    case "quote":
+      return <blockquote key={key}>{block.text}</blockquote>;
+    case "code":
+      return <pre className="manuscript-code" key={key}>{block.text}</pre>;
+    case "divider":
+      return <hr key={key} />;
+    default:
+      return <p key={key}>{block.text}</p>;
+    }
+  })}</div>;
+}
+
+type NoteTagField = "note_type" | "cover_type" | "commercial_intensity" | "audience" | "user_scenario" | "progress";
+
+const NOTE_TAG_FIELDS: Array<{ key: NoteTagField; label: string }> = [
+  { key: "note_type", label: "内容类型" },
+  { key: "audience", label: "对话人群" },
+  { key: "user_scenario", label: "用户场景" },
+  { key: "cover_type", label: "封面类型" },
+  { key: "commercial_intensity", label: "商业强度" },
+  { key: "progress", label: "进度" }
+];
+
+function NoteTagsPanel({ tags }: { tags: NoteTags | undefined }) {
+  const complete = tags?.complete === true;
+  return <section className="note-content-tags" aria-label="稿件标签">
+    <div className="note-content-tags-heading">
+      <div><TagsIcon size={15} /><span>标签信息</span></div>
+      <span className={`note-tags-completeness ${complete ? "complete" : "incomplete"}`} role="status">
+        {complete ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+        {complete ? "标签完整" : "标签待补充"}
+      </span>
+    </div>
+    <dl>{NOTE_TAG_FIELDS.map((field) => {
+      const values = tags?.[field.key] ?? [];
+      return <div className={values.length === 0 ? "missing" : ""} key={field.key}>
+        <dt>{field.label}</dt>
+        <dd>{values.length > 0
+          ? values.map((value) => <span className="note-tag-value" key={`${field.key}-${value}`}>{value}</span>)
+          : <span className="note-tag-value missing">待补充</span>}
+        </dd>
+      </div>;
+    })}</dl>
+  </section>;
+}
+
 function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const [routeParams, setRouteParams] = useSearchParams();
   const planID = routeParams.get("plan_id")?.trim() ?? "";
@@ -166,6 +283,7 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
   const [contentError, setContentError] = useState("");
   const [noteContent, setNoteContent] = useState<NoteContentResult | null>(null);
 
+  const [zoomedImage, setZoomedImage] = useState<ZoomedImage | null>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setSearchQuery(searchInput.trim());
@@ -177,11 +295,16 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
   useEffect(() => {
     if (!contentOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContentOpen(false);
+      if (event.key !== "Escape") return;
+      if (zoomedImage) {
+        setZoomedImage(null);
+        return;
+      }
+      setContentOpen(false);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [contentOpen]);
+  }, [contentOpen, zoomedImage]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -293,11 +416,19 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
             : contentError ? <div className="note-content-state error"><AlertCircle size={18} />{contentError}</div>
               : noteContent?.found ? <>
                 {noteContent.providers.length > 0 ? <div className="note-content-source"><span>来源机构</span><strong>{noteContent.providers.join("、")}</strong></div> : null}
-                <pre>{noteContent.note_content}</pre>
+                <NoteTagsPanel tags={noteContent.tags} />
+                <ManuscriptContent blocks={noteContent.blocks ?? []} fallback={noteContent.note_content} onZoom={setZoomedImage} />
               </> : <div className="note-content-state">当前稿件库未收录这篇笔记的内容</div>}
         </div>
         <footer>{noteContent?.note_url ? <a href={noteContent.note_url} target="_blank" rel="noreferrer"><ExternalLink size={15} />打开小红书笔记</a> : <span />}</footer>
       </section>
+    </div> : null}
+    {zoomedImage ? <div className="manuscript-lightbox" role="dialog" aria-modal="true" aria-label="稿件大图" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setZoomedImage(null);
+    }}>
+      <button className="icon-button" title="关闭" aria-label="关闭稿件大图" onClick={() => setZoomedImage(null)}><X size={19} /></button>
+      <img src={zoomedImage.src} alt={zoomedImage.caption || "稿件大图"} />
+      {zoomedImage.caption ? <p>{zoomedImage.caption}</p> : null}
     </div> : null}
   </>;
 }
