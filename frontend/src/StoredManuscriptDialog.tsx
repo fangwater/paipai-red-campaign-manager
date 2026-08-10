@@ -128,11 +128,13 @@ function NoteTagsPanel({ tags }: { tags: NoteTags | undefined }) {
 
 function StoredManuscriptDialog({
   noteID,
+  manuscriptTitle = "",
   onClose,
   variant = "manuscript",
   onEdit
 }: {
   noteID: string;
+  manuscriptTitle?: string;
   onClose: () => void;
   variant?: ContentVariant;
   onEdit?: () => void;
@@ -187,7 +189,9 @@ function StoredManuscriptDialog({
     }}>
       <section className="note-content-dialog stored-manuscript-dialog" role="dialog" aria-modal="true" aria-labelledby="stored-manuscript-title">
         <header>
-          <div><h2 id="stored-manuscript-title">{isReference ? "参考内容" : "对应稿件"}</h2><span>{content?.note_id || noteID}</span></div>
+          <div><h2 id="stored-manuscript-title">{isReference ? "参考内容" : "对应稿件"}</h2><span>
+            {isReference ? (content?.note_id || noteID) : (manuscriptTitle.trim() || content?.note_id || noteID)}
+          </span></div>
           <div className="note-content-header-actions">
             {isReference && onEdit ? <button className="icon-button" title="编辑参考内容" aria-label="编辑参考内容" onClick={onEdit}><Pencil size={16} /></button> : null}
             <button className="icon-button" title="关闭" aria-label={isReference ? "关闭参考内容" : "关闭对应稿件"} onClick={onClose}><X size={18} /></button>

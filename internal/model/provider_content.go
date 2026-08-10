@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const ManuscriptExtractorVersion = 3
+const ManuscriptExtractorVersion = 4
 
 type ProviderContentTable struct {
 	ProviderCode     string
@@ -36,6 +36,7 @@ type ProviderNote struct {
 	ContentBlocks     []ManuscriptBlock
 	ReferenceNoteIDs  []string
 	Assets            []ManuscriptAsset
+	SourceTitle       string
 	SourceURL         string
 	SourceResourceKey string
 	SourceRevision    int

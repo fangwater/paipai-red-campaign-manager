@@ -97,6 +97,32 @@ func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.Docume
 	return candidates, nil
 }
 
+func (p *Postgres) UpdateProviderNoteSources(ctx context.Context, refs []model.DocumentRef) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, ref := range refs {
+		batch.Queue(`
+			UPDATE service_provider_notes
+			SET source_title = COALESCE(NULLIF(BTRIM($2), ''), source_title),
+				source_url = COALESCE(NULLIF(BTRIM($3), ''), source_url)
+			WHERE note_id = $1
+		`, ref.RecordID, ref.Label, ref.SourceURL)
+	}
+	results := p.pool.SendBatch(ctx, batch)
+	for index := 0; index < batch.Len(); index++ {
+		if _, err := results.Exec(); err != nil {
+			_ = results.Close()
+			return fmt.Errorf("update provider note source batch item %d: %w", index+1, err)
+		}
+	}
+	if err := results.Close(); err != nil {
+		return fmt.Errorf("close provider note source batch: %w", err)
+	}
+	return nil
+}
+
 func (p *Postgres) FailRunningProviderContentSyncs(ctx context.Context, reason string) error {
 	if reason == "" {
 		reason = "manual sync service restarted before the request finished"
@@ -320,20 +346,21 @@ func queueProviderNotes(batch *pgx.Batch, notes []model.ProviderNote) error {
 		}
 		batch.Queue(`
 			INSERT INTO service_provider_notes (
-				note_id, note_content, content_blocks, reference_note_ids, source_url,
+				note_id, note_content, content_blocks, reference_note_ids, source_title, source_url,
 				source_resource_key, source_revision, extractor_version, updated_at
-			) VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, NOW())
+			) VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8, $9, NOW())
 			ON CONFLICT (note_id) DO UPDATE SET
 				note_content = EXCLUDED.note_content,
 				content_blocks = EXCLUDED.content_blocks,
 				reference_note_ids = EXCLUDED.reference_note_ids,
+				source_title = COALESCE(NULLIF(EXCLUDED.source_title, ''), service_provider_notes.source_title),
 				source_url = EXCLUDED.source_url,
 				source_resource_key = EXCLUDED.source_resource_key,
 				source_revision = EXCLUDED.source_revision,
 				extractor_version = EXCLUDED.extractor_version,
 				updated_at = NOW()
-		`, note.NoteID, note.NoteContent, blocksJSON, referenceNoteIDs, note.SourceURL,
-			note.SourceResourceKey, note.SourceRevision, extractorVersion)
+		`, note.NoteID, note.NoteContent, blocksJSON, referenceNoteIDs, note.SourceTitle,
+			note.SourceURL, note.SourceResourceKey, note.SourceRevision, extractorVersion)
 		batch.Queue("DELETE FROM service_provider_note_assets WHERE note_id = $1", note.NoteID)
 		for position, block := range blocks {
 			if block.Type != "image" || block.AssetID == "" {

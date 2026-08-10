@@ -7,10 +7,17 @@ import "./red-materials.css";
 
 type ServiceState = "checking" | "online" | "offline";
 
+type ReferenceMaterialSource = {
+  note_id: string;
+  title: string;
+  url: string;
+};
+
 type ReferenceMaterialItem = {
   reference_note_id: string;
   note_url: string;
   source_note_ids: string[];
+  source_manuscripts?: ReferenceMaterialSource[];
   providers: string[];
   usage_count: number;
   has_content: boolean;
@@ -44,6 +51,23 @@ const EMPTY_RESULT: ReferenceMaterialsResult = {
 
 const integerFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 
+function MaterialSources({ item, onOpen }: { item: ReferenceMaterialItem; onOpen: (source: ReferenceMaterialSource) => void }) {
+  const sources = item.source_manuscripts?.length
+    ? item.source_manuscripts
+    : item.source_note_ids.map((noteID) => ({ note_id: noteID, title: "", url: "" }));
+  return <div className="red-material-sources">{sources.map((source) => {
+    const label = source.title.trim() || source.note_id;
+    return <div className="red-material-source" key={source.note_id}>
+      <button type="button" onClick={() => onOpen(source)} title={label} aria-label={`查看已存稿件 ${label}`}>
+        <FileText size={13} /><span>{label}</span>
+      </button>
+      {source.url ? <a href={source.url} target="_blank" rel="noreferrer" title="打开飞书稿件" aria-label={`打开飞书稿件 ${label}`}>
+        <ExternalLink size={13} />
+      </a> : null}
+    </div>;
+  })}</div>;
+}
+
 function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -51,7 +75,7 @@ function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
   const [result, setResult] = useState<ReferenceMaterialsResult>(EMPTY_RESULT);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedManuscriptID, setSelectedManuscriptID] = useState("");
+  const [selectedManuscript, setSelectedManuscript] = useState<ReferenceMaterialSource | null>(null);
   const [selectedReference, setSelectedReference] = useState<ReferenceMaterialItem | null>(null);
   const [editingReference, setEditingReference] = useState<ReferenceMaterialItem | null>(null);
 
@@ -112,7 +136,7 @@ function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
     </section>
 
     <section className="red-material-toolbar">
-      <label className="analysis-search red-material-search"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索素材 ID、稿件 ID 或机构" /></label>
+      <label className="analysis-search red-material-search"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索素材 ID、稿件标题或机构" /></label>
       <span>{loading ? <LoaderCircle size={16} className="spin" /> : null}{search ? `“${search}”的结果` : "全部素材"}</span>
     </section>
 
@@ -133,7 +157,7 @@ function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
                 ? <button className="red-material-identity" type="button" onClick={() => setSelectedReference(item)} title="查看参考内容" aria-label={`查看参考内容 ${item.reference_note_id}`}><span><FileText size={16} /></span><code>{item.reference_note_id}</code></button>
                 : <a className="red-material-identity" href={item.note_url} target="_blank" rel="noreferrer" aria-label={`打开红薯素材 ${item.reference_note_id}`}><span><Link2 size={16} /></span><code>{item.reference_note_id}</code></a>}</td>
               <td><span className={`red-material-content-status ${item.has_content ? "filled" : "empty"}`} title={item.has_content ? (item.content_source === "manual" ? "已填充：人工录入" : "已填充：稿件库") : "未填充"}>{item.has_content ? <CheckCircle2 size={13} /> : <CircleDashed size={13} />}{item.has_content ? "已填充" : "未填充"}</span></td>
-              <td><div className="red-material-sources">{item.source_note_ids.map((noteID) => <button key={noteID} type="button" onClick={() => setSelectedManuscriptID(noteID)} title={`查看已存稿件 ${noteID}`} aria-label={`查看已存稿件 ${noteID}`}><FileText size={12} /><code>{noteID}</code></button>)}</div></td>
+              <td><MaterialSources item={item} onOpen={setSelectedManuscript} /></td>
               <td><div className="red-material-providers">{item.providers.length > 0 ? item.providers.map((provider) => <span key={provider}>{provider}</span>) : <small>未标注</small>}</div></td>
               <td><span className="red-material-usage">{integerFormatter.format(item.usage_count)}</span></td>
               <td><div className="red-material-actions">
@@ -150,7 +174,7 @@ function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
         <button className="icon-button" title="下一页" aria-label="下一页" disabled={page >= pageCount || loading} onClick={() => setPage((current) => current + 1)}><ChevronRight size={17} /></button>
       </div></footer>
     </section>
-    {selectedManuscriptID ? <StoredManuscriptDialog noteID={selectedManuscriptID} onClose={() => setSelectedManuscriptID("")} /> : null}
+    {selectedManuscript ? <StoredManuscriptDialog noteID={selectedManuscript.note_id} manuscriptTitle={selectedManuscript.title} onClose={() => setSelectedManuscript(null)} /> : null}
     {selectedReference ? <StoredManuscriptDialog noteID={selectedReference.reference_note_id} variant="reference" onClose={() => setSelectedReference(null)} onEdit={() => openReferenceEditor(selectedReference)} /> : null}
     {editingReference ? <ReferenceMaterialEditor noteID={editingReference.reference_note_id} hasContent={editingReference.has_content} onClose={() => setEditingReference(null)} onSaved={() => handleReferenceSaved(editingReference)} /> : null}
   </>;

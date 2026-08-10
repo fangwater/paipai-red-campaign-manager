@@ -13,11 +13,11 @@
 .red-material-table-section > header h2 { margin: 0; color: #30363a; font-size: 13px; }
 .red-material-table-section > header p { margin: 4px 0 0; color: #858c92; font-size: 10px; }
 .red-material-table-wrap { overflow-x: auto; }
-.red-material-table { width: 100%; min-width: 1080px; border-collapse: collapse; table-layout: fixed; }
+.red-material-table { width: 100%; min-width: 1120px; border-collapse: collapse; table-layout: fixed; }
 .red-material-table th { height: 38px; padding: 0 14px; border-bottom: 1px solid #e7e9eb; background: #f8f9f9; color: #7d858a; font-size: 9px; font-weight: 650; text-align: left; }
 .red-material-table th:nth-child(1) { width: 236px; }
 .red-material-table th:nth-child(2) { width: 104px; }
-.red-material-table th:nth-child(3) { width: 350px; }
+.red-material-table th:nth-child(3) { width: 390px; }
 .red-material-table th:nth-child(4) { width: 140px; }
 .red-material-table th:nth-child(5) { width: 76px; text-align: center; }
 .red-material-table th:nth-child(6) { width: 84px; }
@@ -28,13 +28,17 @@
 .red-material-identity:is(button) { padding: 0; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .red-material-identity > span { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 6px; background: #f7e9ea; color: #ad444b; }
 .red-material-identity:is(button) > span { background: #eaf4ef; color: #286f5a; }
-.red-material-identity code, .red-material-sources code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0; }
+.red-material-identity code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0; }
 .red-material-identity code { font-size: 10px; }
 .red-material-identity:hover code { color: #a43f46; text-decoration: underline; text-underline-offset: 3px; }
-.red-material-sources { display: flex; flex-wrap: wrap; gap: 5px; }
-.red-material-sources button { max-width: 176px; min-height: 23px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; overflow: hidden; border: 1px solid #e1e5e3; border-radius: 4px; background: #f7f9f8; color: #53625e; font: inherit; text-align: left; cursor: pointer; }
+.red-material-sources { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+.red-material-source { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 4px; }
+.red-material-source button { min-width: 0; min-height: 27px; display: flex; align-items: center; gap: 6px; padding: 3px 7px; overflow: hidden; border: 1px solid #e1e5e3; border-radius: 4px; background: #f7f9f8; color: #53625e; font: inherit; text-align: left; cursor: pointer; }
 .red-material-sources button:hover { border-color: #9db6ae; color: #286f5a; }
-.red-material-sources code { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.red-material-source button svg { flex: none; }
+.red-material-source button span { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.red-material-source > a { width: 26px; height: 27px; display: grid; place-items: center; border: 1px solid #e1e5e3; border-radius: 4px; background: #fff; color: #7d858a; }
+.red-material-source > a:hover { border-color: #9db6ae; color: #286f5a; }
 .red-material-providers { display: flex; flex-wrap: wrap; gap: 5px; }
 .red-material-providers span { min-height: 22px; display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 4px; background: #eaf4ef; color: #286f5a; font-size: 9px; }
 .red-material-providers small { color: #9aa09e; font-size: 9px; }

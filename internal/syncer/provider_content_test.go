@@ -55,6 +55,7 @@ type providerDestinationStub struct {
 	started     []string
 	failed      []string
 	saved       []string
+	sourceRefs  []model.DocumentRef
 	noteBatches []int
 }
 
@@ -64,6 +65,11 @@ func (d *providerDestinationStub) ProviderContentTables(context.Context) ([]mode
 
 func (d *providerDestinationStub) ProviderNotesToFetch(_ context.Context, refs []model.DocumentRef) ([]model.DocumentRef, error) {
 	return refs, nil
+}
+
+func (d *providerDestinationStub) UpdateProviderNoteSources(_ context.Context, refs []model.DocumentRef) error {
+	d.sourceRefs = append(d.sourceRefs, refs...)
+	return nil
 }
 
 func (d *providerDestinationStub) MarkProviderContentSyncStarted(_ context.Context, providerCode string) error {
@@ -162,6 +168,9 @@ func TestProviderRunPersistsNotesInBoundedBatches(t *testing.T) {
 	want := []int{providerNoteBatchSize, providerNoteBatchSize, 1}
 	if !slices.Equal(fetchedBatches, want) || !slices.Equal(destination.noteBatches, want) {
 		t.Fatalf("fetched batches=%v persisted batches=%v want=%v", fetchedBatches, destination.noteBatches, want)
+	}
+	if len(destination.sourceRefs) != providerNoteBatchSize*2+1 {
+		t.Fatalf("updated source refs=%d", len(destination.sourceRefs))
 	}
 	if result.Notes != providerNoteBatchSize*2+1 {
 		t.Fatalf("Run() result = %+v", result)

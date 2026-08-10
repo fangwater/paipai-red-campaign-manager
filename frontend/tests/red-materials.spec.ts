@@ -3,6 +3,10 @@ import { expect, test } from "@playwright/test";
 const materialID = "6208dd8e000000002103e259";
 const filledMaterialID = "6208dd8e000000002103e260";
 const sourceNoteIDs = ["6a5975fd000000001003f991", "6a33d5aa000000001c024f8a"];
+const sourceManuscripts = [
+  { note_id: sourceNoteIDs[0], title: "通勤精力管理实测", url: "https://example.feishu.cn/wiki/manuscript-1" },
+  { note_id: sourceNoteIDs[1], title: "熬夜恢复方法记录", url: "https://example.feishu.cn/wiki/manuscript-2" }
+];
 const manuscriptAssetID = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const transparentPNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
@@ -103,6 +107,7 @@ test("opens the first-level red materials directory from the homepage", async ({
             reference_note_id: materialID,
             note_url: `https://www.xiaohongshu.com/explore/${materialID}`,
             source_note_ids: sourceNoteIDs,
+            source_manuscripts: sourceManuscripts,
             providers: ["智元", "曼杰"],
             usage_count: 2,
             has_content: false,
@@ -111,6 +116,7 @@ test("opens the first-level red materials directory from the homepage", async ({
             reference_note_id: filledMaterialID,
             note_url: `https://www.xiaohongshu.com/explore/${filledMaterialID}`,
             source_note_ids: [sourceNoteIDs[1]],
+            source_manuscripts: [sourceManuscripts[1]],
             providers: ["智元"],
             usage_count: 1,
             has_content: true,
@@ -135,6 +141,10 @@ test("opens the first-level red materials directory from the homepage", async ({
   await expect(materialLink).toHaveAttribute("href", `https://www.xiaohongshu.com/explore/${materialID}`);
   await expect(page.getByText("未填充", { exact: true })).toHaveCount(1);
   await expect(page.getByText("已填充", { exact: true })).toHaveCount(1);
+  await expect(page.locator(".red-material-sources")).not.toContainText(sourceNoteIDs[0]);
+  await expect(page.getByRole("button", { name: `查看已存稿件 ${sourceManuscripts[0].title}` })).toBeVisible();
+  await expect(page.getByRole("link", { name: `打开飞书稿件 ${sourceManuscripts[0].title}` }))
+    .toHaveAttribute("href", sourceManuscripts[0].url);
 
   await page.getByRole("button", { name: `查看参考内容 ${filledMaterialID}` }).click();
   const referenceDialog = page.getByRole("dialog", { name: "参考内容" });
@@ -152,13 +162,14 @@ test("opens the first-level red materials directory from the homepage", async ({
   await expect(referenceDialog).toContainText("人工录入");
   await referenceDialog.getByRole("button", { name: "关闭参考内容" }).click();
   await expect(page.getByText("已填充", { exact: true })).toHaveCount(2);
-  const sourceButton = page.getByRole("button", { name: `查看已存稿件 ${sourceNoteIDs[0]}` });
+  const sourceButton = page.getByRole("button", { name: `查看已存稿件 ${sourceManuscripts[0].title}` });
   await expect(sourceButton).toBeVisible();
   await expect(sourceButton).not.toHaveAttribute("href", /.+/);
   await sourceButton.click();
   await expect.poll(() => requestedManuscriptIDs).toContain(sourceNoteIDs[0]);
   const manuscriptDialog = page.getByRole("dialog", { name: "对应稿件" });
   await expect(manuscriptDialog).toContainText("这是中台保存的稿件正文。");
+  await expect(manuscriptDialog).toContainText(sourceManuscripts[0].title);
   await expect(manuscriptDialog).toContainText("智元");
   await expect(manuscriptDialog.getByRole("region", { name: "稿件标签" })).toContainText("精力疲惫");
   await expect(manuscriptDialog.getByRole("img", { name: "存档配图" })).toBeVisible();
@@ -167,7 +178,7 @@ test("opens the first-level red materials directory from the homepage", async ({
   await manuscriptDialog.getByRole("button", { name: "关闭对应稿件" }).click();
   await expect(manuscriptDialog).toHaveCount(0);
 
-  await page.getByPlaceholder("搜索素材 ID、稿件 ID 或机构").fill("智元");
+  await page.getByPlaceholder("搜索素材 ID、稿件标题或机构").fill("智元");
   await expect.poll(() => searches).toContain("智元");
   await page.getByRole("button", { name: "下一页" }).click();
   await expect.poll(() => pages).toContain("2");

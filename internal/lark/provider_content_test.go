@@ -126,7 +126,7 @@ func TestProviderNoteDocumentRefAndContent(t *testing.T) {
 	row := []interface{}{
 		"6a59e5d700000000010016cf",
 		[]interface{}{map[string]interface{}{
-			"text": "稿件标题",
+			"text": "通勤精力管理实测",
 			"link": "https://example.feishu.cn/docx/doc-token",
 		}},
 	}
@@ -140,13 +140,14 @@ func TestProviderNoteDocumentRefAndContent(t *testing.T) {
 
 	referenceID := "69b1039d00000000080316ae"
 	notes, errorsCount := providerNotes([]model.DocumentRef{ref}, []model.Document{{
-		Provider: ref.Provider, ResourceKey: ref.ResourceKey, Content: "笔记正文", Status: documentSucceeded,
+		Provider: ref.Provider, ResourceKey: ref.ResourceKey, Title: "飞书文档内部标题", Content: "笔记正文", Status: documentSucceeded,
 		ReferenceNoteIDs: []string{ref.RecordID, referenceID},
 	}})
 	if errorsCount != 0 || len(notes) != 1 {
 		t.Fatalf("providerNotes() notes=%+v errors=%d", notes, errorsCount)
 	}
 	if notes[0].NoteID != "6a59e5d700000000010016cf" || notes[0].NoteContent != "笔记正文" ||
+		notes[0].SourceTitle != "通勤精力管理实测" ||
 		!slices.Equal(notes[0].ReferenceNoteIDs, []string{referenceID}) {
 		t.Fatalf("providerNotes() = %+v", notes)
 	}

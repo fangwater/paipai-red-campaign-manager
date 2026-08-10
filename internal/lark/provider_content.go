@@ -437,10 +437,14 @@ func providerNotes(refs []model.DocumentRef, documents []model.Document) ([]mode
 			errorsCount++
 			continue
 		}
+		sourceTitle := strings.TrimSpace(ref.Label)
+		if sourceTitle == "" {
+			sourceTitle = strings.TrimSpace(document.Title)
+		}
 		notes = append(notes, model.ProviderNote{
 			NoteID: ref.RecordID, NoteContent: document.Content,
 			ContentBlocks: document.Blocks, ReferenceNoteIDs: excludeReferenceNoteID(document.ReferenceNoteIDs, ref.RecordID),
-			Assets: document.Assets, SourceURL: ref.SourceURL, SourceResourceKey: ref.ResourceKey,
+			Assets: document.Assets, SourceTitle: sourceTitle, SourceURL: ref.SourceURL, SourceResourceKey: ref.ResourceKey,
 			SourceRevision: document.RevisionID, ExtractorVersion: model.ManuscriptExtractorVersion,
 		})
 	}

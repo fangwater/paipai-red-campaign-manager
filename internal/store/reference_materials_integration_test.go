@@ -65,8 +65,12 @@ func TestMaituoReferenceMaterialsIntegration(t *testing.T) {
 			{RecordKey: "row:3", SourceRowNumber: 3, NoteID: source2},
 		},
 		Notes: []model.ProviderNote{
-			{NoteID: source1, NoteContent: "第一篇", ReferenceNoteIDs: []string{reference1, reference2, reference1, "invalid", source1}},
-			{NoteID: source2, NoteContent: "第二篇", ReferenceNoteIDs: []string{reference1}},
+			{NoteID: source1, NoteContent: "第一篇", SourceTitle: "第一篇稿件",
+				SourceURL:        "https://example.feishu.cn/wiki/source-1",
+				ReferenceNoteIDs: []string{reference1, reference2, reference1, "invalid", source1}},
+			{NoteID: source2, NoteContent: "第二篇", SourceTitle: "第二篇稿件",
+				SourceURL:        "https://example.feishu.cn/wiki/source-2",
+				ReferenceNoteIDs: []string{reference1}},
 		},
 	})
 	if err != nil {
@@ -85,6 +89,21 @@ func TestMaituoReferenceMaterialsIntegration(t *testing.T) {
 		len(result.Items[0].SourceNoteIDs) != 2 || len(result.Items[0].Providers) != 1 ||
 		result.Items[0].HasContent {
 		t.Fatalf("first item = %+v", result.Items[0])
+	}
+	if len(result.Items[0].SourceManuscripts) != 2 {
+		t.Fatalf("first item sources = %+v", result.Items[0].SourceManuscripts)
+	}
+	sources := make(map[string]maituo.ReferenceMaterialSource, len(result.Items[0].SourceManuscripts))
+	for _, source := range result.Items[0].SourceManuscripts {
+		sources[source.NoteID] = source
+	}
+	if sources[source1].Title != "第一篇稿件" ||
+		sources[source1].URL != "https://example.feishu.cn/wiki/source-1" {
+		t.Fatalf("source 1 = %+v", sources[source1])
+	}
+	if sources[source2].Title != "第二篇稿件" ||
+		sources[source2].URL != "https://example.feishu.cn/wiki/source-2" {
+		t.Fatalf("source 2 = %+v", sources[source2])
 	}
 
 	emptyContent, err := postgres.MaituoReferenceMaterialContent(ctx, reference1)
@@ -136,5 +155,15 @@ func TestMaituoReferenceMaterialsIntegration(t *testing.T) {
 	}
 	if filtered.Total != 1 || filtered.Stats.ReferenceCount != 1 || filtered.Items[0].ReferenceNoteID != reference2 {
 		t.Fatalf("filtered = %+v", filtered)
+	}
+
+	filtered, err = postgres.MaituoReferenceMaterials(ctx, maituo.ReferenceMaterialsQuery{
+		Search: "第二篇稿件", Page: 1, PageSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filtered.Total != 1 || filtered.Stats.ReferenceCount != 1 || filtered.Items[0].ReferenceNoteID != reference1 {
+		t.Fatalf("title filtered = %+v", filtered)
 	}
 }

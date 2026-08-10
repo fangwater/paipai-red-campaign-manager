@@ -91,3 +91,8 @@ var ReferenceNoteIDsSQL string
 //
 //go:embed 020_reference_material_contents.sql
 var ReferenceMaterialContentsSQL string
+
+// ProviderNoteSourceTitleSQL stores the title of each source manuscript document.
+//
+//go:embed 021_provider_note_source_title.sql
+var ProviderNoteSourceTitleSQL string

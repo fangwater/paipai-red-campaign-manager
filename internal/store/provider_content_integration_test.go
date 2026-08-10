@@ -83,9 +83,16 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 	if second.Upserted != 1 || second.Deleted != 1 {
 		t.Fatalf("second result = %+v", second)
 	}
+	if err := postgres.UpdateProviderNoteSources(ctx, []model.DocumentRef{{
+		RecordID:  noteID1,
+		Label:     "通勤精力管理实测",
+		SourceURL: "https://example.feishu.cn/wiki/manuscript-1",
+	}}); err != nil {
+		t.Fatalf("UpdateProviderNoteSources() error = %v", err)
+	}
 
 	var active, deleted int
-	var progress, status, noteContent string
+	var progress, status, noteContent, sourceTitle, sourceURL string
 	var lastSyncedAt *time.Time
 	err = postgres.pool.QueryRow(ctx, `
 		SELECT
@@ -99,8 +106,8 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 		t.Fatalf("query provider records: %v", err)
 	}
 	err = postgres.pool.QueryRow(ctx, `
-		SELECT note_content FROM service_provider_notes WHERE note_id = $1
-	`, noteID1).Scan(&noteContent)
+		SELECT note_content, source_title, COALESCE(source_url, '') FROM service_provider_notes WHERE note_id = $1
+	`, noteID1).Scan(&noteContent, &sourceTitle, &sourceURL)
 	if err != nil {
 		t.Fatalf("query provider note: %v", err)
 	}
@@ -112,7 +119,9 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query provider index: %v", err)
 	}
-	if active != 1 || deleted != 1 || progress != "已通过" || noteContent != "更新后的正文" || status != "succeeded" || lastSyncedAt == nil {
+	if active != 1 || deleted != 1 || progress != "已通过" || noteContent != "更新后的正文" ||
+		sourceTitle != "通勤精力管理实测" || sourceURL != "https://example.feishu.cn/wiki/manuscript-1" ||
+		status != "succeeded" || lastSyncedAt == nil {
 		t.Fatalf("active=%d deleted=%d progress=%q note_content=%q status=%q last_synced_at=%v",
 			active, deleted, progress, noteContent, status, lastSyncedAt)
 	}

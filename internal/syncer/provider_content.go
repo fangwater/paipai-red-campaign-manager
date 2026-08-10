@@ -24,6 +24,7 @@ type ProviderSource interface {
 type ProviderDestination interface {
 	ProviderContentTables(context.Context) ([]model.ProviderContentTable, error)
 	ProviderNotesToFetch(context.Context, []model.DocumentRef) ([]model.DocumentRef, error)
+	UpdateProviderNoteSources(context.Context, []model.DocumentRef) error
 	MarkProviderContentSyncStarted(context.Context, string) error
 	MarkProviderContentSyncFailed(context.Context, string, error) error
 	UpsertProviderNotes(context.Context, []model.ProviderNote) error
@@ -83,6 +84,14 @@ func (s *ProviderSyncer) RunProviders(ctx context.Context, providerCodes []strin
 		if fetchErr != nil {
 			syncErr := fmt.Errorf("find incremental notes for provider %s: %w", table.ProviderName, fetchErr)
 			if markErr := s.markFailed(table.ProviderCode, fetchErr); markErr != nil {
+				syncErr = errors.Join(syncErr, markErr)
+			}
+			syncErrors = append(syncErrors, syncErr)
+			continue
+		}
+		if updateErr := s.destination.UpdateProviderNoteSources(ctx, snapshot.NoteRefs); updateErr != nil {
+			syncErr := fmt.Errorf("update manuscript titles for provider %s: %w", table.ProviderName, updateErr)
+			if markErr := s.markFailed(table.ProviderCode, updateErr); markErr != nil {
 				syncErr = errors.Join(syncErr, markErr)
 			}
 			syncErrors = append(syncErrors, syncErr)

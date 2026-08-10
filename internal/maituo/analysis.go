@@ -32,14 +32,21 @@ type ReferenceMaterialsQuery struct {
 	PageSize int
 }
 
+type ReferenceMaterialSource struct {
+	NoteID string `json:"note_id"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+}
+
 type ReferenceMaterialItem struct {
-	ReferenceNoteID string   `json:"reference_note_id"`
-	NoteURL         string   `json:"note_url"`
-	SourceNoteIDs   []string `json:"source_note_ids"`
-	Providers       []string `json:"providers"`
-	UsageCount      int      `json:"usage_count"`
-	HasContent      bool     `json:"has_content"`
-	ContentSource   string   `json:"content_source"`
+	ReferenceNoteID   string                    `json:"reference_note_id"`
+	NoteURL           string                    `json:"note_url"`
+	SourceNoteIDs     []string                  `json:"source_note_ids"`
+	SourceManuscripts []ReferenceMaterialSource `json:"source_manuscripts"`
+	Providers         []string                  `json:"providers"`
+	UsageCount        int                       `json:"usage_count"`
+	HasContent        bool                      `json:"has_content"`
+	ContentSource     string                    `json:"content_source"`
 }
 
 type ReferenceMaterialContent struct {

@@ -16,14 +16,17 @@ import (
 const referenceMaterialsCTE = `
 	WITH relationships AS (
 		SELECT LOWER(BTRIM(reference.reference_note_id)) AS reference_note_id,
-			notes.note_id AS source_note_id
+			notes.note_id AS source_note_id,
+			COALESCE(BTRIM(notes.source_title), '') AS source_title,
+			COALESCE(notes.source_url, '') AS source_url
 		FROM service_provider_notes notes
 		CROSS JOIN LATERAL unnest(
 			COALESCE(notes.reference_note_ids, '{}'::TEXT[])
 		) AS reference(reference_note_id)
 		WHERE BTRIM(reference.reference_note_id) ~* '^[0-9a-f]{24}$'
 		  AND LOWER(BTRIM(reference.reference_note_id)) <> LOWER(BTRIM(notes.note_id))
-		GROUP BY LOWER(BTRIM(reference.reference_note_id)), notes.note_id
+		GROUP BY LOWER(BTRIM(reference.reference_note_id)), notes.note_id,
+			notes.source_title, notes.source_url
 	), source_providers AS (
 		SELECT executions.note_id AS source_note_id,
 			COALESCE(
@@ -38,12 +41,14 @@ const referenceMaterialsCTE = `
 		GROUP BY executions.note_id
 	), filtered_relationships AS (
 		SELECT relationships.reference_note_id, relationships.source_note_id,
+			relationships.source_title, relationships.source_url,
 			COALESCE(source_providers.providers, '{}'::TEXT[]) AS providers
 		FROM relationships
 		LEFT JOIN source_providers USING (source_note_id)
 		WHERE $1 = '%%'
 		   OR relationships.reference_note_id ILIKE $1
 		   OR relationships.source_note_id ILIKE $1
+		   OR relationships.source_title ILIKE $1
 		   OR EXISTS (
 			SELECT 1
 			FROM unnest(COALESCE(source_providers.providers, '{}'::TEXT[])) AS provider(name)
@@ -101,6 +106,8 @@ func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.Re
 	rowsQuery := referenceMaterialsCTE + `
 		SELECT material.reference_note_id,
 			ARRAY_AGG(DISTINCT material.source_note_id ORDER BY material.source_note_id),
+			ARRAY_AGG(material.source_title ORDER BY material.source_note_id),
+			ARRAY_AGG(material.source_url ORDER BY material.source_note_id),
 			COALESCE((
 				SELECT ARRAY_AGG(DISTINCT provider.name ORDER BY provider.name)
 				FROM filtered_relationships provider_material
@@ -127,13 +134,23 @@ func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.Re
 	defer rows.Close()
 	for rows.Next() {
 		var item maituo.ReferenceMaterialItem
+		var sourceTitles, sourceURLs []string
 		if err := rows.Scan(
-			&item.ReferenceNoteID, &item.SourceNoteIDs, &item.Providers, &item.UsageCount,
+			&item.ReferenceNoteID, &item.SourceNoteIDs, &sourceTitles, &sourceURLs,
+			&item.Providers, &item.UsageCount,
 			&item.HasContent, &item.ContentSource,
 		); err != nil {
 			return result, fmt.Errorf("scan reference material: %w", err)
 		}
 		item.NoteURL = referenceMaterialURL(item.ReferenceNoteID)
+		item.SourceManuscripts = make([]maituo.ReferenceMaterialSource, 0, len(item.SourceNoteIDs))
+		for index, noteID := range item.SourceNoteIDs {
+			item.SourceManuscripts = append(item.SourceManuscripts, maituo.ReferenceMaterialSource{
+				NoteID: noteID,
+				Title:  sourceTitles[index],
+				URL:    sourceURLs[index],
+			})
+		}
 		result.Items = append(result.Items, item)
 	}
 	if err := rows.Err(); err != nil {
