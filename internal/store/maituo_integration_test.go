@@ -88,8 +88,8 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	}
 	if searchAccount == nil || searchAccount.Spend != 5 || searchAccount.SearchUsers != 6 ||
 		searchAccount.OriginalCost == nil || *searchAccount.OriginalCost != 1 ||
-		searchAccount.CorrectionCoefficient == nil || *searchAccount.CorrectionCoefficient != 14 ||
-		searchAccount.Cost == nil || *searchAccount.Cost != 14 ||
+		searchAccount.CorrectionCoefficient != nil ||
+		searchAccount.Cost == nil || *searchAccount.Cost != 1 ||
 		searchAccount.SearchRatePct == nil || *searchAccount.SearchRatePct != 2 ||
 		searchAccount.CPC == nil || *searchAccount.CPC != 3 ||
 		searchAccount.CTRPct == nil || *searchAccount.CTRPct != 4 || searchAccount.NoteCount != 7 {
@@ -101,8 +101,8 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	latestPoint := searchAccount.Points[len(searchAccount.Points)-1]
 	if latestPoint.Spend == nil || *latestPoint.Spend != 5 || latestPoint.SearchUsers == nil || *latestPoint.SearchUsers != 6 ||
 		latestPoint.OriginalCost == nil || *latestPoint.OriginalCost != 1 ||
-		latestPoint.CorrectionCoefficient == nil || *latestPoint.CorrectionCoefficient != 14 ||
-		latestPoint.Cost == nil || *latestPoint.Cost != 14 ||
+		latestPoint.CorrectionCoefficient != nil ||
+		latestPoint.Cost == nil || *latestPoint.Cost != 1 ||
 		latestPoint.NoteCount == nil || *latestPoint.NoteCount != 7 {
 		t.Fatalf("diagnosis latest point: %+v", latestPoint)
 	}
@@ -111,8 +111,8 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	}
 	if len(searchAccount.Plans) != 1 ||
 		searchAccount.Plans[0].OriginalCost == nil || *searchAccount.Plans[0].OriginalCost != 1 ||
-		searchAccount.Plans[0].CorrectionCoefficient == nil || *searchAccount.Plans[0].CorrectionCoefficient != 12 ||
-		searchAccount.Plans[0].Cost == nil || *searchAccount.Plans[0].Cost != 12 {
+		searchAccount.Plans[0].CorrectionCoefficient != nil ||
+		searchAccount.Plans[0].Cost == nil || *searchAccount.Plans[0].Cost != 1 {
 		t.Fatalf("search plans: %+v", searchAccount.Plans)
 	}
 	businessOverview, err := postgres.BusinessOverview(ctx, 7, prefix+"-spu")
@@ -136,12 +136,12 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	overviewPoint := overview.Points[len(overview.Points)-1]
 	if overview.CurrentTotalSpend != 12 || overviewPoint.TotalSpend == nil || *overviewPoint.TotalSpend != 12 ||
 		overviewPoint.SearchSpend == nil || *overviewPoint.SearchSpend != 5 ||
-		overviewPoint.SearchCost == nil || *overviewPoint.SearchCost != 14 ||
+		overviewPoint.SearchCost == nil || *overviewPoint.SearchCost != 1 ||
 		overviewPoint.SearchCPC == nil || *overviewPoint.SearchCPC != 3 ||
 		overviewPoint.SearchCTRPct == nil || *overviewPoint.SearchCTRPct != 4 ||
 		overviewPoint.SearchRatePct == nil || *overviewPoint.SearchRatePct != 2 ||
 		overviewPoint.FeedSpend == nil || *overviewPoint.FeedSpend != 7 ||
-		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 112 ||
+		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 8 ||
 		overviewPoint.FeedCPC == nil || *overviewPoint.FeedCPC != 10 ||
 		overviewPoint.FeedCTRPct == nil || *overviewPoint.FeedCTRPct != 11 ||
 		overviewPoint.FeedSearchRatePct == nil || *overviewPoint.FeedSearchRatePct != 9 {

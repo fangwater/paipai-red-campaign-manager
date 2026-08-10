@@ -21,16 +21,15 @@ const (
 )
 
 type diagnosisHistoryRow struct {
-	ReportDate            string
-	NoteID                string
-	NoteURL               string
-	Account               string
-	CampaignName          string
-	Placement             string
-	Spend                 float64
-	SearchCost            *float64
-	PostbackCost          *float64
-	CorrectionCoefficient *float64
+	ReportDate   string
+	NoteID       string
+	NoteURL      string
+	Account      string
+	CampaignName string
+	Placement    string
+	Spend        float64
+	SearchCost   *float64
+	PostbackCost *float64
 }
 
 func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (maituo.AccountPlanDiagnosis, error) {
@@ -57,14 +56,6 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		return result, fmt.Errorf("parse Maituo account diagnosis date: %w", err)
 	}
 	windowStart := latestDate.AddDate(0, 0, -(maituoAccountOverviewDays - 1)).Format(time.DateOnly)
-	overlapPoints, err := p.maituoSearchUserOverlapPoints(ctx, spu, windowStart, result.ReportDate)
-	if err != nil {
-		return result, err
-	}
-	accountCorrectionCoefficients := make(map[string]*float64, len(overlapPoints))
-	for _, point := range overlapPoints {
-		accountCorrectionCoefficients[point.ReportDate] = point.OverlapCoefficient
-	}
 	accountRows, err := p.pool.Query(ctx, `
 		SELECT accounts.report_date::TEXT, accounts.subaccount, accounts.placement,
 			accounts.spend::DOUBLE PRECISION, accounts.search_users,
@@ -85,15 +76,13 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	defer accountRows.Close()
 
 	type accountSnapshot struct {
-		Spend                 float64
-		SearchUsers           int64
-		OriginalCost          *float64
-		CorrectionCoefficient *float64
-		Cost                  *float64
-		SearchRatePct         *float64
-		CPC                   *float64
-		CTRPct                *float64
-		NoteCount             int64
+		Spend         float64
+		SearchUsers   int64
+		Cost          *float64
+		SearchRatePct *float64
+		CPC           *float64
+		CTRPct        *float64
+		NoteCount     int64
 	}
 	history := map[string]map[string]accountSnapshot{}
 	for accountRows.Next() {
@@ -107,11 +96,8 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		); err != nil {
 			return result, fmt.Errorf("scan Maituo account diagnosis history: %w", err)
 		}
-		originalCost := diagnosisNullableCost(nullableCost)
-		coefficient := accountCorrectionCoefficients[reportDate]
 		snapshot := accountSnapshot{
-			Spend: spend, SearchUsers: searchUsers, OriginalCost: originalCost,
-			CorrectionCoefficient: coefficient, Cost: diagnosisCorrectedCost(originalCost, coefficient),
+			Spend: spend, SearchUsers: searchUsers, Cost: diagnosisNullableCost(nullableCost),
 			SearchRatePct: diagnosisNullableCost(searchRatePct), CPC: diagnosisNullableCost(cpc),
 			CTRPct: diagnosisNullableCost(ctrPct), NoteCount: noteCount,
 		}
@@ -135,22 +121,21 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		}
 		account, placement := splitDiagnosisAccountKey(key)
 		item := maituo.AccountDiagnosis{
-			Account:               account,
-			Placement:             placement,
-			Spend:                 roundMaituoMoney(current.Spend),
-			SearchUsers:           current.SearchUsers,
-			OriginalCost:          current.OriginalCost,
-			CorrectionCoefficient: current.CorrectionCoefficient,
-			Cost:                  current.Cost,
-			SearchRatePct:         current.SearchRatePct,
-			CPC:                   current.CPC,
-			CTRPct:                current.CTRPct,
-			NoteCount:             current.NoteCount,
-			CostMetric:            diagnosisCostMetric(placement),
-			KPI:                   maituoAccountDiagnosisKPI,
-			Status:                diagnosisAccountStatus(current.Cost),
-			Points:                []maituo.AccountDiagnosisPoint{},
-			Plans:                 []maituo.PlanDiagnosis{},
+			Account:       account,
+			Placement:     placement,
+			Spend:         roundMaituoMoney(current.Spend),
+			SearchUsers:   current.SearchUsers,
+			OriginalCost:  current.Cost,
+			Cost:          current.Cost,
+			SearchRatePct: current.SearchRatePct,
+			CPC:           current.CPC,
+			CTRPct:        current.CTRPct,
+			NoteCount:     current.NoteCount,
+			CostMetric:    diagnosisCostMetric(placement),
+			KPI:           maituoAccountDiagnosisKPI,
+			Status:        diagnosisAccountStatus(current.Cost),
+			Points:        []maituo.AccountDiagnosisPoint{},
+			Plans:         []maituo.PlanDiagnosis{},
 		}
 		if previous, exists := snapshots[previousDate]; exists {
 			item.PreviousCost = previous.Cost
@@ -168,8 +153,7 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 				noteCount := snapshot.NoteCount
 				point.Spend = &spend
 				point.SearchUsers = &searchUsers
-				point.OriginalCost = snapshot.OriginalCost
-				point.CorrectionCoefficient = snapshot.CorrectionCoefficient
+				point.OriginalCost = snapshot.Cost
 				point.Cost = snapshot.Cost
 				point.SearchRatePct = snapshot.SearchRatePct
 				point.CPC = snapshot.CPC
@@ -237,7 +221,7 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		return result.AccountOverviews[left].CurrentTotalSpend > result.AccountOverviews[right].CurrentTotalSpend
 	})
 
-	historyRows, reportDates, err := p.maituoDiagnosisPlanHistory(ctx, result.ReportDate, spu, accountIndexes)
+	historyRows, reportDates, err := p.maituoDiagnosisPlanHistory(ctx, result.ReportDate, accountIndexes)
 	if err != nil {
 		return result, err
 	}
@@ -274,15 +258,13 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		if !ok {
 			continue
 		}
-		originalCost := diagnosisPlanOriginalCost(row)
 		cost := diagnosisPlanCost(row)
 		kpi := diagnosisPlanKPI(row.Placement)
 		consecutive := diagnosisConsecutiveOverKPI(planHistory[diagnosisPlanKey(row)], reportDates, kpi)
 		action := diagnosisPlanAction(cost, consecutive, kpi)
 		plan := maituo.PlanDiagnosis{
 			NoteID: row.NoteID, NoteURL: row.NoteURL, CampaignName: row.CampaignName,
-			Spend: roundMaituoMoney(row.Spend), OriginalCost: originalCost,
-			CorrectionCoefficient: row.CorrectionCoefficient, Cost: cost,
+			Spend: roundMaituoMoney(row.Spend), OriginalCost: cost, Cost: cost,
 			CostMetric: diagnosisCostMetric(row.Placement), KPI: kpi,
 			OverKPI: cost != nil && *cost >= kpi, Action: action, ConsecutiveOverKPI: consecutive,
 		}
@@ -316,19 +298,15 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	return result, nil
 }
 
-func (p *Postgres) maituoDiagnosisPlanHistory(ctx context.Context, reportDate, spu string, accountIndexes map[string]int) ([]diagnosisHistoryRow, []string, error) {
+func (p *Postgres) maituoDiagnosisPlanHistory(ctx context.Context, reportDate string, accountIndexes map[string]int) ([]diagnosisHistoryRow, []string, error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT notes.report_date::TEXT, notes.note_id, notes.note_url, notes.subaccount,
 			notes.campaign_name, notes.placement, notes.spend::DOUBLE PRECISION,
-			notes.search_cost::DOUBLE PRECISION, notes.estimated_postback_cost::DOUBLE PRECISION,
-			overlap.note_overlap_coefficient::DOUBLE PRECISION
+			notes.search_cost::DOUBLE PRECISION, notes.estimated_postback_cost::DOUBLE PRECISION
 		FROM maituo_customer_daily_notes notes
-		JOIN maituo_customer_daily_search_user_overlap overlap
-		  ON overlap.report_date = notes.report_date
-		 AND overlap.spu = $2
 		WHERE notes.deleted_at IS NULL AND notes.report_date <= $1::DATE
 		ORDER BY notes.report_date DESC, notes.subaccount, notes.placement, notes.campaign_name, notes.note_id
-	`, reportDate, spu)
+	`, reportDate)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query Maituo plan diagnosis history: %w", err)
 	}
@@ -337,10 +315,10 @@ func (p *Postgres) maituoDiagnosisPlanHistory(ctx context.Context, reportDate, s
 	reportDateSet := map[string]struct{}{}
 	for rows.Next() {
 		var row diagnosisHistoryRow
-		var searchCost, postbackCost, correctionCoefficient pgtype.Float8
+		var searchCost, postbackCost pgtype.Float8
 		if err := rows.Scan(
 			&row.ReportDate, &row.NoteID, &row.NoteURL, &row.Account, &row.CampaignName,
-			&row.Placement, &row.Spend, &searchCost, &postbackCost, &correctionCoefficient,
+			&row.Placement, &row.Spend, &searchCost, &postbackCost,
 		); err != nil {
 			return nil, nil, fmt.Errorf("scan Maituo plan diagnosis history: %w", err)
 		}
@@ -349,10 +327,6 @@ func (p *Postgres) maituoDiagnosisPlanHistory(ctx context.Context, reportDate, s
 		}
 		row.SearchCost = diagnosisNullableCost(searchCost)
 		row.PostbackCost = diagnosisNullableCost(postbackCost)
-		if correctionCoefficient.Valid {
-			value := correctionCoefficient.Float64
-			row.CorrectionCoefficient = &value
-		}
 		history = append(history, row)
 		reportDateSet[row.ReportDate] = struct{}{}
 	}
@@ -547,23 +521,11 @@ func diagnosisPlanKey(row diagnosisHistoryRow) string {
 	return row.NoteID + "\x00" + row.Account + "\x00" + row.CampaignName + "\x00" + row.Placement
 }
 
-func diagnosisPlanOriginalCost(row diagnosisHistoryRow) *float64 {
+func diagnosisPlanCost(row diagnosisHistoryRow) *float64 {
 	if row.Placement == "信息流" {
 		return row.PostbackCost
 	}
 	return row.SearchCost
-}
-
-func diagnosisPlanCost(row diagnosisHistoryRow) *float64 {
-	return diagnosisCorrectedCost(diagnosisPlanOriginalCost(row), row.CorrectionCoefficient)
-}
-
-func diagnosisCorrectedCost(originalCost, coefficient *float64) *float64 {
-	if originalCost == nil || coefficient == nil || *coefficient <= 0 {
-		return nil
-	}
-	corrected := roundMaituoMoney(*originalCost * *coefficient)
-	return &corrected
 }
 
 func diagnosisCostMetric(placement string) string {

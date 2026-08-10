@@ -33,9 +33,6 @@
 .diagnosis-over-value { color: #b23a3a !important; font-weight: 650; }
 .diagnosis-good-value { color: #1d7a52 !important; }
 .diagnosis-sparkline { width: 92px; height: 28px; display: block; overflow: visible; }
-.diagnosis-cost-comparison { min-width: 0; display: inline-flex; flex-direction: column; align-items: flex-end; gap: 3px; line-height: 1; vertical-align: middle; }
-.diagnosis-cost-comparison strong { color: #30363a; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.diagnosis-cost-comparison small { color: #8a9196; font-size: 8px; font-variant-numeric: tabular-nums; }
 
 .diagnosis-sparkline path { fill: none; stroke: #2f7d67; stroke-width: 2; }
 .diagnosis-sparkline circle { fill: #2f7d67; stroke: #fff; stroke-width: 1.5; }
