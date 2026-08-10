@@ -15,6 +15,7 @@ test("opens the first-level red materials directory from the homepage", async ({
   const pages: string[] = [];
   const requestedManuscriptIDs: string[] = [];
   const savedReferenceContents: string[] = [];
+  const requestedFilters: Array<{ provider: string; noteType: string; audience: string }> = [];
   const referenceContents = new Map<string, string>([[filledMaterialID, "这是已经填充的参考素材正文。"]]);
   await page.route("**/paipai/healthz", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) }));
   await page.route("**/paipai/api/imports/maituo-customer-daily", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] }) }));
@@ -92,6 +93,11 @@ test("opens the first-level red materials directory from the homepage", async ({
     const requestedPage = url.searchParams.get("page") || "1";
     searches.push(url.searchParams.get("q") || "");
     pages.push(requestedPage);
+    requestedFilters.push({
+      provider: url.searchParams.get("provider") || "",
+      noteType: url.searchParams.get("note_type") || "",
+      audience: url.searchParams.get("audience") || ""
+    });
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -99,6 +105,22 @@ test("opens the first-level red materials directory from the homepage", async ({
         success: true,
         data: {
           search: url.searchParams.get("q") || "",
+          filters: {
+            provider: url.searchParams.get("provider") || "",
+            note_type: url.searchParams.get("note_type") || "",
+            cover_type: url.searchParams.get("cover_type") || "",
+            commercial_intensity: url.searchParams.get("commercial_intensity") || "",
+            audience: url.searchParams.get("audience") || "",
+            user_scenario: url.searchParams.get("user_scenario") || ""
+          },
+          filter_options: {
+            providers: ["智元", "曼杰"],
+            note_type: ["科普", "经验分享"],
+            cover_type: ["大字报", "产品图"],
+            commercial_intensity: ["软广", "硬广"],
+            audience: ["职场人", "中老年"],
+            user_scenario: ["精力疲惫", "父母心脏养护"]
+          },
           stats: { material_count: 30, source_note_count: 27, reference_count: 34, provider_count: 3 },
           total: 30,
           page: Number(requestedPage),
@@ -109,6 +131,13 @@ test("opens the first-level red materials directory from the homepage", async ({
             source_note_ids: sourceNoteIDs,
             source_manuscripts: sourceManuscripts,
             providers: ["智元", "曼杰"],
+            tags: {
+              note_type: ["科普"],
+              cover_type: ["大字报"],
+              commercial_intensity: ["软广"],
+              audience: ["职场人"],
+              user_scenario: ["精力疲惫"]
+            },
             usage_count: 2,
             has_content: false,
             content_source: ""
@@ -118,6 +147,13 @@ test("opens the first-level red materials directory from the homepage", async ({
             source_note_ids: [sourceNoteIDs[1]],
             source_manuscripts: [sourceManuscripts[1]],
             providers: ["智元"],
+            tags: {
+              note_type: ["经验分享"],
+              cover_type: ["产品图"],
+              commercial_intensity: ["硬广"],
+              audience: ["中老年"],
+              user_scenario: ["父母心脏养护"]
+            },
             usage_count: 1,
             has_content: true,
             content_source: "manuscript"
@@ -137,6 +173,21 @@ test("opens the first-level red materials directory from the homepage", async ({
   await expect(page.locator(".red-material-stats")).toContainText("34");
   await expect(page.getByText("智元", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("曼杰", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "内容类型" }).selectOption("科普");
+  await expect.poll(() => requestedFilters.some((filters) => filters.noteType === "科普")).toBe(true);
+  await page.getByRole("button", { name: "按对话人群筛选 职场人" }).click();
+  await expect.poll(() => requestedFilters.some((filters) =>
+    filters.noteType === "科普" && filters.audience === "职场人"
+  )).toBe(true);
+  const resetFilters = page.getByRole("button", { name: "清除全部筛选" });
+  await expect(resetFilters).toBeEnabled();
+  await resetFilters.click();
+  await expect(page.getByRole("combobox", { name: "内容类型" })).toHaveValue("");
+  await expect(page.getByRole("combobox", { name: "对话人群" })).toHaveValue("");
+  await page.getByRole("button", { name: "按机构筛选 智元" }).first().click();
+  await expect.poll(() => requestedFilters.some((filters) => filters.provider === "智元")).toBe(true);
+  await page.getByRole("button", { name: "取消机构筛选 智元" }).first().click();
+  await expect(page.getByRole("combobox", { name: "来源机构" })).toHaveValue("");
   const materialLink = page.getByRole("link", { name: `打开红薯素材 ${materialID}` });
   await expect(materialLink).toHaveAttribute("href", `https://www.xiaohongshu.com/explore/${materialID}`);
   await expect(page.getByText("未填充", { exact: true })).toHaveCount(1);
@@ -178,7 +229,7 @@ test("opens the first-level red materials directory from the homepage", async ({
   await manuscriptDialog.getByRole("button", { name: "关闭对应稿件" }).click();
   await expect(manuscriptDialog).toHaveCount(0);
 
-  await page.getByPlaceholder("搜索素材 ID、稿件标题或机构").fill("智元");
+  await page.getByPlaceholder("搜索素材 ID、稿件标题、机构或标签").fill("智元");
   await expect.poll(() => searches).toContain("智元");
   await page.getByRole("button", { name: "下一页" }).click();
   await expect.poll(() => pages).toContain("2");
