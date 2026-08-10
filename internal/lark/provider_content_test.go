@@ -139,7 +139,7 @@ func TestProviderNoteDocumentRefAndContent(t *testing.T) {
 	}
 
 	referenceID := "69b1039d00000000080316ae"
-	notes, errorsCount := providerNotes([]model.DocumentRef{ref}, []model.Document{{
+	notes, errorsCount := providerNotes("manjie", []model.DocumentRef{ref}, []model.Document{{
 		Provider: ref.Provider, ResourceKey: ref.ResourceKey, Title: "飞书文档内部标题", Content: "笔记正文", Status: documentSucceeded,
 		ReferenceNoteIDs: []string{ref.RecordID, referenceID},
 	}})
@@ -150,6 +150,23 @@ func TestProviderNoteDocumentRefAndContent(t *testing.T) {
 		notes[0].SourceTitle != "通勤精力管理实测" ||
 		!slices.Equal(notes[0].ReferenceNoteIDs, []string{referenceID}) {
 		t.Fatalf("providerNotes() = %+v", notes)
+	}
+}
+
+func TestProviderNotesUsesYouyiyouerContentTitle(t *testing.T) {
+	ref := model.DocumentRef{
+		RecordID: "6a59e5d700000000010016cf", Provider: "feishu", ResourceKey: "docx:doc-token",
+		Label: "脉拓辅酶q10-职场人-Chris-0706",
+	}
+	notes, errorsCount := providerNotes("youyiyouer", []model.DocumentRef{ref}, []model.Document{{
+		Provider: ref.Provider, ResourceKey: ref.ResourceKey, Title: "飞书文档内部标题",
+		Content: "标题：吃了两个月，说点大实话...\n正文：测试正文", Status: documentSucceeded,
+	}})
+	if errorsCount != 0 || len(notes) != 1 {
+		t.Fatalf("providerNotes() notes=%+v errors=%d", notes, errorsCount)
+	}
+	if notes[0].SourceTitle != "吃了两个月，说点大实话..." {
+		t.Fatalf("providerNotes() source title = %q", notes[0].SourceTitle)
 	}
 }
 

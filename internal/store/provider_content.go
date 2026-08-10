@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"paipai-red-campaign-manager/internal/model"
+	"paipai-red-campaign-manager/internal/providercontent"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -97,18 +98,46 @@ func (p *Postgres) ProviderNotesToFetch(ctx context.Context, refs []model.Docume
 	return candidates, nil
 }
 
-func (p *Postgres) UpdateProviderNoteSources(ctx context.Context, refs []model.DocumentRef) error {
+func (p *Postgres) UpdateProviderNoteSources(ctx context.Context, providerCode string, refs []model.DocumentRef) error {
 	if len(refs) == 0 {
 		return nil
 	}
+	noteIDs := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		noteIDs = append(noteIDs, ref.RecordID)
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT note_id, note_content
+		FROM service_provider_notes
+		WHERE note_id = ANY($1::text[])
+	`, noteIDs)
+	if err != nil {
+		return fmt.Errorf("query provider note contents for source titles: %w", err)
+	}
+	contents := make(map[string]string, len(noteIDs))
+	for rows.Next() {
+		var noteID, content string
+		if err := rows.Scan(&noteID, &content); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan provider note content for source title: %w", err)
+		}
+		contents[noteID] = content
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate provider note contents for source titles: %w", err)
+	}
+	rows.Close()
+
 	batch := &pgx.Batch{}
 	for _, ref := range refs {
+		sourceTitle := providercontent.SourceTitle(providerCode, contents[ref.RecordID], ref.Label, "")
 		batch.Queue(`
 			UPDATE service_provider_notes
 			SET source_title = COALESCE(NULLIF(BTRIM($2), ''), source_title),
 				source_url = COALESCE(NULLIF(BTRIM($3), ''), source_url)
 			WHERE note_id = $1
-		`, ref.RecordID, ref.Label, ref.SourceURL)
+		`, ref.RecordID, sourceTitle, ref.SourceURL)
 	}
 	results := p.pool.SendBatch(ctx, batch)
 	for index := 0; index < batch.Len(); index++ {

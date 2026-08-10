@@ -74,7 +74,7 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 			{RecordKey: "row:2", SourceRowNumber: 2, NoteID: noteID1, Progress: "已通过"},
 		},
 		Notes: []model.ProviderNote{
-			{NoteID: noteID1, NoteContent: "更新后的正文"},
+			{NoteID: noteID1, NoteContent: "标题：存量正文标题\n正文：更新后的正文"},
 		},
 	})
 	if err != nil {
@@ -83,9 +83,9 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 	if second.Upserted != 1 || second.Deleted != 1 {
 		t.Fatalf("second result = %+v", second)
 	}
-	if err := postgres.UpdateProviderNoteSources(ctx, []model.DocumentRef{{
+	if err := postgres.UpdateProviderNoteSources(ctx, "youyiyouer", []model.DocumentRef{{
 		RecordID:  noteID1,
-		Label:     "通勤精力管理实测",
+		Label:     "内部稿件名",
 		SourceURL: "https://example.feishu.cn/wiki/manuscript-1",
 	}}); err != nil {
 		t.Fatalf("UpdateProviderNoteSources() error = %v", err)
@@ -119,8 +119,8 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query provider index: %v", err)
 	}
-	if active != 1 || deleted != 1 || progress != "已通过" || noteContent != "更新后的正文" ||
-		sourceTitle != "通勤精力管理实测" || sourceURL != "https://example.feishu.cn/wiki/manuscript-1" ||
+	if active != 1 || deleted != 1 || progress != "已通过" || noteContent != "标题：存量正文标题\n正文：更新后的正文" ||
+		sourceTitle != "存量正文标题" || sourceURL != "https://example.feishu.cn/wiki/manuscript-1" ||
 		status != "succeeded" || lastSyncedAt == nil {
 		t.Fatalf("active=%d deleted=%d progress=%q note_content=%q status=%q last_synced_at=%v",
 			active, deleted, progress, noteContent, status, lastSyncedAt)

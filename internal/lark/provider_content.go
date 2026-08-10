@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"paipai-red-campaign-manager/internal/model"
+	"paipai-red-campaign-manager/internal/providercontent"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larksheets "github.com/larksuite/oapi-sdk-go/v3/service/sheets/v3"
@@ -126,7 +127,7 @@ func (c *Client) FetchProviderContent(ctx context.Context, table model.ProviderC
 	}, nil
 }
 
-func (c *Client) FetchProviderNotes(ctx context.Context, refs []model.DocumentRef) ([]model.ProviderNote, int, error) {
+func (c *Client) FetchProviderNotes(ctx context.Context, providerCode string, refs []model.DocumentRef) ([]model.ProviderNote, int, error) {
 	documents := make([]model.Document, 0, len(refs))
 	seen := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
@@ -148,7 +149,7 @@ func (c *Client) FetchProviderNotes(ctx context.Context, refs []model.DocumentRe
 			ErrorMessage: "non-Feishu manuscript content fetch is disabled",
 		})
 	}
-	notes, fetchErrors := providerNotes(refs, documents)
+	notes, fetchErrors := providerNotes(providerCode, refs, documents)
 	return notes, fetchErrors, nil
 }
 
@@ -420,7 +421,7 @@ func isFinalLinkLabel(value string) bool {
 		strings.Contains(normalized, "最终稿")
 }
 
-func providerNotes(refs []model.DocumentRef, documents []model.Document) ([]model.ProviderNote, int) {
+func providerNotes(providerCode string, refs []model.DocumentRef, documents []model.Document) ([]model.ProviderNote, int) {
 	contents := make(map[string]model.Document, len(documents))
 	for _, document := range documents {
 		if document.Status != documentSucceeded || (document.Content == "" && len(document.Blocks) == 0) {
@@ -437,10 +438,7 @@ func providerNotes(refs []model.DocumentRef, documents []model.Document) ([]mode
 			errorsCount++
 			continue
 		}
-		sourceTitle := strings.TrimSpace(ref.Label)
-		if sourceTitle == "" {
-			sourceTitle = strings.TrimSpace(document.Title)
-		}
+		sourceTitle := providercontent.SourceTitle(providerCode, document.Content, ref.Label, document.Title)
 		notes = append(notes, model.ProviderNote{
 			NoteID: ref.RecordID, NoteContent: document.Content,
 			ContentBlocks: document.Blocks, ReferenceNoteIDs: excludeReferenceNoteID(document.ReferenceNoteIDs, ref.RecordID),

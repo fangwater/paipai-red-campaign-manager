@@ -18,13 +18,13 @@ const providerNoteBatchSize = 1
 
 type ProviderSource interface {
 	FetchProviderContent(context.Context, model.ProviderContentTable) (model.ProviderContentSnapshot, error)
-	FetchProviderNotes(context.Context, []model.DocumentRef) ([]model.ProviderNote, int, error)
+	FetchProviderNotes(context.Context, string, []model.DocumentRef) ([]model.ProviderNote, int, error)
 }
 
 type ProviderDestination interface {
 	ProviderContentTables(context.Context) ([]model.ProviderContentTable, error)
 	ProviderNotesToFetch(context.Context, []model.DocumentRef) ([]model.DocumentRef, error)
-	UpdateProviderNoteSources(context.Context, []model.DocumentRef) error
+	UpdateProviderNoteSources(context.Context, string, []model.DocumentRef) error
 	MarkProviderContentSyncStarted(context.Context, string) error
 	MarkProviderContentSyncFailed(context.Context, string, error) error
 	UpsertProviderNotes(context.Context, []model.ProviderNote) error
@@ -89,7 +89,7 @@ func (s *ProviderSyncer) RunProviders(ctx context.Context, providerCodes []strin
 			syncErrors = append(syncErrors, syncErr)
 			continue
 		}
-		if updateErr := s.destination.UpdateProviderNoteSources(ctx, snapshot.NoteRefs); updateErr != nil {
+		if updateErr := s.destination.UpdateProviderNoteSources(ctx, table.ProviderCode, snapshot.NoteRefs); updateErr != nil {
 			syncErr := fmt.Errorf("update manuscript titles for provider %s: %w", table.ProviderName, updateErr)
 			if markErr := s.markFailed(table.ProviderCode, updateErr); markErr != nil {
 				syncErr = errors.Join(syncErr, markErr)
@@ -102,7 +102,7 @@ func (s *ProviderSyncer) RunProviders(ctx context.Context, providerCodes []strin
 		noteSyncFailed := false
 		for start := 0; start < len(noteRefs); start += providerNoteBatchSize {
 			end := min(start+providerNoteBatchSize, len(noteRefs))
-			notes, batchErrors, fetchErr := s.source.FetchProviderNotes(ctx, noteRefs[start:end])
+			notes, batchErrors, fetchErr := s.source.FetchProviderNotes(ctx, table.ProviderCode, noteRefs[start:end])
 			if fetchErr != nil {
 				syncErr := fmt.Errorf("fetch incremental notes for provider %s: %w", table.ProviderName, fetchErr)
 				if markErr := s.markFailed(table.ProviderCode, fetchErr); markErr != nil {

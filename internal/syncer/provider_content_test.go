@@ -39,7 +39,7 @@ func (s providerSourceStub) FetchProviderContent(_ context.Context, table model.
 	}, nil
 }
 
-func (s providerSourceStub) FetchProviderNotes(_ context.Context, refs []model.DocumentRef) ([]model.ProviderNote, int, error) {
+func (s providerSourceStub) FetchProviderNotes(_ context.Context, _ string, refs []model.DocumentRef) ([]model.ProviderNote, int, error) {
 	if s.fetchedNoteBatches != nil {
 		*s.fetchedNoteBatches = append(*s.fetchedNoteBatches, len(refs))
 	}
@@ -51,12 +51,13 @@ func (s providerSourceStub) FetchProviderNotes(_ context.Context, refs []model.D
 }
 
 type providerDestinationStub struct {
-	tables      []model.ProviderContentTable
-	started     []string
-	failed      []string
-	saved       []string
-	sourceRefs  []model.DocumentRef
-	noteBatches []int
+	tables          []model.ProviderContentTable
+	started         []string
+	failed          []string
+	saved           []string
+	sourceRefs      []model.DocumentRef
+	sourceProviders []string
+	noteBatches     []int
 }
 
 func (d *providerDestinationStub) ProviderContentTables(context.Context) ([]model.ProviderContentTable, error) {
@@ -67,7 +68,8 @@ func (d *providerDestinationStub) ProviderNotesToFetch(_ context.Context, refs [
 	return refs, nil
 }
 
-func (d *providerDestinationStub) UpdateProviderNoteSources(_ context.Context, refs []model.DocumentRef) error {
+func (d *providerDestinationStub) UpdateProviderNoteSources(_ context.Context, providerCode string, refs []model.DocumentRef) error {
+	d.sourceProviders = append(d.sourceProviders, providerCode)
 	d.sourceRefs = append(d.sourceRefs, refs...)
 	return nil
 }
@@ -114,6 +116,9 @@ func TestProviderRunContinuesAfterProviderFailure(t *testing.T) {
 	}
 	if len(destination.saved) != 1 || destination.saved[0] != "youyiyouer" {
 		t.Fatalf("saved = %v", destination.saved)
+	}
+	if strings.Join(destination.sourceProviders, ",") != "youyiyouer" {
+		t.Fatalf("source title providers = %v", destination.sourceProviders)
 	}
 }
 
