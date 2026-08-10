@@ -406,7 +406,7 @@ curl -sS http://127.0.0.1:18080/v1/creativities/all \
 
 创意上游接口为 `POST https://adapi.xiaohongshu.com/api/open/jg/creativity/search`，分页位于 `page.page_index`、`page.page_size`，参见[小红书官方“创意查询”文档](https://ad-market.xiaohongshu.com/docs-center?bizType=943&articleId=3158)。
 
-业务数据不会在定时器或服务启动时自动刷新。只有显式调用计划、单元或创意接口时，目标表才会更新。三个 Make 命令分别刷新全部授权广告主，计划和单元默认使用增量模式，创意使用完整模式：
+计划、单元和创意支持自动与显式刷新。三个手动 Make 命令分别刷新全部授权广告主，计划和单元默认使用增量模式，创意使用完整模式：
 
 ```bash
 make xhs-sync-campaigns
@@ -414,6 +414,18 @@ make xhs-sync-units
 make xhs-sync-creativities
 make xhs-sync-status
 ```
+
+每日生产任务在 03:30（Asia/Shanghai）依次完整刷新计划、单元和创意，只有上一步成功后才会继续。安装后可立即执行、查看 timer 状态和日志：
+
+```bash
+make xhs-sync-daily
+make xhs-sync-daily-install
+make xhs-sync-daily-now
+make xhs-sync-daily-status
+make xhs-sync-daily-logs
+```
+
+`sync-daily` 会轮询每个运行记录直到完成，任一目标失败都会以非零状态退出。systemd timer 使用 `Persistent=true`，失败后每 10 分钟重试，最多 3 次。
 
 HTTP 请求体为空或 `{}` 时处理全部授权广告主；传 `advertiser_id` 时只处理指定的已授权广告主。计划和单元的 `mode` 可选 `incremental` 或 `full`，省略时默认为 `incremental`：
 

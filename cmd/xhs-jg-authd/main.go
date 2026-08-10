@@ -63,6 +63,8 @@ func run(ctx context.Context, args []string) error {
 		return runSyncControlRequest(ctx, "/v1/sync/units", xhssync.ModeIncremental, args[1:])
 	case "sync-creativities":
 		return runSyncControlRequest(ctx, "/v1/sync/creativities", xhssync.ModeFull, args[1:])
+	case "sync-daily":
+		return runDailySync(ctx, args[1:], os.Stdout)
 	case "help", "-h", "--help":
 		printUsage(os.Stdout)
 		return nil
@@ -389,4 +391,5 @@ func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "  xhs-jg-authd sync-campaigns [--mode incremental|full] [--advertiser-id ID]")
 	fmt.Fprintln(output, "  xhs-jg-authd sync-units [--mode incremental|full] [--advertiser-id ID]")
 	fmt.Fprintln(output, "  xhs-jg-authd sync-creativities [--advertiser-id ID]")
+	fmt.Fprintln(output, "  xhs-jg-authd sync-daily [--timeout DURATION] [--poll-interval DURATION]")
 }

@@ -125,9 +125,11 @@ func (p *Postgres) XHSJGIncrementalSince(ctx context.Context, advertiserID int64
 	}
 	var since time.Time
 	err = p.pool.QueryRow(ctx, fmt.Sprintf(`
-		SELECT COALESCE(%s, %s, NOW() - INTERVAL '2 days')
-		FROM xhs_jg_advertisers
-		WHERE advertiser_id=$1
+		SELECT COALESCE((
+			SELECT COALESCE(%s, %s)
+			FROM xhs_jg_advertisers
+			WHERE advertiser_id=$1
+		), NOW() - INTERVAL '2 days')
 	`, incrementalColumn, fullColumn), advertiserID).Scan(&since)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("query XHS Spotlight %s incremental cursor for advertiser %d: %w", target, advertiserID, err)

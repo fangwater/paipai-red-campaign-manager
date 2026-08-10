@@ -19,3 +19,4 @@ PrivateDevices=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/paipai-red-campaign-manager/.guorai

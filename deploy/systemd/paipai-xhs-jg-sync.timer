@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PaiPai XHS Spotlight structure sync every day
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1min
+Unit=paipai-xhs-jg-sync.service
+
+[Install]
+WantedBy=timers.target

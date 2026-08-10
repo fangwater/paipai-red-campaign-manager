@@ -1,6 +1,7 @@
 .PHONY: run test build frontend-dev frontend-build frontend-deploy xhs-token xhs-refresh xhs-authd-build xhs-authd-start \
 	lark-sync-build lark-sync-start lark-sync-manuscripts lark-sync-dandelion lark-sync-status lark-sync-logs lark-sync-stop \
 	xhs-authd-authorize xhs-authd-status xhs-authd-logs xhs-authd-stop xhs-campaign-sync xhs-sync-status xhs-sync-campaigns xhs-sync-units xhs-sync-creativities \
+	xhs-sync-daily xhs-sync-daily-install xhs-sync-daily-now xhs-sync-daily-status xhs-sync-daily-logs \
 	embeddings-refresh embeddings-force-refresh guorai-build guorai-login guorai-sync guorai-sync-install guorai-sync-now guorai-sync-status guorai-sync-logs
 
 run:
@@ -87,6 +88,25 @@ xhs-sync-units: xhs-authd-build
 
 xhs-sync-creativities: xhs-authd-build
 	@set -a; . ./.env; set +a; ./bin/xhs-jg-authd sync-creativities
+
+xhs-sync-daily: xhs-authd-build
+	@./bin/xhs-jg-authd sync-daily
+
+xhs-sync-daily-install: xhs-authd-build
+	systemd-analyze verify deploy/systemd/paipai-xhs-jg-sync.service deploy/systemd/paipai-xhs-jg-sync.timer
+	@sudo install -m 0644 deploy/systemd/paipai-xhs-jg-sync.service /etc/systemd/system/paipai-xhs-jg-sync.service
+	@sudo install -m 0644 deploy/systemd/paipai-xhs-jg-sync.timer /etc/systemd/system/paipai-xhs-jg-sync.timer
+	@sudo systemctl daemon-reload
+	@sudo systemctl enable --now paipai-xhs-jg-sync.timer
+
+xhs-sync-daily-now: xhs-authd-build
+	@sudo systemctl start paipai-xhs-jg-sync.service
+
+xhs-sync-daily-status:
+	@systemctl status paipai-xhs-jg-sync.timer paipai-xhs-jg-sync.service --no-pager
+
+xhs-sync-daily-logs:
+	@journalctl -u paipai-xhs-jg-sync.service -n 100 --no-pager
 
 xhs-authd-logs:
 	pm2 logs paipai-xhs-jg-authd --lines 100
