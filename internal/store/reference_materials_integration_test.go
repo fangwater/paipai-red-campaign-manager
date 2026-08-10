@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -61,8 +62,16 @@ func TestMaituoReferenceMaterialsIntegration(t *testing.T) {
 			SheetID: "sheet-test", SheetName: "稿件测试表",
 		},
 		Records: []model.ProviderNoteExecution{
-			{RecordKey: "row:2", SourceRowNumber: 2, NoteID: source1},
-			{RecordKey: "row:3", SourceRowNumber: 3, NoteID: source2},
+			{
+				RecordKey: "row:2", SourceRowNumber: 2, NoteID: source1,
+				CoverType: "产品图", CommercialIntensity: "硬广", Audience: "职场人",
+				UserScenario: "精力疲惫", NoteType: "直给推荐",
+			},
+			{
+				RecordKey: "row:3", SourceRowNumber: 3, NoteID: source2,
+				CoverType: "大字报", CommercialIntensity: "软广", Audience: "中老年",
+				UserScenario: "父母心脏养护", NoteType: "科普",
+			},
 		},
 		Notes: []model.ProviderNote{
 			{NoteID: source1, NoteContent: "第一篇", SourceTitle: "第一篇稿件",
@@ -89,6 +98,20 @@ func TestMaituoReferenceMaterialsIntegration(t *testing.T) {
 		len(result.Items[0].SourceNoteIDs) != 2 || len(result.Items[0].Providers) != 1 ||
 		result.Items[0].HasContent {
 		t.Fatalf("first item = %+v", result.Items[0])
+	}
+	options := result.FilterOptions
+	if !slices.Equal(options.Providers, []string{prefix}) ||
+		!slices.Contains(options.NoteType, "直给推荐") || !slices.Contains(options.NoteType, "科普") ||
+		!slices.Contains(options.CoverType, "产品图") || !slices.Contains(options.CoverType, "大字报") ||
+		!slices.Contains(options.CommercialIntensity, "硬广") || !slices.Contains(options.CommercialIntensity, "软广") ||
+		!slices.Contains(options.Audience, "职场人") || !slices.Contains(options.Audience, "中老年") ||
+		!slices.Contains(options.UserScenario, "精力疲惫") || !slices.Contains(options.UserScenario, "父母心脏养护") {
+		t.Fatalf("filter options = %+v", options)
+	}
+	tags := result.Items[0].Tags
+	if !slices.Contains(tags.NoteType, "直给推荐") || !slices.Contains(tags.NoteType, "科普") ||
+		!slices.Contains(tags.Audience, "职场人") || !slices.Contains(tags.Audience, "中老年") {
+		t.Fatalf("first item tags = %+v", tags)
 	}
 	if len(result.Items[0].SourceManuscripts) != 2 {
 		t.Fatalf("first item sources = %+v", result.Items[0].SourceManuscripts)
@@ -165,5 +188,38 @@ func TestMaituoReferenceMaterialsIntegration(t *testing.T) {
 	}
 	if filtered.Total != 1 || filtered.Stats.ReferenceCount != 1 || filtered.Items[0].ReferenceNoteID != reference1 {
 		t.Fatalf("title filtered = %+v", filtered)
+	}
+
+	filtered, err = postgres.MaituoReferenceMaterials(ctx, maituo.ReferenceMaterialsQuery{
+		Filters: maituo.ReferenceMaterialFilters{Audience: "中老年", NoteType: "科普"},
+		Page:    1, PageSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filtered.Total != 1 || filtered.Stats.ReferenceCount != 1 || filtered.Items[0].UsageCount != 1 ||
+		len(filtered.Items[0].SourceNoteIDs) != 1 || filtered.Items[0].SourceNoteIDs[0] != source2 {
+		t.Fatalf("tag filtered = %+v", filtered)
+	}
+
+	filtered, err = postgres.MaituoReferenceMaterials(ctx, maituo.ReferenceMaterialsQuery{
+		Filters: maituo.ReferenceMaterialFilters{Audience: "职场人", NoteType: "科普"},
+		Page:    1, PageSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filtered.Total != 0 || !slices.Contains(filtered.FilterOptions.NoteType, "科普") {
+		t.Fatalf("cross-source filter = %+v", filtered)
+	}
+
+	filtered, err = postgres.MaituoReferenceMaterials(ctx, maituo.ReferenceMaterialsQuery{
+		Search: "父母心脏养护", Page: 1, PageSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filtered.Total != 1 || filtered.Items[0].ReferenceNoteID != reference1 || filtered.Items[0].UsageCount != 1 {
+		t.Fatalf("tag search = %+v", filtered)
 	}
 }

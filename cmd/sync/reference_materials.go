@@ -35,11 +35,28 @@ func (server *apiServer) maituoReferenceMaterials(writer http.ResponseWriter, re
 		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "搜索内容不能超过 200 个字符"})
 		return
 	}
+	filters := maituo.ReferenceMaterialFilters{
+		Provider:            strings.TrimSpace(request.URL.Query().Get("provider")),
+		NoteType:            strings.TrimSpace(request.URL.Query().Get("note_type")),
+		CoverType:           strings.TrimSpace(request.URL.Query().Get("cover_type")),
+		CommercialIntensity: strings.TrimSpace(request.URL.Query().Get("commercial_intensity")),
+		Audience:            strings.TrimSpace(request.URL.Query().Get("audience")),
+		UserScenario:        strings.TrimSpace(request.URL.Query().Get("user_scenario")),
+	}
+	for _, value := range []string{
+		filters.Provider, filters.NoteType, filters.CoverType,
+		filters.CommercialIntensity, filters.Audience, filters.UserScenario,
+	} {
+		if len([]rune(value)) > 100 {
+			writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "筛选标签不能超过 100 个字符"})
+			return
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
 	defer cancel()
 	result, err := server.maituoAnalytics.MaituoReferenceMaterials(ctx, maituo.ReferenceMaterialsQuery{
-		Search: search, Page: page, PageSize: pageSize,
+		Search: search, Filters: filters, Page: page, PageSize: pageSize,
 	})
 	if err != nil {
 		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})

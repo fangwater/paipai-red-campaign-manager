@@ -28,8 +28,35 @@ type NoteContent struct {
 
 type ReferenceMaterialsQuery struct {
 	Search   string
+	Filters  ReferenceMaterialFilters
 	Page     int
 	PageSize int
+}
+
+type ReferenceMaterialFilters struct {
+	Provider            string `json:"provider"`
+	NoteType            string `json:"note_type"`
+	CoverType           string `json:"cover_type"`
+	CommercialIntensity string `json:"commercial_intensity"`
+	Audience            string `json:"audience"`
+	UserScenario        string `json:"user_scenario"`
+}
+
+type ReferenceMaterialTags struct {
+	NoteType            []string `json:"note_type"`
+	CoverType           []string `json:"cover_type"`
+	CommercialIntensity []string `json:"commercial_intensity"`
+	Audience            []string `json:"audience"`
+	UserScenario        []string `json:"user_scenario"`
+}
+
+type ReferenceMaterialFilterOptions struct {
+	Providers           []string `json:"providers"`
+	NoteType            []string `json:"note_type"`
+	CoverType           []string `json:"cover_type"`
+	CommercialIntensity []string `json:"commercial_intensity"`
+	Audience            []string `json:"audience"`
+	UserScenario        []string `json:"user_scenario"`
 }
 
 type ReferenceMaterialSource struct {
@@ -44,6 +71,7 @@ type ReferenceMaterialItem struct {
 	SourceNoteIDs     []string                  `json:"source_note_ids"`
 	SourceManuscripts []ReferenceMaterialSource `json:"source_manuscripts"`
 	Providers         []string                  `json:"providers"`
+	Tags              ReferenceMaterialTags     `json:"tags"`
 	UsageCount        int                       `json:"usage_count"`
 	HasContent        bool                      `json:"has_content"`
 	ContentSource     string                    `json:"content_source"`
@@ -71,12 +99,14 @@ type ReferenceMaterialStats struct {
 }
 
 type ReferenceMaterials struct {
-	Search   string                  `json:"search"`
-	Stats    ReferenceMaterialStats  `json:"stats"`
-	Total    int                     `json:"total"`
-	Page     int                     `json:"page"`
-	PageSize int                     `json:"page_size"`
-	Items    []ReferenceMaterialItem `json:"items"`
+	Search        string                         `json:"search"`
+	Filters       ReferenceMaterialFilters       `json:"filters"`
+	FilterOptions ReferenceMaterialFilterOptions `json:"filter_options"`
+	Stats         ReferenceMaterialStats         `json:"stats"`
+	Total         int                            `json:"total"`
+	Page          int                            `json:"page"`
+	PageSize      int                            `json:"page_size"`
+	Items         []ReferenceMaterialItem        `json:"items"`
 }
 
 type NoteTags struct {

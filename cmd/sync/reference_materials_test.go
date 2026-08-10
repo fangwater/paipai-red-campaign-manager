@@ -13,15 +13,20 @@ import (
 func TestMaituoReferenceMaterials(t *testing.T) {
 	stub := &maituoAnalyticsStub{materialsResult: maituo.ReferenceMaterials{Total: 268}}
 	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
-	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/reference-materials?q=智元&page=2&page_size=40", nil)
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/reference-materials?q=智元&provider=有一有二&note_type=科普&cover_type=产品图&commercial_intensity=软广&audience=职场人&user_scenario=精力疲惫&page=2&page_size=40", nil)
 	response := httptest.NewRecorder()
 
 	server.maituoReferenceMaterials(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
+	filters := stub.materialsQuery.Filters
 	if stub.materialsCalls != 1 || stub.materialsQuery.Search != "智元" ||
-		stub.materialsQuery.Page != 2 || stub.materialsQuery.PageSize != 40 {
+		stub.materialsQuery.Page != 2 || stub.materialsQuery.PageSize != 40 ||
+		filters.Provider != "有一有二" ||
+		filters.NoteType != "科普" || filters.CoverType != "产品图" ||
+		filters.CommercialIntensity != "软广" ||
+		filters.Audience != "职场人" || filters.UserScenario != "精力疲惫" {
 		t.Fatalf("calls = %d, query = %+v", stub.materialsCalls, stub.materialsQuery)
 	}
 }
@@ -30,6 +35,22 @@ func TestMaituoReferenceMaterialsRejectsInvalidPageSize(t *testing.T) {
 	stub := &maituoAnalyticsStub{}
 	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
 	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/reference-materials?page_size=101", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoReferenceMaterials(response, request)
+	if response.Code != http.StatusBadRequest || stub.materialsCalls != 0 {
+		t.Fatalf("status = %d, calls = %d", response.Code, stub.materialsCalls)
+	}
+}
+
+func TestMaituoReferenceMaterialsRejectsLongFilter(t *testing.T) {
+	stub := &maituoAnalyticsStub{}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/analytics/maituo/reference-materials?audience="+strings.Repeat("人", 101),
+		nil,
+	)
 	response := httptest.NewRecorder()
 
 	server.maituoReferenceMaterials(response, request)

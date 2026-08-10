@@ -27,13 +27,38 @@ const referenceMaterialsCTE = `
 		  AND LOWER(BTRIM(reference.reference_note_id)) <> LOWER(BTRIM(notes.note_id))
 		GROUP BY LOWER(BTRIM(reference.reference_note_id)), notes.note_id,
 			notes.source_title, notes.source_url
-	), source_providers AS (
+	), source_metadata AS (
 		SELECT executions.note_id AS source_note_id,
 			COALESCE(
 				ARRAY_AGG(DISTINCT tables.provider_name ORDER BY tables.provider_name)
 					FILTER (WHERE tables.provider_name IS NOT NULL),
 				'{}'::TEXT[]
-			) AS providers
+			) AS providers,
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.note_type) ORDER BY BTRIM(executions.note_type))
+					FILTER (WHERE NULLIF(BTRIM(executions.note_type), '') IS NOT NULL),
+				'{}'::TEXT[]
+			) AS note_types,
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.cover_type) ORDER BY BTRIM(executions.cover_type))
+					FILTER (WHERE NULLIF(BTRIM(executions.cover_type), '') IS NOT NULL),
+				'{}'::TEXT[]
+			) AS cover_types,
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.commercial_intensity) ORDER BY BTRIM(executions.commercial_intensity))
+					FILTER (WHERE NULLIF(BTRIM(executions.commercial_intensity), '') IS NOT NULL),
+				'{}'::TEXT[]
+			) AS commercial_intensities,
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.audience) ORDER BY BTRIM(executions.audience))
+					FILTER (WHERE NULLIF(BTRIM(executions.audience), '') IS NOT NULL),
+				'{}'::TEXT[]
+			) AS audiences,
+			COALESCE(
+				ARRAY_AGG(DISTINCT BTRIM(executions.user_scenario) ORDER BY BTRIM(executions.user_scenario))
+					FILTER (WHERE NULLIF(BTRIM(executions.user_scenario), '') IS NOT NULL),
+				'{}'::TEXT[]
+			) AS user_scenarios
 		FROM service_provider_note_executions executions
 		JOIN service_provider_content_tables tables
 		  ON tables.provider_code=executions.provider_code
@@ -42,18 +67,38 @@ const referenceMaterialsCTE = `
 	), filtered_relationships AS (
 		SELECT relationships.reference_note_id, relationships.source_note_id,
 			relationships.source_title, relationships.source_url,
-			COALESCE(source_providers.providers, '{}'::TEXT[]) AS providers
+			COALESCE(source_metadata.providers, '{}'::TEXT[]) AS providers,
+			COALESCE(source_metadata.note_types, '{}'::TEXT[]) AS note_types,
+			COALESCE(source_metadata.cover_types, '{}'::TEXT[]) AS cover_types,
+			COALESCE(source_metadata.commercial_intensities, '{}'::TEXT[]) AS commercial_intensities,
+			COALESCE(source_metadata.audiences, '{}'::TEXT[]) AS audiences,
+			COALESCE(source_metadata.user_scenarios, '{}'::TEXT[]) AS user_scenarios
 		FROM relationships
-		LEFT JOIN source_providers USING (source_note_id)
-		WHERE $1 = '%%'
-		   OR relationships.reference_note_id ILIKE $1
-		   OR relationships.source_note_id ILIKE $1
-		   OR relationships.source_title ILIKE $1
-		   OR EXISTS (
-			SELECT 1
-			FROM unnest(COALESCE(source_providers.providers, '{}'::TEXT[])) AS provider(name)
-			WHERE provider.name ILIKE $1
-		   )
+		LEFT JOIN source_metadata USING (source_note_id)
+		WHERE (
+			$1 = '%%'
+			OR relationships.reference_note_id ILIKE $1
+			OR relationships.source_note_id ILIKE $1
+			OR relationships.source_title ILIKE $1
+			OR EXISTS (
+				SELECT 1
+				FROM unnest(
+					COALESCE(source_metadata.providers, '{}'::TEXT[]) ||
+					COALESCE(source_metadata.note_types, '{}'::TEXT[]) ||
+					COALESCE(source_metadata.cover_types, '{}'::TEXT[]) ||
+					COALESCE(source_metadata.commercial_intensities, '{}'::TEXT[]) ||
+					COALESCE(source_metadata.audiences, '{}'::TEXT[]) ||
+					COALESCE(source_metadata.user_scenarios, '{}'::TEXT[])
+				) AS tag(value)
+				WHERE tag.value ILIKE $1
+			)
+		)
+		  AND ($2 = '' OR $2 = ANY(COALESCE(source_metadata.providers, '{}'::TEXT[])))
+		  AND ($3 = '' OR $3 = ANY(COALESCE(source_metadata.note_types, '{}'::TEXT[])))
+		  AND ($4 = '' OR $4 = ANY(COALESCE(source_metadata.cover_types, '{}'::TEXT[])))
+		  AND ($5 = '' OR $5 = ANY(COALESCE(source_metadata.commercial_intensities, '{}'::TEXT[])))
+		  AND ($6 = '' OR $6 = ANY(COALESCE(source_metadata.audiences, '{}'::TEXT[])))
+		  AND ($7 = '' OR $7 = ANY(COALESCE(source_metadata.user_scenarios, '{}'::TEXT[])))
 	), content_status AS (
 		SELECT materials.reference_note_id,
 			EXISTS (
@@ -74,10 +119,19 @@ const referenceMaterialsCTE = `
 
 func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.ReferenceMaterialsQuery) (maituo.ReferenceMaterials, error) {
 	result := maituo.ReferenceMaterials{
-		Search: query.Search, Page: query.Page, PageSize: query.PageSize,
+		Search: query.Search, Filters: query.Filters, Page: query.Page, PageSize: query.PageSize,
 		Items: []maituo.ReferenceMaterialItem{},
 	}
 	searchPattern := "%" + strings.TrimSpace(query.Search) + "%"
+	queryArgs := []any{
+		searchPattern,
+		query.Filters.Provider,
+		query.Filters.NoteType,
+		query.Filters.CoverType,
+		query.Filters.CommercialIntensity,
+		query.Filters.Audience,
+		query.Filters.UserScenario,
+	}
 	statsQuery := referenceMaterialsCTE + `
 		SELECT COUNT(DISTINCT reference_note_id)::INTEGER,
 			COUNT(DISTINCT source_note_id)::INTEGER,
@@ -86,14 +140,62 @@ func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.Re
 				SELECT COUNT(DISTINCT provider.name)::INTEGER
 				FROM filtered_relationships material
 				CROSS JOIN LATERAL unnest(material.providers) AS provider(name)
+			),
+			ARRAY(
+				SELECT DISTINCT option.value
+				FROM relationships
+				JOIN source_metadata USING (source_note_id)
+				CROSS JOIN LATERAL unnest(source_metadata.providers) AS option(value)
+				ORDER BY option.value
+			),
+			ARRAY(
+				SELECT DISTINCT option.value
+				FROM relationships
+				JOIN source_metadata USING (source_note_id)
+				CROSS JOIN LATERAL unnest(source_metadata.note_types) AS option(value)
+				ORDER BY option.value
+			),
+			ARRAY(
+				SELECT DISTINCT option.value
+				FROM relationships
+				JOIN source_metadata USING (source_note_id)
+				CROSS JOIN LATERAL unnest(source_metadata.cover_types) AS option(value)
+				ORDER BY option.value
+			),
+			ARRAY(
+				SELECT DISTINCT option.value
+				FROM relationships
+				JOIN source_metadata USING (source_note_id)
+				CROSS JOIN LATERAL unnest(source_metadata.commercial_intensities) AS option(value)
+				ORDER BY option.value
+			),
+			ARRAY(
+				SELECT DISTINCT option.value
+				FROM relationships
+				JOIN source_metadata USING (source_note_id)
+				CROSS JOIN LATERAL unnest(source_metadata.audiences) AS option(value)
+				ORDER BY option.value
+			),
+			ARRAY(
+				SELECT DISTINCT option.value
+				FROM relationships
+				JOIN source_metadata USING (source_note_id)
+				CROSS JOIN LATERAL unnest(source_metadata.user_scenarios) AS option(value)
+				ORDER BY option.value
 			)
 		FROM filtered_relationships
 	`
-	if err := p.pool.QueryRow(ctx, statsQuery, searchPattern).Scan(
+	if err := p.pool.QueryRow(ctx, statsQuery, queryArgs...).Scan(
 		&result.Stats.MaterialCount,
 		&result.Stats.SourceNoteCount,
 		&result.Stats.ReferenceCount,
 		&result.Stats.ProviderCount,
+		&result.FilterOptions.Providers,
+		&result.FilterOptions.NoteType,
+		&result.FilterOptions.CoverType,
+		&result.FilterOptions.CommercialIntensity,
+		&result.FilterOptions.Audience,
+		&result.FilterOptions.UserScenario,
 	); err != nil {
 		return result, fmt.Errorf("query reference material stats: %w", err)
 	}
@@ -114,6 +216,36 @@ func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.Re
 				CROSS JOIN LATERAL unnest(provider_material.providers) AS provider(name)
 				WHERE provider_material.reference_note_id=material.reference_note_id
 			), '{}'::TEXT[]),
+			COALESCE((
+				SELECT ARRAY_AGG(DISTINCT tag.value ORDER BY tag.value)
+				FROM filtered_relationships tag_material
+				CROSS JOIN LATERAL unnest(tag_material.note_types) AS tag(value)
+				WHERE tag_material.reference_note_id=material.reference_note_id
+			), '{}'::TEXT[]),
+			COALESCE((
+				SELECT ARRAY_AGG(DISTINCT tag.value ORDER BY tag.value)
+				FROM filtered_relationships tag_material
+				CROSS JOIN LATERAL unnest(tag_material.cover_types) AS tag(value)
+				WHERE tag_material.reference_note_id=material.reference_note_id
+			), '{}'::TEXT[]),
+			COALESCE((
+				SELECT ARRAY_AGG(DISTINCT tag.value ORDER BY tag.value)
+				FROM filtered_relationships tag_material
+				CROSS JOIN LATERAL unnest(tag_material.commercial_intensities) AS tag(value)
+				WHERE tag_material.reference_note_id=material.reference_note_id
+			), '{}'::TEXT[]),
+			COALESCE((
+				SELECT ARRAY_AGG(DISTINCT tag.value ORDER BY tag.value)
+				FROM filtered_relationships tag_material
+				CROSS JOIN LATERAL unnest(tag_material.audiences) AS tag(value)
+				WHERE tag_material.reference_note_id=material.reference_note_id
+			), '{}'::TEXT[]),
+			COALESCE((
+				SELECT ARRAY_AGG(DISTINCT tag.value ORDER BY tag.value)
+				FROM filtered_relationships tag_material
+				CROSS JOIN LATERAL unnest(tag_material.user_scenarios) AS tag(value)
+				WHERE tag_material.reference_note_id=material.reference_note_id
+			), '{}'::TEXT[]),
 			COUNT(DISTINCT material.source_note_id)::INTEGER AS usage_count,
 			(status.has_manual_content OR status.has_synced_content) AS has_content,
 			CASE
@@ -125,9 +257,10 @@ func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.Re
 		JOIN content_status status USING (reference_note_id)
 		GROUP BY material.reference_note_id, status.has_manual_content, status.has_synced_content
 		ORDER BY usage_count DESC, material.reference_note_id
-		LIMIT $2 OFFSET $3
+		LIMIT $8 OFFSET $9
 	`
-	rows, err := p.pool.Query(ctx, rowsQuery, searchPattern, query.PageSize, offset)
+	rowArgs := append(queryArgs, query.PageSize, offset)
+	rows, err := p.pool.Query(ctx, rowsQuery, rowArgs...)
 	if err != nil {
 		return result, fmt.Errorf("query reference materials: %w", err)
 	}
@@ -137,7 +270,10 @@ func (p *Postgres) MaituoReferenceMaterials(ctx context.Context, query maituo.Re
 		var sourceTitles, sourceURLs []string
 		if err := rows.Scan(
 			&item.ReferenceNoteID, &item.SourceNoteIDs, &sourceTitles, &sourceURLs,
-			&item.Providers, &item.UsageCount,
+			&item.Providers,
+			&item.Tags.NoteType, &item.Tags.CoverType, &item.Tags.CommercialIntensity,
+			&item.Tags.Audience, &item.Tags.UserScenario,
+			&item.UsageCount,
 			&item.HasContent, &item.ContentSource,
 		); err != nil {
 			return result, fmt.Errorf("scan reference material: %w", err)
