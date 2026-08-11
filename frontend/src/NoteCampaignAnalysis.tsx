@@ -10,7 +10,7 @@ import { useSearchParams } from "react-router-dom";
 echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
 type WindowOption = "3d" | "7d" | "all";
-type SortOption = "daily_spend" | "cumulative_spend";
+type SortOption = "daily_spend" | "cumulative_spend" | "search_cost_change";
 
 type AnalysisPoint = {
   report_date: string;
@@ -32,6 +32,7 @@ type AnalysisItem = {
   total_spend: number;
   total_search_users: number;
   latest_search_cost: number;
+  search_cost_change: number;
   points: AnalysisPoint[];
 };
 
@@ -88,11 +89,18 @@ const WINDOW_OPTIONS: Array<{ value: WindowOption; label: string }> = [
 ];
 const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
   { value: "daily_spend", label: "当天消耗" },
-  { value: "cumulative_spend", label: "累计消耗" }
+  { value: "cumulative_spend", label: "累计消耗" },
+  { value: "search_cost_change", label: "回搜成本差值" }
 ];
 
 const moneyFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const countFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
+
+function formatCostChange(value: number): string {
+  if (value > 0) return "+¥" + moneyFormatter.format(value);
+  if (value < 0) return "-¥" + moneyFormatter.format(Math.abs(value));
+  return "¥" + moneyFormatter.format(0);
+}
 
 function itemKey(item: AnalysisItem): string {
   return `${item.note_id}\u0000${item.campaign_name}\u0000${item.placement}`;
@@ -337,6 +345,10 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
   const dateRange = result.report_dates.length > 0
     ? `${result.report_dates[0]} - ${result.report_dates[result.report_dates.length - 1]}`
     : "暂无报表日期";
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === sortOption)?.label ?? "累计消耗";
+  const latestDate = result.report_dates[result.report_dates.length - 1];
+  const previousDate = result.report_dates[result.report_dates.length - 2];
+  const costChangeTitle = latestDate && previousDate ? latestDate + " 回搜成本 - " + previousDate + " 回搜成本" : "暂无前一报表日";
 
   const queryNoteContent = async (noteID: string) => {
     setContentOpen(true);
@@ -395,12 +407,13 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
     </section>
 
     <section className="analysis-table-section">
-      <header><div className="analysis-table-title"><h2>笔记计划列表</h2><p>{result.total.toLocaleString()} 个组合，按{sortOption === "daily_spend" ? "当天消耗" : "累计消耗"}排序</p></div><div className="analysis-table-actions"><ArrowDownWideNarrow size={15} /><span>排序</span><div className="sort-segmented" aria-label="笔记排序方式">
+      <header><div className="analysis-table-title"><h2>笔记计划列表</h2><p>{result.total.toLocaleString()} 个组合，按{sortLabel}降序</p></div><div className="analysis-table-actions"><ArrowDownWideNarrow size={15} /><span>排序</span><div className="sort-segmented" aria-label="笔记排序方式">
         {SORT_OPTIONS.map((option) => <button key={option.value} className={sortOption === option.value ? "active" : ""} onClick={() => { setSortOption(option.value); setPage(1); }}>{option.label}</button>)}
       </div>{loading ? <LoaderCircle size={18} className="spin" /> : null}</div></header>
-      <div className="analysis-table-wrap"><table className="analysis-table"><thead><tr><th>笔记ID</th><th>计划</th><th>场域</th><th>投放天数</th><th>当天消耗</th><th>累计消耗</th><th>累计回搜人数</th><th>当天回搜成本</th></tr></thead><tbody>
+      <div className="analysis-table-wrap"><table className="analysis-table"><thead><tr><th>笔记ID</th><th>计划</th><th>场域</th><th>投放天数</th><th>当天消耗</th><th>累计消耗</th><th>累计回搜人数</th><th>当天回搜成本</th><th title={costChangeTitle}>较前一日</th></tr></thead><tbody>
         {result.items.map((item) => <tr key={itemKey(item)} className={itemKey(item) === itemKey(selected ?? item) ? "selected" : ""} onClick={() => setSelectedKey(itemKey(item))}>
           <td title={item.note_id}><strong>{item.note_id}</strong></td><td title={item.campaign_name}>{item.campaign_name}</td><td><span className={`placement-swatch placement-${item.placement}`}>{item.placement}</span></td><td>{item.active_days}/{result.report_dates.length}</td><td>¥{moneyFormatter.format(item.latest_spend)}</td><td>¥{moneyFormatter.format(item.total_spend)}</td><td>{countFormatter.format(item.total_search_users)}</td><td>¥{moneyFormatter.format(item.latest_search_cost)}</td>
+          <td className={"search-cost-change " + (item.search_cost_change > 0 ? "increase" : item.search_cost_change < 0 ? "decrease" : "")} title={costChangeTitle}>{formatCostChange(item.search_cost_change)}</td>
         </tr>)}
       </tbody></table></div>
       <footer className="analysis-pagination"><span>第 {result.page}/{pageCount} 页</span><div><button className="icon-button" title="上一页" aria-label="上一页" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={17} /></button><button className="icon-button" title="下一页" aria-label="下一页" disabled={page >= pageCount || loading} onClick={() => setPage((current) => current + 1)}><ChevronRight size={17} /></button></div></footer>

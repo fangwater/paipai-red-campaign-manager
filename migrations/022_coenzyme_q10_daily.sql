@@ -53,4 +53,4 @@ CREATE TABLE IF NOT EXISTS coenzyme_q10_daily (
 CREATE INDEX IF NOT EXISTS idx_coenzyme_q10_daily_updated
     ON coenzyme_q10_daily (updated_at DESC);
 
-COMMENT ON TABLE coenzyme_q10_daily IS '飞书“辅酶q10日数据”页签的按日期增量快照；源表暂缺的日期不会被删除';
+COMMENT ON TABLE coenzyme_q10_daily IS 'cid数据的按日期增量快照，源飞书页签为“辅酶q10日数据”；源表暂缺的日期不会被删除';

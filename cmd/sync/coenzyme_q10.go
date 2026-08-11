@@ -29,7 +29,7 @@ func (server *apiServer) syncCoenzymeQ10(writer http.ResponseWriter, request *ht
 	defer cancel()
 	startedAt := time.Now()
 	result, err := server.coenzymeQ10Sync.Run(ctx)
-	server.logger.Info("Lark coenzyme Q10 daily sync finished",
+	server.logger.Info("Lark cid data sync finished",
 		"result", result,
 		"duration", time.Since(startedAt),
 		"error", err,

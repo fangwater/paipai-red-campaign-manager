@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
     body: JSON.stringify({ success: true, data: { recent: [{ run_id: 3, status: "succeeded", fetched_count: 3103, upserted_count: 3103, deleted_count: 0, started_at: "2026-07-24T13:40:00+08:00", completed_at: "2026-07-24T13:40:10+08:00" }] } })
   }));
   await page.route("**/paipai/api/lark/sync/manuscripts/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: { providers } }) }));
-  await page.route("**/paipai/api/lark/sync/coenzyme-q10/status", (route) => route.fulfill({
+  await page.route("**/paipai/api/lark/sync/cid/status", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify({ success: true, data: { record_count: 35, earliest_date: "2026-07-07", latest_date: "2026-08-10", last_synced_at: "2026-08-11T09:00:00+08:00", recent: [{ run_id: 8, status: "succeeded", fetched: 35, inserted: 35, updated: 0, unchanged: 0, started_at: "2026-08-11T09:00:00+08:00" }] } })
   }));
@@ -27,7 +27,7 @@ test("opens Dandelion update and syncs manuscripts from the sidebar", async ({ p
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: { providers: 3, fetched: 172, upserted: 172, deleted: 0, notes: 172, note_errors: 0 } }) });
   });
   let coenzymeBody: unknown;
-  await page.route("**/paipai/api/lark/sync/coenzyme-q10", async (route) => {
+  await page.route("**/paipai/api/lark/sync/cid", async (route) => {
     coenzymeBody = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: { run_id: 9, sheet_name: "辅酶q10日数据", fetched: 35, inserted: 0, updated: 0, unchanged: 35, earliest_date: "2026-07-07", latest_date: "2026-08-10" } }) });
   });
@@ -43,10 +43,10 @@ test("opens Dandelion update and syncs manuscripts from the sidebar", async ({ p
   await page.getByRole("button", { name: "同步稿件", exact: true }).click();
   await expect.poll(() => manuscriptBody).toEqual({});
 
-  await page.getByRole("button", { name: "辅酶Q10日数据", exact: true }).click();
-  await expect(page).toHaveURL(/\/paipai\/data-sync\/coenzyme-q10$/);
+  await page.getByRole("button", { name: "cid数据", exact: true }).click();
+  await expect(page).toHaveURL(/\/paipai\/data-sync\/cid$/);
   await expect(page.locator(".data-sync-target.active")).toContainText("2026-08-10");
-  await page.getByRole("button", { name: "同步辅酶Q10", exact: true }).click();
+  await page.getByRole("button", { name: "同步cid数据", exact: true }).click();
   await expect.poll(() => coenzymeBody).toEqual({});
   await expect(page.locator(".data-sync-result")).toContainText("未变化 35");
 });

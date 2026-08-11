@@ -47,12 +47,16 @@ func TestCoenzymeQ10SyncAndStatusEndpoints(t *testing.T) {
 		timeout: time.Second, logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 
-	response := performRequest(t, handler, http.MethodPost, "/v1/sync/coenzyme-q10", "{}", http.StatusOK)
+	response := performRequest(t, handler, http.MethodPost, "/v1/sync/cid", "{}", http.StatusOK)
 	if syncStub.calls != 1 || !strings.Contains(response, `"inserted":2`) || !strings.Contains(response, `"unchanged":32`) {
 		t.Fatalf("calls=%d response=%s", syncStub.calls, response)
 	}
-	response = performRequest(t, handler, http.MethodGet, "/v1/sync/coenzyme-q10/status", "", http.StatusOK)
+	response = performRequest(t, handler, http.MethodGet, "/v1/sync/cid/status", "", http.StatusOK)
 	if !strings.Contains(response, `"record_count":35`) || !strings.Contains(response, `"latest_date":"2026-08-10"`) {
 		t.Fatalf("status response=%s", response)
+	}
+	legacyResponse := performRequest(t, handler, http.MethodGet, "/v1/sync/coenzyme-q10/status", "", http.StatusOK)
+	if !strings.Contains(legacyResponse, `"record_count":35`) {
+		t.Fatalf("legacy status response=%s", legacyResponse)
 	}
 }

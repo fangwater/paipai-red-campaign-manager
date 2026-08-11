@@ -22,7 +22,7 @@ PaiPai 小红书投放管理服务。飞书多维表格 Base、稿件正文和�
 - 稿件按笔记 ID、文档资源键和抽取版本增量抓取；链接及抽取版本未变化时不重复请求，抓取失败的 ID 下轮重试。
 - 图片下载后按 SHA-256 去重存入 PostgreSQL，不保存或暴露飞书临时 URL；源图最大 50 MB，超过 2 MB 或边长超过 2560px 的 JPEG/PNG 会先缩放压缩，数据库单图最多 10 MB、单篇优化后最多 100 MB。
 - 服务商记录使用快照同步，飞书中消失的行在 PostgreSQL 中标记为软删除。
-- “辅酶q10日数据”按日期和内容哈希增量写入；新增日期插入、历史修订更新、未变化记录跳过，源表暂缺日期不删除本地历史。
+- “cid数据”从源页签“辅酶q10日数据”按日期和内容哈希增量写入；新增日期插入、历史修订更新、未变化记录跳过，源表暂缺日期不删除本地历史。
 
 腾讯/企微文档不抓取正文。服务会保存其链接和 `auth_required` 状态，并将正文统一存为 `nan`。
 
@@ -38,8 +38,8 @@ PaiPai 小红书投放管理服务。飞书多维表格 Base、稿件正文和�
 - `service_provider_notes`：笔记 ID、定稿纯文本、有序内容块及来源版本。
 - `manuscript_assets`：按内容哈希去重的稿件图片二进制。
 - `service_provider_note_assets`：稿件与图片的有序关联。
-- `coenzyme_q10_daily`：辅酶 Q10 的 19 列日数据，日期为幂等主键。
-- `coenzyme_q10_sync_runs`：每轮读取、插入、更新、未变化数量及失败原因。
+- `coenzyme_q10_daily`：cid数据的 19 列日记录，日期为幂等主键。
+- `coenzyme_q10_sync_runs`：cid数据每轮读取、插入、更新、未变化数量及失败原因。
 
 ## 环境要求
 
@@ -73,7 +73,7 @@ cp .env.example .env
 - `SYNC_TIMEOUT`：一次显式同步请求的超时，默认 10 分钟
 - `DOCUMENT_REFRESH_INTERVAL`：调用 Base 同步时，已抓取正文的重新拉取间隔，默认 1 小时
 
-- `LARK_COENZYME_Q10_WIKI_TOKEN`：日报所在 Wiki 节点，默认当前“脉拓辅酶日报表”。
+- `LARK_COENZYME_Q10_WIKI_TOKEN`：cid数据源日报所在 Wiki 节点，默认当前“脉拓辅酶日报表”。
 - `LARK_COENZYME_Q10_SHEET_ID`：日报页签 ID，默认 `a961f7`。
 - `LARK_COENZYME_Q10_SHEET_NAME`：日报页签名，默认“辅酶q10日数据”；同步时名称优先于 ID。
 稿件向量配置：
@@ -143,10 +143,10 @@ make frontend-deploy
 
 - `window`：`3d`、`7d` 或 `all`，默认 `7d`；3D/7D 取最近实际存在的报表日，周五、周六自然跳过
 - `q`：按笔记ID、计划名或场域模糊搜索
-- `sort`：`daily_spend` 按最新报表日消耗排序，`cumulative_spend` 按所选范围累计消耗排序，默认 `cumulative_spend`
+- `sort`：`daily_spend` 按最新报表日消耗排序，`cumulative_spend` 按所选范围累计消耗排序，`search_cost_change` 按“最新报表日回搜成本 - 上一实际报表日回搜成本”排序，默认 `cumulative_spend`
 - `page`、`page_size`：分页参数，每页最多 100 个组合
 
-每个组合返回所选报表日内的累计消耗、累计回搜人数，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加。分析结果不返回笔记 URL、分类或子账户。
+每个组合返回所选报表日内的累计消耗、累计回搜人数、最新回搜成本及其较上一实际报表日的差值，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加，差值计算同样将未投放日视为 0。仅有一个报表日时差值为 0。分析结果不返回笔记 URL、分类或子账户。
 
 ## 内容分析 API
 
@@ -210,10 +210,10 @@ make lark-sync-start
 - `GET /v1/sync/manuscripts/status`：查询三张稿件表最近的持久化同步状态。
 - `POST /v1/sync/dandelion`：只同步配置 Base 内的“蒲公英数据”表。
 - `GET /v1/sync/dandelion/status`：查询蒲公英最近 10 次持久化同步结果。
-- `POST /v1/sync/coenzyme-q10`：按日期增量同步“辅酶q10日数据”。
-- `GET /v1/sync/coenzyme-q10/status`：查询当前日期范围和最近 10 次持久化同步结果。
+- `POST /v1/sync/cid`：按日期增量同步 cid数据。
+- `GET /v1/sync/cid/status`：查询 cid数据当前日期范围和最近 10 次持久化同步结果。
 
-前端入口包括 `/paipai/data-sync/coenzyme-q10`。公网只开放各目标固定的状态查询与显式同步触发路径；飞书凭据、Token 与源表地址均不返回前端。
+前端入口为 `/paipai/data-sync/cid`；原 `coenzyme-q10` 前端和 API 路径保留兼容。公网只开放各目标固定的状态查询与显式同步触发路径；飞书凭据、Token 与源表地址均不返回前端。
 
 稿件请求体为空或 `{}` 时同步全部三个服务商：`manjie`（曼杰）、`youyiyouer`（有一有二）、`zhiyuan`（智元）：
 
@@ -240,21 +240,21 @@ make lark-sync-dandelion
 
 该目标当前对应 Base `ULhXbXkAGaiNARsahfcclBX4nWe` 内的 `tbl3djNUVT4WANi0`，接口成功结果中的 `tables` 固定为 `1`。记录使用 `app_token + table_id + record_id` 与其他飞书目标隔离。
 
-“辅酶q10日数据”可手动同步，也可安装每天上海时间 06:00 的 systemd timer：
+“cid数据”可手动同步，也可安装每天上海时间 11:00 的 systemd timer：
 
 ```bash
-make lark-sync-coenzyme-q10
-make lark-sync-coenzyme-q10-daily-install
+make lark-sync-cid
+make lark-sync-cid-daily-install
 ```
 
-timer 使用 `OnCalendar=*-*-* 06:00:00 Asia/Shanghai` 和 `Persistent=true`；主机在 06:00 停机时会在恢复后补跑。同步失败后每 10 分钟重试，2 小时内最多启动 3 次。
+timer 使用 `OnCalendar=*-*-* 11:00:00 Asia/Shanghai` 和 `Persistent=true`；主机在 11:00 停机时会在恢复后补跑。同步失败后每 10 分钟重试，2 小时内最多启动 3 次。
 
 立即执行、查看下次触发时间和日志：
 
 ```bash
-make lark-sync-coenzyme-q10-daily-now
-make lark-sync-coenzyme-q10-daily-status
-make lark-sync-coenzyme-q10-daily-logs
+make lark-sync-cid-daily-now
+make lark-sync-cid-daily-status
+make lark-sync-cid-daily-logs
 ```
 
 也可直接确认 timer 日历：

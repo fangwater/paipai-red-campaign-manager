@@ -147,6 +147,7 @@ type NoteCampaignAnalysisItem struct {
 	TotalSpend       float64             `json:"total_spend"`
 	TotalSearchUsers int64               `json:"total_search_users"`
 	LatestSearchCost float64             `json:"latest_search_cost"`
+	SearchCostChange float64             `json:"search_cost_change"`
 	Points           []NoteCampaignPoint `json:"points"`
 }
 

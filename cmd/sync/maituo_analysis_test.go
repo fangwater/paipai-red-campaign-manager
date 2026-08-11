@@ -123,6 +123,21 @@ func TestMaituoNoteCampaignAnalysis(t *testing.T) {
 	}
 }
 
+func TestMaituoNoteCampaignAnalysisAcceptsSearchCostChangeSort(t *testing.T) {
+	stub := &maituoAnalyticsStub{result: maituo.NoteCampaignAnalysis{Window: "7d", Sort: "search_cost_change"}}
+	server := &apiServer{maituoAnalytics: stub, timeout: time.Second}
+	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/maituo/note-campaigns?sort=search_cost_change", nil)
+	response := httptest.NewRecorder()
+
+	server.maituoNoteCampaignAnalysis(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if stub.calls != 1 || stub.query.Sort != "search_cost_change" {
+		t.Fatalf("calls = %d, query = %+v", stub.calls, stub.query)
+	}
+}
+
 func TestMaituoNoteContent(t *testing.T) {
 	stub := &maituoAnalyticsStub{contentResult: maituo.NoteContent{
 		NoteID: "6a33d5aa000000001c024f8a", Found: true, NoteContent: "稿件正文",

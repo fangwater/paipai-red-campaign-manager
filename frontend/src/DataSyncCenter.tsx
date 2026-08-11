@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, CalendarDays, CheckCircle2, Database, FileText, LoaderCircle, RefreshCw, XCircle } from "lucide-react";
 
-export type DataSyncTarget = "dandelion" | "manuscripts" | "coenzyme-q10";
+export type DataSyncTarget = "dandelion" | "manuscripts" | "cid";
 
 type DandelionRun = {
   run_id: number;
@@ -75,11 +75,11 @@ function stateLabel(status?: string): string {
 function targetLabel(target: DataSyncTarget): string {
   if (target === "dandelion") return "蒲公英数据";
   if (target === "manuscripts") return "稿件数据";
-  return "辅酶Q10日数据";
+  return "cid数据";
 }
 
 function resultSummary(target: DataSyncTarget, result: SyncResult): string {
-  if (target === "coenzyme-q10") {
+  if (target === "cid") {
     return `读取 ${result.fetched.toLocaleString()} · 新增 ${(result.inserted ?? 0).toLocaleString()} · 更新 ${(result.updated ?? 0).toLocaleString()} · 未变化 ${(result.unchanged ?? 0).toLocaleString()}`;
   }
   return `读取 ${result.fetched.toLocaleString()} · 写入 ${(result.upserted ?? 0).toLocaleString()} · 失效 ${(result.deleted ?? 0).toLocaleString()}`;
@@ -97,14 +97,14 @@ function DataSyncCenter({ activeTarget }: { activeTarget: DataSyncTarget }) {
     const [dandelionResponse, manuscriptResponse, coenzymeResponse] = await Promise.all([
       fetch(`${import.meta.env.BASE_URL}api/lark/sync/dandelion/status`, { signal }),
       fetch(`${import.meta.env.BASE_URL}api/lark/sync/manuscripts/status`, { signal }),
-      fetch(`${import.meta.env.BASE_URL}api/lark/sync/coenzyme-q10/status`, { signal })
+      fetch(`${import.meta.env.BASE_URL}api/lark/sync/cid/status`, { signal })
     ]);
     const dandelionPayload = await dandelionResponse.json() as { success: boolean; data?: { recent: DandelionRun[] }; error?: string };
     const manuscriptPayload = await manuscriptResponse.json() as { success: boolean; data?: { providers: ProviderStatus[] }; error?: string };
     const coenzymePayload = await coenzymeResponse.json() as { success: boolean; data?: CoenzymeStatus; error?: string };
     if (!dandelionResponse.ok || !dandelionPayload.success) throw new Error(dandelionPayload.error || "无法读取蒲公英同步状态");
     if (!manuscriptResponse.ok || !manuscriptPayload.success) throw new Error(manuscriptPayload.error || "无法读取稿件同步状态");
-    if (!coenzymeResponse.ok || !coenzymePayload.success) throw new Error(coenzymePayload.error || "无法读取辅酶Q10同步状态");
+    if (!coenzymeResponse.ok || !coenzymePayload.success) throw new Error(coenzymePayload.error || "无法读取cid数据同步状态");
     setDandelionRuns(dandelionPayload.data?.recent ?? []);
     setProviders(manuscriptPayload.data?.providers ?? []);
     setCoenzymeStatus(coenzymePayload.data ?? EMPTY_COENZYME_STATUS);
@@ -175,10 +175,10 @@ function DataSyncCenter({ activeTarget }: { activeTarget: DataSyncTarget }) {
         <footer><span>全部服务商</span><button className="sync-trigger" disabled={syncing !== ""} onClick={() => void trigger("manuscripts")}>{syncing === "manuscripts" ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />}{syncing === "manuscripts" ? "同步中" : "同步稿件"}</button></footer>
       </article>
 
-      <article className={`data-sync-target ${activeTarget === "coenzyme-q10" ? "active" : ""}`}>
-        <header><span className="data-target-icon coenzyme"><CalendarDays size={21} /></span><div><h2>辅酶Q10日数据</h2><p>{coenzymeStatus.last_synced_at ? `最近同步 ${dateTimeFormatter.format(new Date(coenzymeStatus.last_synced_at))}` : "暂无同步记录"}</p></div></header>
+      <article className={`data-sync-target ${activeTarget === "cid" ? "active" : ""}`}>
+        <header><span className="data-target-icon coenzyme"><CalendarDays size={21} /></span><div><h2>cid数据</h2><p>{coenzymeStatus.last_synced_at ? `最近同步 ${dateTimeFormatter.format(new Date(coenzymeStatus.last_synced_at))}` : "暂无同步记录"}</p></div></header>
         <div className="data-sync-metrics"><div><span>最近状态</span><strong className={`data-state ${latestCoenzyme?.status ?? "pending"}`}>{stateLabel(latestCoenzyme?.status)}</strong></div><div><span>日记录</span><strong>{coenzymeStatus.record_count ? coenzymeStatus.record_count.toLocaleString() : "-"}</strong></div><div><span>最新日期</span><strong className="coenzyme-latest-date">{coenzymeStatus.latest_date ?? "-"}</strong></div></div>
-        <footer><span>按日期增量更新</span><button className="sync-trigger" disabled={syncing !== ""} onClick={() => void trigger("coenzyme-q10")}>{syncing === "coenzyme-q10" ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />}{syncing === "coenzyme-q10" ? "同步中" : "同步辅酶Q10"}</button></footer>
+        <footer><span>按日期增量更新</span><button className="sync-trigger" disabled={syncing !== ""} onClick={() => void trigger("cid")}>{syncing === "cid" ? <LoaderCircle size={16} className="spin" /> : <RefreshCw size={16} />}{syncing === "cid" ? "同步中" : "同步cid数据"}</button></footer>
       </article>
     </section>
 

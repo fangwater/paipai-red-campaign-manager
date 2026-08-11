@@ -58,7 +58,7 @@ func TestMaituoNoteCampaignAnalysisIntegration(t *testing.T) {
 	}
 
 	result, err := postgres.MaituoNoteCampaignAnalysis(ctx, maituo.NoteCampaignAnalysisQuery{
-		Window: "3d", Search: prefix, Sort: "daily_spend", Page: 1, PageSize: 10,
+		Window: "3d", Search: prefix, Sort: "search_cost_change", Page: 1, PageSize: 10,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,8 +66,11 @@ func TestMaituoNoteCampaignAnalysisIntegration(t *testing.T) {
 	if len(result.ReportDates) != 3 || result.Total != 2 || len(result.Items) != 2 {
 		t.Fatalf("result = %+v", result)
 	}
-	if result.Items[0].Placement != "搜索" {
-		t.Fatalf("daily spend sort first item = %+v", result.Items[0])
+	if result.Items[0].Placement != "搜索" || result.Items[0].SearchCostChange != 5 {
+		t.Fatalf("search cost change sort first item = %+v", result.Items[0])
+	}
+	if result.Items[1].Placement != "信息流" || result.Items[1].SearchCostChange != -5 {
+		t.Fatalf("search cost change sort second item = %+v", result.Items[1])
 	}
 	var searchItem *maituo.NoteCampaignAnalysisItem
 	for index := range result.Items {

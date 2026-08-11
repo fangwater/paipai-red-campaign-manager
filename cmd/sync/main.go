@@ -190,7 +190,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("Lark manual sync API started",
 		"listen", listener.Addr().String(),
 		"manual_only", true,
-		"targets", []string{"dandelion", "manuscripts", "coenzyme-q10"},
+		"targets", []string{"dandelion", "manuscripts", "cid"},
 		"sync_timeout", cfg.SyncTimeout,
 	)
 	select {
@@ -215,6 +215,8 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
 	mux.HandleFunc("/v1/imports/dandelion-excel", server.importDandelionExcel)
 	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
+	mux.HandleFunc("/v1/sync/cid", server.syncCoenzymeQ10)
+	mux.HandleFunc("/v1/sync/cid/status", server.coenzymeQ10StatusHandler)
 	mux.HandleFunc("/v1/sync/coenzyme-q10", server.syncCoenzymeQ10)
 	mux.HandleFunc("/v1/sync/coenzyme-q10/status", server.coenzymeQ10StatusHandler)
 	mux.HandleFunc("/v1/imports/maituo-subaccount-directories", server.listMaituoSubaccountDirectories)

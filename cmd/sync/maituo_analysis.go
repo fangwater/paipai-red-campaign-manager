@@ -81,8 +81,8 @@ func (server *apiServer) maituoNoteCampaignAnalysis(writer http.ResponseWriter, 
 	if sort == "" {
 		sort = "cumulative_spend"
 	}
-	if sort != "daily_spend" && sort != "cumulative_spend" {
-		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "sort 仅支持 daily_spend 或 cumulative_spend"})
+	if sort != "daily_spend" && sort != "cumulative_spend" && sort != "search_cost_change" {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "sort 仅支持 daily_spend、cumulative_spend 或 search_cost_change"})
 		return
 	}
 

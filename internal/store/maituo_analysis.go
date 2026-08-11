@@ -167,6 +167,10 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 	searchPattern := "%" + strings.TrimSpace(query.Search) + "%"
 	offset := (query.Page - 1) * query.PageSize
 	latestReportDate := result.ReportDates[len(result.ReportDates)-1]
+	previousReportDate := latestReportDate
+	if len(result.ReportDates) > 1 {
+		previousReportDate = result.ReportDates[len(result.ReportDates)-2]
+	}
 	rows, err := p.pool.Query(ctx, `
 		WITH selected_dates AS (
 			SELECT value::DATE AS report_date FROM unnest($1::TEXT[]) value
@@ -193,20 +197,25 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 				COALESCE(MAX(spend) FILTER (WHERE report_date = $5::DATE), 0)::DOUBLE PRECISION AS latest_spend,
 				SUM(spend)::DOUBLE PRECISION AS total_spend,
 				SUM(search_users)::BIGINT AS total_search_users,
-				COALESCE(MAX(search_cost) FILTER (WHERE report_date = $5::DATE), 0)::DOUBLE PRECISION AS latest_search_cost
+				COALESCE(MAX(search_cost) FILTER (WHERE report_date = $5::DATE), 0)::DOUBLE PRECISION AS latest_search_cost,
+				(
+					COALESCE(MAX(search_cost) FILTER (WHERE report_date = $5::DATE), 0)
+					- COALESCE(MAX(search_cost) FILTER (WHERE report_date = $8::DATE), 0)
+				)::DOUBLE PRECISION AS search_cost_change
 			FROM daily
 			GROUP BY note_id, campaign_name, placement
 		)
 		SELECT note_id, campaign_name, placement, first_report_date, last_report_date,
-			active_days, latest_spend, total_spend, total_search_users, latest_search_cost,
+			active_days, latest_spend, total_spend, total_search_users, latest_search_cost, search_cost_change,
 			COUNT(*) OVER()::INTEGER AS total_count
 		FROM summaries
 		ORDER BY
 			CASE WHEN $6 = 'daily_spend' THEN latest_spend END DESC,
 			CASE WHEN $6 = 'cumulative_spend' THEN total_spend END DESC,
+			CASE WHEN $6 = 'search_cost_change' THEN search_cost_change END DESC,
 			total_spend DESC, total_search_users DESC, note_id, campaign_name, placement
 		LIMIT $3 OFFSET $4
-	`, result.ReportDates, searchPattern, query.PageSize, offset, latestReportDate, query.Sort, query.PlanID)
+	`, result.ReportDates, searchPattern, query.PageSize, offset, latestReportDate, query.Sort, query.PlanID, previousReportDate)
 	if err != nil {
 		return result, fmt.Errorf("query Maituo note campaign summaries: %w", err)
 	}
@@ -215,7 +224,7 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 		if err := rows.Scan(
 			&item.NoteID, &item.CampaignName, &item.Placement,
 			&item.FirstReportDate, &item.LastReportDate, &item.ActiveDays,
-			&item.LatestSpend, &item.TotalSpend, &item.TotalSearchUsers, &item.LatestSearchCost, &result.Total,
+			&item.LatestSpend, &item.TotalSpend, &item.TotalSearchUsers, &item.LatestSearchCost, &item.SearchCostChange, &result.Total,
 		); err != nil {
 			rows.Close()
 			return result, fmt.Errorf("scan Maituo note campaign summary: %w", err)
@@ -223,6 +232,7 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 		item.LatestSpend = roundMaituoMoney(item.LatestSpend)
 		item.TotalSpend = roundMaituoMoney(item.TotalSpend)
 		item.LatestSearchCost = roundMaituoMoney(item.LatestSearchCost)
+		item.SearchCostChange = roundMaituoMoney(item.SearchCostChange)
 		item.Points = []maituo.NoteCampaignPoint{}
 		result.Items = append(result.Items, item)
 	}

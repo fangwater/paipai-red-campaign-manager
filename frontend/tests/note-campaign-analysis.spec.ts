@@ -32,8 +32,8 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
           page: 1,
           page_size: 25,
           items: [
-            { note_id: "note-a", campaign_name: "磷虾油搜索计划", placement: "搜索", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 2, latest_spend: 20, total_spend: 30, total_search_users: 6, latest_search_cost: 5, points },
-            { note_id: "note-b", campaign_name: "辅酶信息流计划", placement: "信息流", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 3, latest_spend: 8, total_spend: 18, total_search_users: 3, latest_search_cost: 4, points: points.map((point) => ({ ...point, cumulative_spend: point.cumulative_spend * 0.6, cumulative_search_users: Math.round(point.cumulative_search_users * 0.5) })) }
+            { note_id: "note-a", campaign_name: "磷虾油搜索计划", placement: "搜索", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 2, latest_spend: 20, total_spend: 30, total_search_users: 6, latest_search_cost: 5, search_cost_change: 5, points },
+            { note_id: "note-b", campaign_name: "辅酶信息流计划", placement: "信息流", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 3, latest_spend: 8, total_spend: 18, total_search_users: 3, latest_search_cost: 4, search_cost_change: -2, points: points.map((point) => ({ ...point, cumulative_spend: point.cumulative_spend * 0.6, cumulative_search_users: Math.round(point.cumulative_search_users * 0.5) })) }
           ]
         }
       })
@@ -86,6 +86,8 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   await expect(page.getByText("回搜成本", { exact: true })).toBeVisible();
   await expect(page.locator(".focus-identity")).toContainText("磷虾油搜索计划");
   await expect(page.locator(".analysis-table tbody tr")).toHaveCount(2);
+  await expect(page.locator(".analysis-table tbody tr").nth(0)).toContainText("+¥5.00");
+  await expect(page.locator(".analysis-table tbody tr").nth(1)).toContainText("-¥2.00");
   await expect(page.getByText("http", { exact: false })).toHaveCount(0);
 
   await page.getByRole("button", { name: "查询内容" }).click();
@@ -132,4 +134,6 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   await expect.poll(() => requestedWindows).toContain("3d");
   await page.getByRole("button", { name: "当天消耗" }).click();
   await expect.poll(() => requestedSorts).toContain("daily_spend");
+  await page.getByRole("button", { name: "回搜成本差值" }).click();
+  await expect.poll(() => requestedSorts).toContain("search_cost_change");
 });

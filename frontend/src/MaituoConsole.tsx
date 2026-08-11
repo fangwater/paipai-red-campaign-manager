@@ -77,7 +77,7 @@ const navGroups = [
       { label: "薯量数据", icon: ChartNoAxesCombined, path: "/guorai-data" },
       { label: "蒲公英数据更新", icon: UploadCloud, path: "/dandelion-upload" },
       { label: "稿件数据", icon: FileText, path: "/data-sync/manuscripts" },
-      { label: "辅酶Q10日数据", icon: CalendarDays, path: "/data-sync/coenzyme-q10" }
+      { label: "cid数据", icon: CalendarDays, path: "/data-sync/cid" }
     ]
   },
   {
@@ -168,8 +168,8 @@ function MaituoConsole() {
   const syncTarget = location.pathname.endsWith("/units") ? "units" : location.pathname.endsWith("/creativities") ? "creativities" : "campaigns";
   const syncTargetLabel = syncTarget === "units" ? "广告单元" : syncTarget === "creativities" ? "创意" : "推广计划";
   const dataSync = location.pathname.startsWith("/data-sync/");
-  const dataSyncTarget = location.pathname.endsWith("/coenzyme-q10") ? "coenzyme-q10" : location.pathname.endsWith("/manuscripts") ? "manuscripts" : "dandelion";
-  const dataSyncTargetLabel = dataSyncTarget === "coenzyme-q10" ? "辅酶Q10日数据" : dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
+  const dataSyncTarget = location.pathname.endsWith("/cid") || location.pathname.endsWith("/coenzyme-q10") ? "cid" : location.pathname.endsWith("/manuscripts") ? "manuscripts" : "dandelion";
+  const dataSyncTargetLabel = dataSyncTarget === "cid" ? "cid数据" : dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
   const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : sync ? "投放管理" : settings ? "系统" : "数据中心";
   const breadcrumbPage = redMaterials ? "红薯素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
