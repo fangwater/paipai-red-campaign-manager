@@ -26,6 +26,19 @@ type OverviewTrend struct {
 	Metrics           []OverviewMetric `json:"metrics"`
 }
 
+type OverviewCIDPoint struct {
+	ReportDate  string   `json:"report_date"`
+	Spend       *float64 `json:"spend"`
+	CoenzymeROI *float64 `json:"coenzyme_roi"`
+}
+
+type OverviewCID struct {
+	StartDate     string             `json:"start_date"`
+	EndDate       string             `json:"end_date"`
+	AvailableDays int                `json:"available_days"`
+	Points        []OverviewCIDPoint `json:"points"`
+}
+
 type OverviewDailyNotes struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
@@ -86,5 +99,6 @@ type BusinessOverview struct {
 	SPU           string                   `json:"spu"`
 	OverlapPoints []SearchUserOverlapPoint `json:"overlap_points"`
 	Trend         OverviewTrend            `json:"trend"`
+	CID           OverviewCID              `json:"cid"`
 	NewNotes      OverviewNewNotes         `json:"new_notes"`
 }

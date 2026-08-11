@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"paipai-red-campaign-manager/internal/model"
 )
@@ -41,6 +42,24 @@ func (server *apiServer) contentAnalysisHandler(writer http.ResponseWriter, requ
 		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "dimension 仅支持 audience 或 scenario"})
 		return
 	}
+	publishedStartDate := strings.TrimSpace(request.URL.Query().Get("published_start_date"))
+	if publishedStartDate != "" {
+		if _, err := time.Parse(time.DateOnly, publishedStartDate); err != nil {
+			writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "published_start_date 必须为 YYYY-MM-DD 格式"})
+			return
+		}
+	}
+	publishedEndDate := strings.TrimSpace(request.URL.Query().Get("published_end_date"))
+	if publishedEndDate != "" {
+		if _, err := time.Parse(time.DateOnly, publishedEndDate); err != nil {
+			writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "published_end_date 必须为 YYYY-MM-DD 格式"})
+			return
+		}
+	}
+	if publishedStartDate != "" && publishedEndDate != "" && publishedStartDate > publishedEndDate {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "published_start_date 不能晚于 published_end_date"})
+		return
+	}
 	if server.contentAnalysis == nil {
 		writeJSON(writer, http.StatusServiceUnavailable, apiResponse{Success: false, Error: "内容分析服务未配置"})
 		return
@@ -49,6 +68,7 @@ func (server *apiServer) contentAnalysisHandler(writer http.ResponseWriter, requ
 	defer cancel()
 	result, err := server.contentAnalysis.ContentAnalysis(ctx, model.ContentAnalysisQuery{
 		SPU: spu, Agency: agency, Dimension: dimension,
+		PublishedStartDate: publishedStartDate, PublishedEndDate: publishedEndDate,
 	})
 	if err != nil {
 		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})

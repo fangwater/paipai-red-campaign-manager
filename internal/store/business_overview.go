@@ -40,6 +40,11 @@ func (p *Postgres) BusinessOverview(ctx context.Context, days int, spu string) (
 			return result, err
 		}
 	}
+	cid, err := p.loadBusinessOverviewCID(ctx, days)
+	if err != nil {
+		return result, err
+	}
+	result.CID = cid
 	newNotes, err := p.loadBusinessOverviewNotes(ctx, days, spu)
 	if err != nil {
 		return result, err
@@ -166,6 +171,56 @@ func overviewNullableFloat(value pgtype.Float8) *float64 {
 	}
 	result := value.Float64
 	return &result
+}
+
+func (p *Postgres) loadBusinessOverviewCID(ctx context.Context, days int) (model.OverviewCID, error) {
+	result := model.OverviewCID{Points: []model.OverviewCIDPoint{}}
+	var latestDate string
+	if err := p.pool.QueryRow(ctx, `
+		SELECT COALESCE(MAX(report_date)::TEXT, '')
+		FROM coenzyme_q10_daily
+	`).Scan(&latestDate); err != nil {
+		return result, fmt.Errorf("query business overview latest CID date: %w", err)
+	}
+	if latestDate == "" {
+		return result, nil
+	}
+	latest, err := time.Parse(time.DateOnly, latestDate)
+	if err != nil {
+		return result, fmt.Errorf("parse business overview latest CID date: %w", err)
+	}
+	result.StartDate = latest.AddDate(0, 0, -(days - 1)).Format(time.DateOnly)
+	result.EndDate = latestDate
+
+	rows, err := p.pool.Query(ctx, `
+		SELECT dates.day::DATE::TEXT,
+			daily.spend::DOUBLE PRECISION,
+			daily.coenzyme_roi::DOUBLE PRECISION
+		FROM generate_series($1::DATE, $2::DATE, INTERVAL '1 day') dates(day)
+		LEFT JOIN coenzyme_q10_daily daily ON daily.report_date=dates.day::DATE
+		ORDER BY dates.day
+	`, result.StartDate, result.EndDate)
+	if err != nil {
+		return result, fmt.Errorf("query business overview CID daily data: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var point model.OverviewCIDPoint
+		var spend, coenzymeROI pgtype.Float8
+		if err := rows.Scan(&point.ReportDate, &spend, &coenzymeROI); err != nil {
+			return result, fmt.Errorf("scan business overview CID daily data: %w", err)
+		}
+		point.Spend = overviewNullableFloat(spend)
+		point.CoenzymeROI = overviewNullableFloat(coenzymeROI)
+		if point.Spend != nil || point.CoenzymeROI != nil {
+			result.AvailableDays++
+		}
+		result.Points = append(result.Points, point)
+	}
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("iterate business overview CID daily data: %w", err)
+	}
+	return result, nil
 }
 
 func (p *Postgres) loadBusinessOverviewNotes(ctx context.Context, days int, spu string) (model.OverviewNewNotes, error) {

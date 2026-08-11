@@ -28,6 +28,16 @@ function makeOverview(days: number, spu: "辅酶" | "磷虾油") {
         { placement: "视频内流", search_users: 0, note_search_users: 0, subaccount_search_users: 0, coefficient: null }
       ]
     })),
+    cid: {
+      start_date: dates[0],
+      end_date: dates[dates.length - 1],
+      available_days: days,
+      points: dates.map((date, index) => ({
+        report_date: date,
+        spend: 5000 + index * 10,
+        coenzyme_roi: 2.1 + index * 0.1
+      }))
+    },
     trend: {
       start_date: dates[0],
       end_date: dates[dates.length - 1],
@@ -97,6 +107,12 @@ test("renders overview trends and agency note details", async ({ page }) => {
   await expect(coefficientChart).toBeVisible();
   await expect(page.locator(".overview-overlap-card")).toHaveCount(1);
   await expect(page.locator(".overview-metric-card")).toHaveCount(4);
+  await expect(page.getByRole("heading", { name: "cid数据 · 辅酶" })).toBeVisible();
+  const cidRows = page.getByRole("table", { name: "cid每日数据" }).locator("tbody tr");
+  await expect(cidRows).toHaveCount(7);
+  await expect(cidRows.first()).toContainText("2026-07-07");
+  await expect(cidRows.first()).toContainText("¥5,060.00");
+  await expect(cidRows.first()).toContainText("2.70");
   await expect.poll(() => requestedQueries).toContain("辅酶:7");
   await expect(page.getByText("较前周期 +25.0%")).toBeVisible();
   await expect(page.getByText("辅酶选购", { exact: true })).toBeVisible();
@@ -125,9 +141,12 @@ test("renders overview trends and agency note details", async ({ page }) => {
   await page.getByRole("button", { name: "磷虾油", exact: true }).click();
   await expect.poll(() => requestedQueries).toContain("磷虾油:7");
   await expect(page.getByText("磷虾油选购", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "cid数据 · 辅酶" })).toBeVisible();
 
   await page.getByRole("button", { name: "14日" }).click();
   await expect.poll(() => requestedQueries).toContain("磷虾油:14");
+  await expect(cidRows).toHaveCount(14);
+  await expect(cidRows.first()).toContainText("2026-07-14");
 });
 
 test("overview remains usable on mobile", async ({ page }) => {
@@ -140,6 +159,7 @@ test("overview remains usable on mobile", async ({ page }) => {
   await expect(page.locator(".overview-overlap-card")).toHaveCount(1);
   await expect(page.locator(".overview-overlap-card").first()).toBeVisible();
   await expect(page.locator(".overview-metric-card").first()).toBeVisible();
+  await expect(page.getByRole("table", { name: "cid每日数据" })).toBeVisible();
   await expect(page.getByRole("button", { name: /智元/ })).toBeVisible();
   await expect(page.locator("body")).toHaveCSS("overflow-x", "visible");
 });

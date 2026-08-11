@@ -90,6 +90,8 @@ func TestBusinessOverviewHandler(t *testing.T) {
 	noteCoefficient := 0.25
 	spuSearchUsers := int64(20)
 	noteSearchUsers := int64(5)
+	cidSpend := 5013.92
+	cidROI := 2.93
 	stub := &businessOverviewStub{result: model.BusinessOverview{
 		Days: 14, SPU: "磷虾油",
 		OverlapPoints: []model.SearchUserOverlapPoint{{
@@ -100,6 +102,10 @@ func TestBusinessOverviewHandler(t *testing.T) {
 				SubaccountSearchUsers: 10, Coefficient: &placementCoefficient,
 			}},
 		}},
+		CID: model.OverviewCID{
+			StartDate: "2026-06-18", EndDate: "2026-07-01", AvailableDays: 1,
+			Points: []model.OverviewCIDPoint{{ReportDate: "2026-07-01", Spend: &cidSpend, CoenzymeROI: &cidROI}},
+		},
 	}}
 	server := &apiServer{businessOverview: stub, timeout: time.Second}
 	request := httptest.NewRequest(http.MethodGet, "/v1/analytics/overview?days=14&spu=%E7%A3%B7%E8%99%BE%E6%B2%B9", nil)
@@ -114,6 +120,7 @@ func TestBusinessOverviewHandler(t *testing.T) {
 		!strings.Contains(response.Body.String(), `"overlap_coefficient":2`) ||
 		!strings.Contains(response.Body.String(), `"note_overlap_coefficient":0.25`) ||
 		strings.Contains(response.Body.String(), `"note_spu_coefficient"`) ||
+		!strings.Contains(response.Body.String(), `"cid":{"start_date":"2026-06-18","end_date":"2026-07-01","available_days":1,"points":[{"report_date":"2026-07-01","spend":5013.92,"coenzyme_roi":2.93}]}`) ||
 		!strings.Contains(response.Body.String(), `"placement_coefficients":[{"placement":"信息流","search_users":10,"note_search_users":5,"subaccount_search_users":10,"coefficient":0.5}]`) {
 		t.Fatalf("days=%d spu=%q body=%s", stub.days, stub.spu, response.Body.String())
 	}

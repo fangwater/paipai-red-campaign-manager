@@ -27,6 +27,17 @@ type OverviewMetric = {
   points: MetricPoint[];
 };
 
+type OverviewCID = {
+  start_date: string;
+  end_date: string;
+  available_days: number;
+  points: Array<{
+    report_date: string;
+    spend: number | null;
+    coenzyme_roi: number | null;
+  }>;
+};
+
 type SearchUserPlacementCoefficient = {
   placement: string;
   search_users: number;
@@ -74,6 +85,7 @@ type OverviewResult = {
     available_days: number;
     metrics: OverviewMetric[];
   };
+  cid?: OverviewCID;
   new_notes: {
     start_date: string;
     end_date: string;
@@ -103,6 +115,7 @@ const NOTE_SPU_SERIES = "笔记加总 / SPU";
 const NOTE_SPU_COLOR = "#3f4850";
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const moneyFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const roiFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 type PlacementChartDatum = {
   value: number;
@@ -437,6 +450,31 @@ function NewNotesChart({ result }: { result: OverviewResult }) {
   return <div ref={chartRef} className="new-notes-chart" role="img" aria-label="每日新增笔记图" />;
 }
 
+function CIDDailyTable({ cid }: { cid?: OverviewCID }) {
+  const points = [...(cid?.points ?? [])].reverse();
+  const range = cid?.start_date && cid.end_date ? `${cid.start_date} - ${cid.end_date}` : "暂无数据";
+
+  return <section className="overview-cid-section">
+    <header className="overview-section-heading">
+      <div><h2>cid数据 · 辅酶</h2><p>{range} · 按日</p></div>
+      <span>有效数据 {cid?.available_days ?? 0}/{points.length} 日</span>
+    </header>
+    <div className="overview-cid-table-wrap">
+      <table className="overview-cid-table" aria-label="cid每日数据">
+        <thead><tr><th>日期</th><th>消耗</th><th>辅酶成交ROI</th></tr></thead>
+        <tbody>
+          {points.map((point) => <tr key={point.report_date}>
+            <td>{point.report_date}</td>
+            <td>{typeof point.spend === "number" ? `¥${moneyFormatter.format(point.spend)}` : "--"}</td>
+            <td>{typeof point.coenzyme_roi === "number" ? roiFormatter.format(point.coenzyme_roi) : "--"}</td>
+          </tr>)}
+          {points.length === 0 ? <tr><td className="overview-cid-empty" colSpan={3}>当前周期暂无 cid 数据</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  </section>;
+}
+
 function safeURL(value: string): string | null {
   try {
     const url = new URL(value);
@@ -504,6 +542,8 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
       <section className="overview-metric-grid">
         {result.trend.metrics.map((metric) => <TrendChart key={metric.key} metric={metric} days={result.days} />)}
       </section>
+
+      <CIDDailyTable cid={result.cid} />
 
       <section className="overview-notes-section">
         <header>

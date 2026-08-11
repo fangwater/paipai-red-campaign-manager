@@ -52,6 +52,8 @@ type ContentResult = {
   spu: SPUOption;
   agency: AgencyOption;
   dimension: DimensionOption;
+  published_start_date: string;
+  published_end_date: string;
   sources: {
     dandelion_data_date: string;
     dandelion_synced_at: string;
@@ -210,6 +212,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const [spu, setSPU] = useState<SPUOption>("辅酶");
   const [agency, setAgency] = useState<AgencyOption>("全部");
   const [dimension, setDimension] = useState<DimensionOption>("audience");
+  const [publishedStartDate, setPublishedStartDate] = useState("");
+  const [publishedEndDate, setPublishedEndDate] = useState("");
   const [includeUnlabeled, setIncludeUnlabeled] = useState(false);
   const [notePage, setNotePage] = useState(1);
   const noteSectionRef = useRef<HTMLElement>(null);
@@ -224,6 +228,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
     setError("");
     setSelectedCell(null);
     const params = new URLSearchParams({ spu, agency, dimension });
+    if (publishedStartDate) params.set("published_start_date", publishedStartDate);
+    if (publishedEndDate) params.set("published_end_date", publishedEndDate);
     fetch(import.meta.env.BASE_URL + "api/analytics/content-analysis?" + params, { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json() as { success: boolean; data?: ContentResult; error?: string };
@@ -238,7 +244,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [agency, dimension, spu]);
+  }, [agency, dimension, publishedEndDate, publishedStartDate, spu]);
 
   const types = result?.types.filter((value) => includeUnlabeled || value !== "未标注") ?? [];
   const dimensions = result?.dimensions.filter((value) => includeUnlabeled || value !== "未标注") ?? [];
@@ -262,7 +268,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
 
   useEffect(() => {
     setNotePage(1);
-  }, [agency, dimension, includeUnlabeled, spu]);
+  }, [agency, dimension, includeUnlabeled, publishedEndDate, publishedStartDate, spu]);
 
   useEffect(() => {
     setNotePage((current) => Math.min(current, notePageCount));
@@ -302,6 +308,12 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
       <div className="content-filter-group"><span>矩阵列</span><div className="segmented-control content-dimension-control" aria-label="热力图维度">
         <button type="button" className={dimension === "audience" ? "active" : ""} onClick={() => setDimension("audience")}>人群标签</button>
         <button type="button" className={dimension === "scenario" ? "active" : ""} onClick={() => setDimension("scenario")}>用户场景</button>
+      </div></div>
+      <div className="content-filter-group content-date-filter"><span>发布时间</span><div className="content-date-range">
+        <input type="date" aria-label="发布时间开始" value={publishedStartDate} max={publishedEndDate || undefined} onChange={(event) => setPublishedStartDate(event.target.value)} />
+        <span aria-hidden="true">至</span>
+        <input type="date" aria-label="发布时间结束" value={publishedEndDate} min={publishedStartDate || undefined} onChange={(event) => setPublishedEndDate(event.target.value)} />
+        <button type="button" title="清除发布时间范围" aria-label="清除发布时间范围" disabled={!publishedStartDate && !publishedEndDate} onClick={() => { setPublishedStartDate(""); setPublishedEndDate(""); }}><X size={14} /></button>
       </div></div>
       <label className="content-unlabeled-toggle"><input type="checkbox" checked={includeUnlabeled} onChange={(event) => setIncludeUnlabeled(event.target.checked)} />包含未标注</label>
     </section>

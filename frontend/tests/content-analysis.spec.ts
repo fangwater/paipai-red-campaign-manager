@@ -30,7 +30,7 @@ function makeNote(id: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeResult(spu: string, agency: string, dimension: Dimension) {
+function makeResult(spu: string, agency: string, dimension: Dimension, publishedStartDate: string, publishedEndDate: string) {
   const primaryDimension = dimension === "audience" ? "职场人" : "精力疲惫";
   const secondDimension = dimension === "audience" ? "健身人" : "运动恢复";
   const notes = [makeNote("note-1"), makeNote("note-2")];
@@ -43,6 +43,8 @@ function makeResult(spu: string, agency: string, dimension: Dimension) {
     spu,
     agency,
     dimension,
+    published_start_date: publishedStartDate,
+    published_end_date: publishedEndDate,
     sources: {
       dandelion_data_date: "2026-07-29",
       dandelion_synced_at: "2026-08-02T09:00:00+08:00",
@@ -135,11 +137,13 @@ async function mockCommon(page: Page, requested: string[]) {
     const spu = params.get("spu") ?? "辅酶";
     const agency = params.get("agency") ?? "全部";
     const dimension = (params.get("dimension") ?? "audience") as Dimension;
-    requested.push(spu + ":" + agency + ":" + dimension);
+    const publishedStartDate = params.get("published_start_date") ?? "";
+    const publishedEndDate = params.get("published_end_date") ?? "";
+    requested.push([spu, agency, dimension, publishedStartDate, publishedEndDate].join(":"));
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ success: true, data: makeResult(spu, agency, dimension) })
+      body: JSON.stringify({ success: true, data: makeResult(spu, agency, dimension, publishedStartDate, publishedEndDate) })
     });
   });
 }
@@ -150,11 +154,21 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await page.goto("/paipai/content-analysis");
 
   await expect(page.getByRole("heading", { name: "内容分析" })).toBeVisible();
-  await expect.poll(() => requested).toContain("辅酶:全部:audience");
+  await expect.poll(() => requested).toContain("辅酶:全部:audience::");
   await expect(page.getByText("2026-07-29", { exact: true })).toBeVisible();
   await expect(page.getByText("内容类型覆盖")).toBeVisible();
   await expect(page.getByRole("button", { name: "科普 职场人 爆文率50%" })).toBeVisible();
   await expect(page.getByText("未标注", { exact: true })).toHaveCount(0);
+
+  const publishedStartDate = page.getByLabel("发布时间开始");
+  const publishedEndDate = page.getByLabel("发布时间结束");
+  await publishedStartDate.fill("2026-07-01");
+  await publishedEndDate.fill("2026-07-31");
+  await expect.poll(() => requested.at(-1)).toBe("辅酶:全部:audience:2026-07-01:2026-07-31");
+  await page.getByRole("button", { name: "清除发布时间范围" }).click();
+  await expect(publishedStartDate).toHaveValue("");
+  await expect(publishedEndDate).toHaveValue("");
+  await expect.poll(() => requested.at(-1)).toBe("辅酶:全部:audience::");
 
   await expect(page.getByText("按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗")).toBeVisible();
   const sortedNotes = page.getByRole("table", { name: "按累计消耗排序的笔记" });
@@ -182,19 +196,19 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
   await page.getByRole("button", { name: "用户场景", exact: true }).click();
-  await expect.poll(() => requested).toContain("辅酶:全部:scenario");
+  await expect.poll(() => requested).toContain("辅酶:全部:scenario::");
   await expect(page.getByRole("button", { name: "科普 精力疲惫 爆文率50%" })).toBeVisible();
   await expect(pageSelect).toHaveValue("1");
   await expect(sortedNotes.locator("tbody tr")).toHaveCount(20);
 
   await page.getByRole("button", { name: "曼杰", exact: true }).click();
-  await expect.poll(() => requested).toContain("辅酶:曼杰:scenario");
+  await expect.poll(() => requested).toContain("辅酶:曼杰:scenario::");
 
   await page.getByLabel("包含未标注").check();
   await expect(page.getByText("未标注", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "磷虾油", exact: true }).click();
-  await expect.poll(() => requested).toContain("磷虾油:曼杰:scenario");
+  await expect.poll(() => requested).toContain("磷虾油:曼杰:scenario::");
 });
 
 test("content heatmap remains usable on mobile", async ({ page }) => {

@@ -24,12 +24,23 @@ func TestContentAnalysisQueryIntegration(t *testing.T) {
 
 	result, err := postgres.ContentAnalysis(ctx, model.ContentAnalysisQuery{
 		SPU: "辅酶", Agency: "全部", Dimension: "audience",
+		PublishedStartDate: "2000-01-01", PublishedEndDate: "2999-12-31",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.SPU != "辅酶" || result.Agency != "全部" || result.Dimension != "audience" {
 		t.Fatalf("result filters=%+v", result)
+	}
+	if result.PublishedStartDate != "2000-01-01" || result.PublishedEndDate != "2999-12-31" {
+		t.Fatalf("result published date filters=%+v", result)
+	}
+	for _, cell := range result.Cells {
+		for _, note := range cell.Notes {
+			if note.PublishedDate < result.PublishedStartDate || note.PublishedDate > result.PublishedEndDate {
+				t.Fatalf("note %s published_date=%q outside selected range", note.NoteID, note.PublishedDate)
+			}
+		}
 	}
 	if result.Coverage.TotalNotes > 0 && (len(result.Types) == 0 || len(result.Dimensions) == 0 || len(result.Cells) == 0) {
 		t.Fatalf("non-empty notes returned incomplete matrix: %+v", result.Coverage)

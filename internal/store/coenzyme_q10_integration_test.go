@@ -43,9 +43,9 @@ func TestCoenzymeQ10DailyIncrementalSyncIntegration(t *testing.T) {
 	first, err := postgres.ApplyCoenzymeQ10Daily(ctx, firstRun.RunID, coenzyme.Snapshot{
 		SpreadsheetToken: "spreadsheet", SheetID: "sheet", SheetName: coenzyme.SheetName,
 		Records: []coenzyme.DailyRecord{
-			{ReportDate: dates[0], SourceRowNumber: 6, ContentHash: "hash-1"},
-			{ReportDate: dates[1], SourceRowNumber: 7, ContentHash: "hash-2"},
-			{ReportDate: dates[2], SourceRowNumber: 8, ContentHash: "hash-3"},
+			{ReportDate: dates[0], Spend: floatPointer(100), CoenzymeROI: floatPointer(2), SourceRowNumber: 6, ContentHash: "hash-1"},
+			{ReportDate: dates[1], Spend: floatPointer(110), CoenzymeROI: floatPointer(2.1), SourceRowNumber: 7, ContentHash: "hash-2"},
+			{ReportDate: dates[2], Spend: floatPointer(120), CoenzymeROI: floatPointer(2.2), SourceRowNumber: 8, ContentHash: "hash-3"},
 		},
 	})
 	if err != nil {
@@ -65,9 +65,9 @@ func TestCoenzymeQ10DailyIncrementalSyncIntegration(t *testing.T) {
 	second, err := postgres.ApplyCoenzymeQ10Daily(ctx, secondRun.RunID, coenzyme.Snapshot{
 		SpreadsheetToken: "spreadsheet", SheetID: "sheet", SheetName: coenzyme.SheetName,
 		Records: []coenzyme.DailyRecord{
-			{ReportDate: dates[1], SourceRowNumber: 7, ContentHash: "hash-2"},
-			{ReportDate: dates[2], SourceRowNumber: 8, ContentHash: "hash-3-updated"},
-			{ReportDate: dates[3], SourceRowNumber: 9, ContentHash: "hash-4"},
+			{ReportDate: dates[1], Spend: floatPointer(110), CoenzymeROI: floatPointer(2.1), SourceRowNumber: 7, ContentHash: "hash-2"},
+			{ReportDate: dates[2], Spend: floatPointer(125), CoenzymeROI: floatPointer(2.25), SourceRowNumber: 8, ContentHash: "hash-3-updated"},
+			{ReportDate: dates[3], Spend: floatPointer(130), CoenzymeROI: floatPointer(2.3), SourceRowNumber: 9, ContentHash: "hash-4"},
 		},
 	})
 	if err != nil {
@@ -85,5 +85,19 @@ func TestCoenzymeQ10DailyIncrementalSyncIntegration(t *testing.T) {
 	}
 	if retained != 4 {
 		t.Fatalf("retained daily rows = %d, want 4", retained)
+	}
+	overview, err := postgres.loadBusinessOverviewCID(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.StartDate != "2097-12-31" || overview.EndDate != "2098-01-04" || overview.AvailableDays != 4 || len(overview.Points) != 5 {
+		t.Fatalf("CID overview = %+v", overview)
+	}
+	if overview.Points[0].Spend != nil || overview.Points[0].CoenzymeROI != nil {
+		t.Fatalf("missing CID day = %+v, want nil metrics", overview.Points[0])
+	}
+	updated := overview.Points[3]
+	if updated.ReportDate != "2098-01-03" || updated.Spend == nil || *updated.Spend != 125 || updated.CoenzymeROI == nil || *updated.CoenzymeROI != 2.25 {
+		t.Fatalf("updated CID day = %+v", updated)
 	}
 }

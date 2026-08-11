@@ -31,6 +31,7 @@ func (p *Postgres) ContentAnalysis(ctx context.Context, query model.ContentAnaly
 	}
 	result := model.ContentAnalysis{
 		SPU: query.SPU, Agency: query.Agency, Dimension: query.Dimension,
+		PublishedStartDate: query.PublishedStartDate, PublishedEndDate: query.PublishedEndDate,
 		Types: []string{}, Dimensions: []string{}, Cells: []model.ContentAnalysisCell{},
 	}
 	if err := p.loadContentAnalysisSources(ctx, query, &result.Sources); err != nil {
@@ -99,8 +100,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 				COALESCE(records.fields #>> '{笔记链接,0,link}', records.fields ->> '笔记链接', '') AS note_url,
 				COALESCE(records.fields #>> '{达人/发布账号,0,text}', records.fields ->> '达人/发布账号', '') AS author,
 				CASE WHEN jsonb_typeof(records.fields -> '发布时间')='number'
-					THEN (TO_TIMESTAMP((records.fields ->> '发布时间')::DOUBLE PRECISION / 1000) AT TIME ZONE 'Asia/Shanghai')::DATE::TEXT
-					ELSE '' END AS published_date,
+					THEN (TO_TIMESTAMP((records.fields ->> '发布时间')::DOUBLE PRECISION / 1000) AT TIME ZONE 'Asia/Shanghai')::DATE
+				END AS published_date,
 				CASE records.fields ->> '下单账号'
 					WHEN '杭州智元文化传播有限公司' THEN '智元'
 					WHEN '江苏拾光宝盒信息技术有限公司' THEN '曼杰'
@@ -129,6 +130,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			SELECT * FROM pgy_ranked
 			WHERE row_number=1 AND provider_code IS NOT NULL AND note_id ~ '^[0-9a-fA-F]{24}$'
 			  AND ($2='全部' OR agency=$2)
+			  AND (NULLIF($3::TEXT, '') IS NULL OR published_date >= NULLIF($3::TEXT, '')::DATE)
+			  AND (NULLIF($4::TEXT, '') IS NULL OR published_date <= NULLIF($4::TEXT, '')::DATE)
 		), maituo_placements AS (
 			SELECT LOWER(BTRIM(note_id)) AS note_id, placement,
 				SUM(spend)::DOUBLE PRECISION AS spend,
@@ -160,7 +163,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			WHERE COALESCE(BTRIM(notes.note_author_name),'') NOT ILIKE 'MegaRed脉拓'
 			  AND notes.spu_name ILIKE $1
 		)
-		SELECT pgy.note_id, pgy.title, pgy.note_url, pgy.author, pgy.published_date, pgy.agency,
+		SELECT pgy.note_id, pgy.title, pgy.note_url, pgy.author, COALESCE(pgy.published_date::TEXT, ''), pgy.agency,
 			COALESCE(execution.note_type,''), COALESCE(execution.audience,''), COALESCE(execution.user_scenario,''),
 			pgy.dandelion_cost,
 			COALESCE(maituo.search_spend,0), maituo.search_cost,
@@ -177,7 +180,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 		LEFT JOIN maituo ON maituo.note_id=LOWER(BTRIM(pgy.note_id))
 		LEFT JOIN guorai ON guorai.note_id=LOWER(BTRIM(pgy.note_id))
 		ORDER BY pgy.agency, pgy.note_id
-	`, "%"+query.SPU+"%", query.Agency)
+	`, "%"+query.SPU+"%", query.Agency, query.PublishedStartDate, query.PublishedEndDate)
 	if err != nil {
 		return nil, fmt.Errorf("query content analysis notes: %w", err)
 	}

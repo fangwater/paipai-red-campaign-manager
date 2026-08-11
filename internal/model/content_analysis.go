@@ -1,9 +1,11 @@
 package model
 
 type ContentAnalysisQuery struct {
-	SPU       string
-	Agency    string
-	Dimension string
+	SPU                string
+	Agency             string
+	Dimension          string
+	PublishedStartDate string
+	PublishedEndDate   string
 }
 
 type ContentAnalysisSources struct {
@@ -68,12 +70,14 @@ type ContentAnalysisCell struct {
 }
 
 type ContentAnalysis struct {
-	SPU        string                  `json:"spu"`
-	Agency     string                  `json:"agency"`
-	Dimension  string                  `json:"dimension"`
-	Sources    ContentAnalysisSources  `json:"sources"`
-	Coverage   ContentAnalysisCoverage `json:"coverage"`
-	Types      []string                `json:"types"`
-	Dimensions []string                `json:"dimensions"`
-	Cells      []ContentAnalysisCell   `json:"cells"`
+	SPU                string                  `json:"spu"`
+	Agency             string                  `json:"agency"`
+	Dimension          string                  `json:"dimension"`
+	PublishedStartDate string                  `json:"published_start_date"`
+	PublishedEndDate   string                  `json:"published_end_date"`
+	Sources            ContentAnalysisSources  `json:"sources"`
+	Coverage           ContentAnalysisCoverage `json:"coverage"`
+	Types              []string                `json:"types"`
+	Dimensions         []string                `json:"dimensions"`
+	Cells              []ContentAnalysisCell   `json:"cells"`
 }
