@@ -172,7 +172,7 @@ make frontend-deploy
 
 子账户层读取最新完整日报的“分子账户”表，统一使用 KPI 70；搜索使用回搜成本，信息流使用预计回流后成本。接口保留按“子账户 + 场域”的诊断表和计划明细，同时按子账户汇总最近 30 个自然日的搜索与信息流趋势。前端可选择子账户及 7/14/30 日周期，直接展示总消耗、搜索消耗与回搜成本、信息流消耗与预计回流后成本、搜索 CPC 与 CTR、信息流 CPC 与 CTR、搜索与信息流回搜率六张图；7 日模式显示点位数值。计划层读取同日报的“笔记明细”表，搜索 KPI 为 30，信息流 KPI 为 70：
 
-数据库视图 `maituo_customer_daily_search_user_overlap` 按“报表日期 + SPU”保留“子账户合计 / SPU”和“笔记合计 / SPU”及其倒数，供接口兼容使用。数据总览接口的 `overlap_points[].placement_coefficients` 读取“分子账户”表，先按场域汇总回搜人数，再分别除以当日 SPU 去重回搜人数；整体回搜系数图只展示各场域与 SPU 的系数，场域动态取自日报，当前包括信息流、搜索和视频内流。子账户与计划诊断不使用任何上述系数：接口中的 `cost` 和兼容字段 `original_cost` 均为日报原始成本，`correction_coefficient` 返回 `null`，所有 KPI 状态、连续超标和动作建议也均按日报原始成本判断。
+数据库视图 `maituo_customer_daily_search_user_overlap` 按“报表日期 + SPU”保留“子账户合计 / SPU”和“笔记合计 / SPU”及其倒数，供接口兼容使用。数据总览接口的 `overlap_points[].placement_coefficients` 按“报表日期 + SPU + 场域”同时计算“笔记回搜人数合计 / 子账户回搜人数合计”和“笔记回搜人数合计 / SPU 去重回搜人数”：笔记通过日期、拆分后的子账户和场域映射到 SPU，同一笔记行映射到同一 SPU 时只计一次；响应返回 `note_search_users`、`subaccount_search_users` 和 `spu_search_users` 作为分子、分母。系数图的场域动态取自日报，当前包括信息流、搜索和视频内流。子账户与计划诊断不使用任何上述系数：接口中的 `cost` 和兼容字段 `original_cost` 均为日报原始成本，`correction_coefficient` 返回 `null`，所有 KPI 状态、连续超标和动作建议也均按日报原始成本判断。
 
 - 成本为空：今日未投放
 - 成本低于 KPI：建议放大

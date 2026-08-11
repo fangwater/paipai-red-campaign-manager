@@ -87,11 +87,16 @@ func TestGuoraiLatestHandlerRejectsInvalidType(t *testing.T) {
 func TestBusinessOverviewHandler(t *testing.T) {
 	coefficient := 2.0
 	placementCoefficient := 0.5
+	noteSPUCoefficient := 0.25
 	stub := &businessOverviewStub{result: model.BusinessOverview{
 		Days: 14, SPU: "磷虾油",
 		OverlapPoints: []model.SearchUserOverlapPoint{{
 			ReportDate: "2026-07-01", OverlapCoefficient: &coefficient,
-			PlacementCoefficients: []model.SearchUserPlacementCoefficient{{Placement: "信息流", SearchUsers: 10, Coefficient: &placementCoefficient}},
+			PlacementCoefficients: []model.SearchUserPlacementCoefficient{{
+				Placement: "信息流", SearchUsers: 10, NoteSearchUsers: 5,
+				SubaccountSearchUsers: 10, SPUSearchUsers: 20, Coefficient: &placementCoefficient,
+				NoteSPUCoefficient: &noteSPUCoefficient,
+			}},
 		}},
 	}}
 	server := &apiServer{businessOverview: stub, timeout: time.Second}
@@ -105,7 +110,7 @@ func TestBusinessOverviewHandler(t *testing.T) {
 	}
 	if stub.days != 14 || stub.spu != "磷虾油" || !strings.Contains(response.Body.String(), `"spu":"磷虾油"`) ||
 		!strings.Contains(response.Body.String(), `"overlap_coefficient":2`) ||
-		!strings.Contains(response.Body.String(), `"placement_coefficients":[{"placement":"信息流","search_users":10,"coefficient":0.5}]`) {
+		!strings.Contains(response.Body.String(), `"placement_coefficients":[{"placement":"信息流","search_users":10,"note_search_users":5,"subaccount_search_users":10,"spu_search_users":20,"coefficient":0.5,"note_spu_coefficient":0.25}]`) {
 		t.Fatalf("days=%d spu=%q body=%s", stub.days, stub.spu, response.Body.String())
 	}
 }

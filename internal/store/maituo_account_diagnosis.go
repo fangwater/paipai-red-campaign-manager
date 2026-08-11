@@ -427,22 +427,61 @@ func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, sp
 		pointIndexes[points[index].ReportDate] = index
 	}
 	rows, err := p.pool.Query(ctx, `
-		SELECT accounts.report_date::DATE::TEXT, accounts.placement,
-			SUM(accounts.search_users)::BIGINT,
-			CASE WHEN spus.search_users > 0
-				THEN SUM(accounts.search_users)::NUMERIC / spus.search_users
-			END::DOUBLE PRECISION
-		FROM maituo_customer_daily_subaccounts accounts
-		JOIN maituo_customer_daily_spus spus
-		  ON spus.report_date = accounts.report_date
-		 AND spus.spu = accounts.spu
-		 AND spus.deleted_at IS NULL
-		WHERE accounts.deleted_at IS NULL
-		  AND accounts.spu = $1
-		  AND accounts.report_date BETWEEN $2::DATE AND $3::DATE
-		GROUP BY accounts.report_date, accounts.placement, spus.search_users
-		ORDER BY accounts.report_date,
-			CASE accounts.placement
+			WITH account_totals AS (
+				SELECT report_date, spu, placement,
+					SUM(search_users)::BIGINT AS subaccount_search_users
+				FROM maituo_customer_daily_subaccounts
+				WHERE deleted_at IS NULL
+				  AND spu = $1
+				  AND report_date BETWEEN $2::DATE AND $3::DATE
+				GROUP BY report_date, spu, placement
+			),
+			subaccount_mappings AS (
+				SELECT DISTINCT report_date, spu, BTRIM(subaccount) AS subaccount, placement
+				FROM maituo_customer_daily_subaccounts
+				WHERE deleted_at IS NULL
+				  AND spu = $1
+				  AND report_date BETWEEN $2::DATE AND $3::DATE
+			),
+			note_rows_by_spu AS (
+				SELECT DISTINCT notes.report_date, notes.note_id, notes.subaccount,
+					notes.campaign_name, notes.placement, notes.search_users, mappings.spu
+				FROM maituo_customer_daily_notes notes
+				CROSS JOIN LATERAL regexp_split_to_table(notes.subaccount, '[、,，]+') account_names(account_name)
+				JOIN subaccount_mappings mappings
+				  ON mappings.report_date = notes.report_date
+				 AND mappings.subaccount = BTRIM(account_names.account_name)
+				 AND mappings.placement = notes.placement
+				WHERE notes.deleted_at IS NULL
+				  AND notes.report_date BETWEEN $2::DATE AND $3::DATE
+			),
+			note_totals AS (
+				SELECT report_date, spu, placement,
+					SUM(search_users)::BIGINT AS note_search_users
+				FROM note_rows_by_spu
+				GROUP BY report_date, spu, placement
+			)
+			SELECT accounts.report_date::DATE::TEXT, accounts.placement,
+				COALESCE(notes.note_search_users, 0)::BIGINT,
+				accounts.subaccount_search_users,
+				COALESCE(spus.search_users, 0)::BIGINT,
+				CASE WHEN accounts.subaccount_search_users > 0
+					THEN COALESCE(notes.note_search_users, 0)::NUMERIC / accounts.subaccount_search_users
+				END::DOUBLE PRECISION,
+				CASE WHEN spus.search_users > 0
+					THEN COALESCE(notes.note_search_users, 0)::NUMERIC / spus.search_users
+				END::DOUBLE PRECISION
+			FROM account_totals accounts
+			LEFT JOIN note_totals notes
+			  ON notes.report_date = accounts.report_date
+			 AND notes.spu = accounts.spu
+			 AND notes.placement = accounts.placement
+			LEFT JOIN maituo_customer_daily_spus spus
+			  ON spus.report_date = accounts.report_date
+			 AND spus.spu = accounts.spu
+			 AND spus.deleted_at IS NULL
+			ORDER BY accounts.report_date,
+				CASE accounts.placement
 				WHEN '信息流' THEN 1
 				WHEN '搜索' THEN 2
 				WHEN '视频内流' THEN 3
@@ -457,19 +496,29 @@ func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, sp
 
 	for rows.Next() {
 		var reportDate, placement string
-		var searchUsers int64
-		var coefficient pgtype.Float8
-		if err := rows.Scan(&reportDate, &placement, &searchUsers, &coefficient); err != nil {
+		var noteSearchUsers, subaccountSearchUsers, spuSearchUsers int64
+		var coefficient, noteSPUCoefficient pgtype.Float8
+		if err := rows.Scan(
+			&reportDate, &placement, &noteSearchUsers, &subaccountSearchUsers, &spuSearchUsers,
+			&coefficient, &noteSPUCoefficient,
+		); err != nil {
 			return fmt.Errorf("scan Maituo search-user placement coefficient: %w", err)
 		}
 		pointIndex, ok := pointIndexes[reportDate]
 		if !ok {
 			continue
 		}
-		item := model.SearchUserPlacementCoefficient{Placement: placement, SearchUsers: searchUsers}
+		item := model.SearchUserPlacementCoefficient{
+			Placement: placement, SearchUsers: subaccountSearchUsers,
+			NoteSearchUsers: noteSearchUsers, SubaccountSearchUsers: subaccountSearchUsers, SPUSearchUsers: spuSearchUsers,
+		}
 		if coefficient.Valid {
 			value := coefficient.Float64
 			item.Coefficient = &value
+		}
+		if noteSPUCoefficient.Valid {
+			value := noteSPUCoefficient.Float64
+			item.NoteSPUCoefficient = &value
 		}
 		points[pointIndex].PlacementCoefficients = append(points[pointIndex].PlacementCoefficients, item)
 	}

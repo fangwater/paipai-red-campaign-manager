@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart, LineChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { AlertCircle, ArrowDownRight, ArrowUpRight, ExternalLink, LoaderCircle, Minus } from "lucide-react";
 
-echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
+echarts.use([LineChart, BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 type ServiceState = "checking" | "online" | "offline";
 type PeriodDays = 7 | 14 | 30;
@@ -30,7 +30,11 @@ type OverviewMetric = {
 type SearchUserPlacementCoefficient = {
   placement: string;
   search_users: number;
+  note_search_users: number;
+  subaccount_search_users: number;
+  spu_search_users: number;
   coefficient: number | null;
+  note_spu_coefficient: number | null;
 };
 
 type SearchUserOverlapPoint = {
@@ -96,6 +100,29 @@ const PLACEMENT_COLORS: Record<string, string> = {
 const PLACEMENT_FALLBACK_COLORS = ["#5f6f82", "#6f7153", "#8a5f72"];
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const moneyFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+type PlacementChartDatum = {
+  value: number;
+  noteSearchUsers: number;
+  denominatorSearchUsers: number;
+};
+
+type PlacementTooltipParam = {
+  data: PlacementChartDatum | null;
+  dataIndex: number;
+  marker: string;
+  seriesName: string;
+};
+
+function escapeTooltipText(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character] ?? character);
+}
 
 function compactNumber(value: number): string {
   if (Math.abs(value) >= 10000) return (value / 10000).toFixed(1) + "万";
@@ -195,13 +222,19 @@ function TrendChart({ metric, days }: { metric: OverviewMetric; days: PeriodDays
   </article>;
 }
 
-function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[]; days: PeriodDays }) {
+function PlacementCoefficientChart({ points, days, denominator }: {
+  points: SearchUserOverlapPoint[];
+  days: PeriodDays;
+  denominator: "subaccount" | "spu";
+}) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const denominatorLabel = denominator === "spu" ? "SPU 回搜" : "子账户回搜";
   const placements = useMemo(() => {
     const names = new Set<string>();
     for (const point of points) {
       for (const item of point.placement_coefficients ?? []) {
-        if (typeof item.coefficient === "number") names.add(item.placement);
+        const coefficient = denominator === "spu" ? item.note_spu_coefficient : item.coefficient;
+        if (typeof coefficient === "number") names.add(item.placement);
       }
     }
     return [...names].sort((left, right) => {
@@ -210,22 +243,48 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
       return (leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex)
         || left.localeCompare(right, "zh-CN");
     });
-  }, [points]);
+  }, [denominator, points]);
   const placementSeries = useMemo(() => placements.map((placement, index) => ({
     placement,
-    label: placement + " ÷ SPU",
     color: PLACEMENT_COLORS[placement] ?? PLACEMENT_FALLBACK_COLORS[index % PLACEMENT_FALLBACK_COLORS.length]
   })), [placements]);
-  const visiblePoints = useMemo(() => points.filter((point) => (point.placement_coefficients ?? []).some((item) => typeof item.coefficient === "number")), [points]);
+  const visiblePoints = useMemo(() => points.filter((point) => (point.placement_coefficients ?? []).some((item) => {
+    const coefficient = denominator === "spu" ? item.note_spu_coefficient : item.coefficient;
+    return typeof coefficient === "number";
+  })), [denominator, points]);
   const option = useMemo<EChartsCoreOption>(() => ({
     animationDuration: 320,
-    grid: { left: 54, right: 22, top: days === 7 ? 46 : 26, bottom: 38 },
+    legend: {
+      data: placementSeries.map((series) => series.placement),
+      top: 14,
+      left: 54,
+      right: 22,
+      selectedMode: true,
+      itemWidth: 18,
+      itemHeight: 3,
+      itemGap: 20,
+      icon: "roundRect",
+      textStyle: { color: "#697177", fontSize: 10 }
+    },
+    grid: { left: 54, right: 22, top: 58, bottom: 38 },
     tooltip: {
       trigger: "axis",
+      confine: true,
       backgroundColor: "rgba(31, 35, 38, 0.94)",
       borderWidth: 0,
       padding: [8, 10],
-      textStyle: { color: "#fff", fontSize: 11 }
+      textStyle: { color: "#fff", fontSize: 11 },
+      formatter: (rawParams: unknown) => {
+        const params = (Array.isArray(rawParams) ? rawParams : [rawParams]) as PlacementTooltipParam[];
+        if (params.length === 0) return "";
+        const reportDate = visiblePoints[params[0].dataIndex]?.report_date ?? "";
+        const rows = params.flatMap((param) => {
+          const datum = param.data;
+          if (!datum || typeof datum.value !== "number") return [];
+          return [`<div style="margin-top:6px">${param.marker}<span>${escapeTooltipText(param.seriesName)}</span><strong style="float:right;margin-left:18px">${datum.value.toFixed(2)}×</strong><div style="margin-left:14px;color:#cfd4d7">笔记回搜 ${numberFormatter.format(datum.noteSearchUsers)} / ${denominatorLabel} ${numberFormatter.format(datum.denominatorSearchUsers)}</div></div>`];
+        });
+        return `<strong>${escapeTooltipText(reportDate)}</strong>${rows.join("")}`;
+      }
     },
     xAxis: {
       type: "category",
@@ -243,9 +302,20 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
       splitLine: { lineStyle: { color: "#edf0f1", type: "dashed" } }
     },
     series: placementSeries.map((series) => ({
-      name: series.label,
+      name: series.placement,
       type: "line",
-      data: visiblePoints.map((point) => point.placement_coefficients.find((item) => item.placement === series.placement)?.coefficient ?? null),
+      data: visiblePoints.map((point) => {
+        const item = point.placement_coefficients.find((candidate) => candidate.placement === series.placement);
+        const coefficient = denominator === "spu" ? item?.note_spu_coefficient : item?.coefficient;
+        if (!item || typeof coefficient !== "number") return null;
+        return {
+          value: coefficient,
+          noteSearchUsers: item.note_search_users,
+          denominatorSearchUsers: denominator === "spu"
+            ? item.spu_search_users
+            : item.subaccount_search_users ?? item.search_users
+        };
+      }),
       connectNulls: true,
       smooth: 0.16,
       showSymbol: days === 7,
@@ -253,7 +323,6 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
       symbolSize: 7,
       lineStyle: { width: 2.5, color: series.color },
       itemStyle: { color: series.color, borderColor: "#fff", borderWidth: 2 },
-      tooltip: { valueFormatter: (value: number) => `${value.toFixed(2)}×` },
       label: {
         show: days === 7 && placementSeries.length === 1,
         position: "top",
@@ -264,7 +333,7 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
       },
       emphasis: { focus: "series", scale: 1.15 }
     }))
-  }), [days, placementSeries, visiblePoints]);
+  }), [days, denominator, denominatorLabel, placementSeries, visiblePoints]);
 
   useEffect(() => {
     if (!chartRef.current || visiblePoints.length === 0) return;
@@ -280,14 +349,13 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
 
   return <article className="overview-overlap-card">
     <header>
-      <div><h3>场域 / SPU 回搜系数</h3><p>场域内子账户回搜人数合计 ÷ SPU 去重回搜人数</p></div>
-      <div className="overview-overlap-legend">
-        {placementSeries.map((series) => <span key={series.placement}><i style={{ background: series.color }} />{series.label}</span>)}
-      </div>
+      {denominator === "spu"
+        ? <div><h3>笔记 / SPU</h3><p>场域笔记回搜人数合计 ÷ SPU 去重回搜人数</p></div>
+        : <div><h3>笔记 / 子账户</h3><p>场域笔记回搜人数合计 ÷ 同场域子账户回搜人数合计</p></div>}
     </header>
     {visiblePoints.length > 0
-      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label="场域与 SPU 回搜系数折线图" />
-      : <div className="overview-overlap-empty">当前周期暂无场域系数</div>}
+      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label={`按场域的笔记与${denominator === "spu" ? "SPU" : "子账户"}回搜系数折线图，图例可点击筛选`} />
+      : <div className="overview-overlap-empty">当前周期暂无{denominator === "spu" ? "笔记 / SPU" : "笔记 / 子账户"}系数</div>}
   </article>;
 }
 
@@ -400,13 +468,6 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
     {error ? <div className="analysis-error"><AlertCircle size={16} />{error}</div> : null}
 
     {loading && !result ? <div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在读取业务数据</div> : result ? <>
-      <section className="overview-overlap-section">
-        <header className="overview-section-heading">
-          <div><h2>整体回搜系数</h2><p>{result.spu} · SPU 级场域口径，按日报日计算</p></div>
-        </header>
-        <OverlapTrendChart points={result.overlap_points ?? []} days={result.days} />
-      </section>
-
       <section className="overview-section-heading">
         <div><h2>投放趋势</h2><p>{result.trend.start_date} - {result.trend.end_date} · 有效数据 {result.trend.available_days}/{result.days} 日</p></div>
         {loading ? <LoaderCircle size={17} className="spin" /> : <span>对比 {result.trend.previous_start_date} - {result.trend.previous_end_date}</span>}
@@ -453,6 +514,16 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
             })}
             {agency && agency.notes.length === 0 ? <tr><td className="agency-empty" colSpan={7}>本周期暂无新增笔记</td></tr> : null}
           </tbody></table></div>
+        </div>
+      </section>
+
+      <section className="overview-overlap-section">
+        <header className="overview-section-heading">
+          <div><h2>场域回搜系数</h2><p>{result.spu} · 按日报日分别计算笔记 / 子账户与笔记 / SPU</p></div>
+        </header>
+        <div className="overview-overlap-grid">
+          <PlacementCoefficientChart points={result.overlap_points ?? []} days={result.days} denominator="subaccount" />
+          <PlacementCoefficientChart points={result.overlap_points ?? []} days={result.days} denominator="spu" />
         </div>
       </section>
     </> : null}
