@@ -1,0 +1,23 @@
+[Unit]
+Description=PaiPai coenzyme Q10 daily Feishu sync
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=2h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/paipai-red-campaign-manager
+ExecStart=/usr/bin/curl --fail --silent --show-error --request POST --connect-timeout 5 --max-time 660 http://127.0.0.1:18081/v1/sync/coenzyme-q10
+TimeoutStartSec=12min
+Restart=on-failure
+RestartSec=10min
+UMask=0077
+Nice=10
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only

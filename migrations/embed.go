@@ -96,3 +96,8 @@ var ReferenceMaterialContentsSQL string
 //
 //go:embed 021_provider_note_source_title.sql
 var ProviderNoteSourceTitleSQL string
+
+// CoenzymeQ10DailySQL stores the incrementally synchronized coenzyme Q10 daily sheet.
+//
+//go:embed 022_coenzyme_q10_daily.sql
+var CoenzymeQ10DailySQL string

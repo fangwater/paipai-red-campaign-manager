@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PaiPai coenzyme Q10 Feishu sync every day at 06:00 Asia/Shanghai
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1min
+Unit=paipai-coenzyme-q10-sync.service
+
+[Install]
+WantedBy=timers.target

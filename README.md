@@ -22,6 +22,7 @@ PaiPai 小红书投放管理服务。飞书多维表格 Base、稿件正文和�
 - 稿件按笔记 ID、文档资源键和抽取版本增量抓取；链接及抽取版本未变化时不重复请求，抓取失败的 ID 下轮重试。
 - 图片下载后按 SHA-256 去重存入 PostgreSQL，不保存或暴露飞书临时 URL；源图最大 50 MB，超过 2 MB 或边长超过 2560px 的 JPEG/PNG 会先缩放压缩，数据库单图最多 10 MB、单篇优化后最多 100 MB。
 - 服务商记录使用快照同步，飞书中消失的行在 PostgreSQL 中标记为软删除。
+- “辅酶q10日数据”按日期和内容哈希增量写入；新增日期插入、历史修订更新、未变化记录跳过，源表暂缺日期不删除本地历史。
 
 腾讯/企微文档不抓取正文。服务会保存其链接和 `auth_required` 状态，并将正文统一存为 `nan`。
 
@@ -37,6 +38,8 @@ PaiPai 小红书投放管理服务。飞书多维表格 Base、稿件正文和�
 - `service_provider_notes`：笔记 ID、定稿纯文本、有序内容块及来源版本。
 - `manuscript_assets`：按内容哈希去重的稿件图片二进制。
 - `service_provider_note_assets`：稿件与图片的有序关联。
+- `coenzyme_q10_daily`：辅酶 Q10 的 19 列日数据，日期为幂等主键。
+- `coenzyme_q10_sync_runs`：每轮读取、插入、更新、未变化数量及失败原因。
 
 ## 环境要求
 
@@ -70,6 +73,9 @@ cp .env.example .env
 - `SYNC_TIMEOUT`：一次显式同步请求的超时，默认 10 分钟
 - `DOCUMENT_REFRESH_INTERVAL`：调用 Base 同步时，已抓取正文的重新拉取间隔，默认 1 小时
 
+- `LARK_COENZYME_Q10_WIKI_TOKEN`：日报所在 Wiki 节点，默认当前“脉拓辅酶日报表”。
+- `LARK_COENZYME_Q10_SHEET_ID`：日报页签 ID，默认 `a961f7`。
+- `LARK_COENZYME_Q10_SHEET_NAME`：日报页签名，默认“辅酶q10日数据”；同步时名称优先于 ID。
 稿件向量配置：
 
 - `BAILIAN_API_KEY`：百炼 Workspace API Key，也可使用 `DASHSCOPE_API_KEY`
@@ -166,7 +172,7 @@ make frontend-deploy
 
 子账户层读取最新完整日报的“分子账户”表，统一使用 KPI 70；搜索使用回搜成本，信息流使用预计回流后成本。接口保留按“子账户 + 场域”的诊断表和计划明细，同时按子账户汇总最近 30 个自然日的搜索与信息流趋势。前端可选择子账户及 7/14/30 日周期，直接展示总消耗、搜索消耗与回搜成本、信息流消耗与预计回流后成本、搜索 CPC 与 CTR、信息流 CPC 与 CTR、搜索与信息流回搜率六张图；7 日模式显示点位数值。计划层读取同日报的“笔记明细”表，搜索 KPI 为 30，信息流 KPI 为 70：
 
-数据库视图 `maituo_customer_daily_search_user_overlap` 按“报表日期 + SPU”以分 SPU 总览回搜人数为统一基准，分别计算“子账户合计 / SPU”和“笔记合计 / SPU”两个综合重合系数，校准系数为各自倒数。笔记中的多账户字段会先拆分映射到 SPU，同一笔记行在同一 SPU 内只计算一次。数据总览接口的 `overlap_points` 返回所选 SPU 与 7/14/30 日周期内的三层人数、两组重合人数及系数；整体回搜重合图按有效报表日展示这两个综合系数，不归属于任何单一子账户。子账户与计划诊断不使用上述修正系数：接口中的 `cost` 和兼容字段 `original_cost` 均为日报原始成本，`correction_coefficient` 返回 `null`，所有 KPI 状态、连续超标和动作建议也均按日报原始成本判断。
+数据库视图 `maituo_customer_daily_search_user_overlap` 按“报表日期 + SPU”保留“子账户合计 / SPU”和“笔记合计 / SPU”及其倒数，供接口兼容使用。数据总览接口的 `overlap_points[].placement_coefficients` 读取“分子账户”表，先按场域汇总回搜人数，再分别除以当日 SPU 去重回搜人数；整体回搜系数图只展示各场域与 SPU 的系数，场域动态取自日报，当前包括信息流、搜索和视频内流。子账户与计划诊断不使用任何上述系数：接口中的 `cost` 和兼容字段 `original_cost` 均为日报原始成本，`correction_coefficient` 返回 `null`，所有 KPI 状态、连续超标和动作建议也均按日报原始成本判断。
 
 - 成本为空：今日未投放
 - 成本低于 KPI：建议放大
@@ -196,7 +202,7 @@ make frontend-deploy
 make lark-sync-start
 ```
 
-服务由 PM2 运行在 `127.0.0.1:18081`，不会定时同步，也不会在启动时同步。接口同步返回结果：`200 OK` 表示数据库写入已经完成，已有同类作业运行时返回 `409 Conflict`。
+服务由 PM2 运行在 `127.0.0.1:18081`，API 进程自身不会定时同步或在启动时同步。接口同步返回结果：`200 OK` 表示数据库写入已经完成，已有同类作业运行时返回 `409 Conflict`。
 
 - `GET /healthz`：进程健康状态。
 - `GET /v1/manuscript-assets/{sha256}`：读取仍被稿件引用的图片，支持 ETag 和私有缓存。
@@ -204,8 +210,10 @@ make lark-sync-start
 - `GET /v1/sync/manuscripts/status`：查询三张稿件表最近的持久化同步状态。
 - `POST /v1/sync/dandelion`：只同步配置 Base 内的“蒲公英数据”表。
 - `GET /v1/sync/dandelion/status`：查询蒲公英最近 10 次持久化同步结果。
+- `POST /v1/sync/coenzyme-q10`：按日期增量同步“辅酶q10日数据”。
+- `GET /v1/sync/coenzyme-q10/status`：查询当前日期范围和最近 10 次持久化同步结果。
 
-前端入口为 `/paipai/data-sync/dandelion` 和 `/paipai/data-sync/manuscripts`。公网只开放四个固定路径：两个状态查询和两个显式同步触发；飞书凭据、Base Token 与源表地址均不返回前端。
+前端入口包括 `/paipai/data-sync/coenzyme-q10`。公网只开放各目标固定的状态查询与显式同步触发路径；飞书凭据、Token 与源表地址均不返回前端。
 
 稿件请求体为空或 `{}` 时同步全部三个服务商：`manjie`（曼杰）、`youyiyouer`（有一有二）、`zhiyuan`（智元）：
 
@@ -231,6 +239,29 @@ make lark-sync-dandelion
 ```
 
 该目标当前对应 Base `ULhXbXkAGaiNARsahfcclBX4nWe` 内的 `tbl3djNUVT4WANi0`，接口成功结果中的 `tables` 固定为 `1`。记录使用 `app_token + table_id + record_id` 与其他飞书目标隔离。
+
+“辅酶q10日数据”可手动同步，也可安装每天上海时间 06:00 的 systemd timer：
+
+```bash
+make lark-sync-coenzyme-q10
+make lark-sync-coenzyme-q10-daily-install
+```
+
+timer 使用 `OnCalendar=*-*-* 06:00:00 Asia/Shanghai` 和 `Persistent=true`；主机在 06:00 停机时会在恢复后补跑。同步失败后每 10 分钟重试，2 小时内最多启动 3 次。
+
+立即执行、查看下次触发时间和日志：
+
+```bash
+make lark-sync-coenzyme-q10-daily-now
+make lark-sync-coenzyme-q10-daily-status
+make lark-sync-coenzyme-q10-daily-logs
+```
+
+也可直接确认 timer 日历：
+
+```bash
+systemctl list-timers paipai-coenzyme-q10-sync.timer --all
+```
 
 列出 Base 内全部数据表：
 

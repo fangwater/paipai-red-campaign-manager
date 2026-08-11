@@ -51,6 +51,8 @@ type manuscriptAssetStore interface {
 type apiServer struct {
 	dandelionSync        baseSyncService
 	dandelionStatus      dandelionStatusStore
+	coenzymeQ10Sync      coenzymeQ10SyncService
+	coenzymeQ10Status    coenzymeQ10StatusStore
 	dandelionExcelImport dandelionExcelImportStore
 	manuscriptSync       manuscriptSyncService
 	embeddingRefresh     noteEmbeddingService
@@ -117,6 +119,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err := destination.FailRunningProviderContentSyncs(ctx, "manual sync service restarted before the request finished"); err != nil {
 		return err
 	}
+	if err := destination.FailRunningCoenzymeQ10Syncs(ctx, "manual sync service restarted before the request finished"); err != nil {
+		return err
+	}
 	embeddingClient, err := embedding.NewClient(cfg.BailianAPIKey, cfg.BailianBaseURL, nil)
 	if err != nil {
 		return fmt.Errorf("configure Bailian embeddings: %w", err)
@@ -145,6 +150,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		dandelionSync:        syncer.New(dandelionSource, dandelionDestination, cfg.DocumentRefreshInterval),
 		dandelionStatus:      dandelionDestination,
 		dandelionExcelImport: destination,
+		coenzymeQ10Sync:      syncer.NewCoenzymeQ10(source, destination, cfg.CoenzymeQ10WikiToken, cfg.CoenzymeQ10SheetID, cfg.CoenzymeQ10SheetName),
+		coenzymeQ10Status:    destination,
 		manuscriptSync:       syncer.NewProvider(source, destination),
 		embeddingRefresh:     embeddingRefresher,
 		statusStore:          destination,
@@ -183,7 +190,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("Lark manual sync API started",
 		"listen", listener.Addr().String(),
 		"manual_only", true,
-		"targets", []string{"dandelion", "manuscripts"},
+		"targets", []string{"dandelion", "manuscripts", "coenzyme-q10"},
 		"sync_timeout", cfg.SyncTimeout,
 	)
 	select {
@@ -208,6 +215,8 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/sync/dandelion/status", server.dandelionStatusHandler)
 	mux.HandleFunc("/v1/imports/dandelion-excel", server.importDandelionExcel)
 	mux.HandleFunc("/v1/imports/maituo-customer-daily", server.importMaituoCustomerDaily)
+	mux.HandleFunc("/v1/sync/coenzyme-q10", server.syncCoenzymeQ10)
+	mux.HandleFunc("/v1/sync/coenzyme-q10/status", server.coenzymeQ10StatusHandler)
 	mux.HandleFunc("/v1/imports/maituo-subaccount-directories", server.listMaituoSubaccountDirectories)
 	mux.HandleFunc(maituoSubaccountDownloadPrefix, server.maituoSubaccountDownload)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
@@ -357,7 +366,7 @@ func writeSyncResult(writer http.ResponseWriter, result interface{}, err error) 
 	}
 	status := http.StatusBadGateway
 	switch {
-	case errors.Is(err, syncer.ErrAlreadyRunning), errors.Is(err, store.ErrSyncLocked), errors.Is(err, store.ErrNoteEmbeddingRefreshLocked):
+	case errors.Is(err, syncer.ErrAlreadyRunning), errors.Is(err, store.ErrSyncLocked), errors.Is(err, store.ErrNoteEmbeddingRefreshLocked), errors.Is(err, store.ErrCoenzymeQ10SyncLocked):
 		status = http.StatusConflict
 	case errors.Is(err, syncer.ErrUnknownProvider):
 		status = http.StatusBadRequest

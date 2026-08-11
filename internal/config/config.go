@@ -12,8 +12,11 @@ const (
 	defaultLarkSyncListen          = "127.0.0.1:18081"
 	defaultTimeout                 = 10 * time.Minute
 	defaultDocumentRefreshInterval = time.Hour
-	defaultBailianEmbeddingModel    = "qwen3.7-text-embedding"
-	defaultBailianDimensions        = 1024
+	defaultBailianEmbeddingModel   = "qwen3.7-text-embedding"
+	defaultBailianDimensions       = 1024
+	defaultCoenzymeQ10WikiToken    = "WZlEwfr9dicJM1kwSVXcxhnUnDb"
+	defaultCoenzymeQ10SheetID      = "a961f7"
+	defaultCoenzymeQ10SheetName    = "辅酶q10日数据"
 )
 
 type Config struct {
@@ -31,6 +34,9 @@ type Config struct {
 	BailianBaseURL          string
 	BailianEmbeddingModel   string
 	BailianDimensions       int
+	CoenzymeQ10WikiToken    string
+	CoenzymeQ10SheetID      string
+	CoenzymeQ10SheetName    string
 }
 
 func Load() (Config, error) {
@@ -49,6 +55,9 @@ func Load() (Config, error) {
 		BailianBaseURL:          os.Getenv("BAILIAN_BASE_URL"),
 		BailianEmbeddingModel:   envOrDefault("BAILIAN_EMBEDDING_MODEL", defaultBailianEmbeddingModel),
 		BailianDimensions:       defaultBailianDimensions,
+		CoenzymeQ10WikiToken:    envOrDefault("LARK_COENZYME_Q10_WIKI_TOKEN", defaultCoenzymeQ10WikiToken),
+		CoenzymeQ10SheetID:      envOrDefault("LARK_COENZYME_Q10_SHEET_ID", defaultCoenzymeQ10SheetID),
+		CoenzymeQ10SheetName:    envOrDefault("LARK_COENZYME_Q10_SHEET_NAME", defaultCoenzymeQ10SheetName),
 	}
 
 	var err error

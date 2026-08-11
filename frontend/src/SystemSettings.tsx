@@ -34,17 +34,18 @@ function SystemSettings() {
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     setStates(initialState);
-    const [core, dandelion, manuscripts, spotlight] = await Promise.allSettled([
+    const [core, dandelion, manuscripts, coenzyme, spotlight] = await Promise.allSettled([
       fetch(`${import.meta.env.BASE_URL}healthz`, { signal }),
       fetch(`${import.meta.env.BASE_URL}api/lark/sync/dandelion/status`, { signal }),
       fetch(`${import.meta.env.BASE_URL}api/lark/sync/manuscripts/status`, { signal }),
+      fetch(`${import.meta.env.BASE_URL}api/lark/sync/coenzyme-q10/status`, { signal }),
       fetch(`${import.meta.env.BASE_URL}api/xhs-jg/sync/status`, { signal })
     ]);
     if (signal?.aborted) return;
     const responseOK = (result: PromiseSettledResult<Response>) => result.status === "fulfilled" && result.value.ok;
     setStates({
       core: responseOK(core) ? "online" : "offline",
-      lark: responseOK(dandelion) && responseOK(manuscripts) ? "online" : "offline",
+      lark: responseOK(dandelion) && responseOK(manuscripts) && responseOK(coenzyme) ? "online" : "offline",
       spotlight: responseOK(spotlight) ? "online" : "offline"
     });
     setCheckedAt(new Date());
@@ -58,7 +59,7 @@ function SystemSettings() {
 
   const services = [
     { key: "core" as const, label: "数据中台 API", detail: "日报导入与分析查询", icon: Server },
-    { key: "lark" as const, label: "飞书数据同步", detail: "蒲公英与服务商稿件", icon: Database },
+    { key: "lark" as const, label: "飞书数据同步", detail: "蒲公英、服务商稿件与辅酶Q10日数据", icon: Database },
     { key: "spotlight" as const, label: "聚光同步服务", detail: "计划、单元与创意", icon: RefreshCw }
   ];
 
@@ -84,7 +85,7 @@ function SystemSettings() {
 
     <section className="settings-actions">
       <header><h2>手动任务</h2></header>
-      <div><button onClick={() => navigate("/data-sync/dandelion")}><Database size={18} /><span><strong>飞书数据同步</strong><small>蒲公英与稿件</small></span></button>
+      <div><button onClick={() => navigate("/data-sync/coenzyme-q10")}><Database size={18} /><span><strong>飞书数据同步</strong><small>蒲公英、稿件与辅酶Q10</small></span></button>
         <button onClick={() => navigate("/xhs-jg-sync/campaigns")}><RefreshCw size={18} /><span><strong>聚光数据同步</strong><small>计划、单元与创意</small></span></button></div>
     </section>
   </>;

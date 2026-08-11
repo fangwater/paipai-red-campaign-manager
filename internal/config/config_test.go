@@ -39,6 +39,9 @@ func TestLoad(t *testing.T) {
 	if cfg.BailianAPIKey != "bailian-key" || cfg.BailianWorkspaceID != "workspace-id" || cfg.BailianDimensions != 768 {
 		t.Fatalf("Bailian config = key:%t workspace:%q dimensions:%d", cfg.BailianAPIKey != "", cfg.BailianWorkspaceID, cfg.BailianDimensions)
 	}
+	if cfg.CoenzymeQ10WikiToken != defaultCoenzymeQ10WikiToken || cfg.CoenzymeQ10SheetID != defaultCoenzymeQ10SheetID || cfg.CoenzymeQ10SheetName != defaultCoenzymeQ10SheetName {
+		t.Fatalf("coenzyme Q10 defaults = %q / %q / %q", cfg.CoenzymeQ10WikiToken, cfg.CoenzymeQ10SheetID, cfg.CoenzymeQ10SheetName)
+	}
 }
 
 func TestLoadRequiresCredentials(t *testing.T) {

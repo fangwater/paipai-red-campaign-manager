@@ -1,5 +1,6 @@
 .PHONY: run test build frontend-dev frontend-build frontend-deploy xhs-token xhs-refresh xhs-authd-build xhs-authd-start \
-	lark-sync-build lark-sync-start lark-sync-manuscripts lark-sync-dandelion lark-sync-status lark-sync-logs lark-sync-stop \
+	lark-sync-build lark-sync-start lark-sync-manuscripts lark-sync-dandelion lark-sync-coenzyme-q10 lark-sync-status lark-sync-logs lark-sync-stop \
+	lark-sync-coenzyme-q10-daily-install lark-sync-coenzyme-q10-daily-now lark-sync-coenzyme-q10-daily-status lark-sync-coenzyme-q10-daily-logs \
 	xhs-authd-authorize xhs-authd-status xhs-authd-logs xhs-authd-stop xhs-campaign-sync xhs-sync-status xhs-sync-campaigns xhs-sync-units xhs-sync-creativities \
 	xhs-sync-daily xhs-sync-daily-install xhs-sync-daily-now xhs-sync-daily-status xhs-sync-daily-logs \
 	embeddings-refresh embeddings-force-refresh guorai-build guorai-login guorai-sync guorai-sync-install guorai-sync-now guorai-sync-status guorai-sync-logs
@@ -18,6 +19,25 @@ lark-sync-manuscripts:
 
 lark-sync-dandelion:
 	@curl -sS -X POST http://127.0.0.1:18081/v1/sync/dandelion
+
+lark-sync-coenzyme-q10:
+	@curl -sS -X POST http://127.0.0.1:18081/v1/sync/coenzyme-q10
+
+lark-sync-coenzyme-q10-daily-install:
+	systemd-analyze verify deploy/systemd/paipai-coenzyme-q10-sync.service deploy/systemd/paipai-coenzyme-q10-sync.timer
+	@sudo install -m 0644 deploy/systemd/paipai-coenzyme-q10-sync.service /etc/systemd/system/paipai-coenzyme-q10-sync.service
+	@sudo install -m 0644 deploy/systemd/paipai-coenzyme-q10-sync.timer /etc/systemd/system/paipai-coenzyme-q10-sync.timer
+	@sudo systemctl daemon-reload
+	@sudo systemctl enable --now paipai-coenzyme-q10-sync.timer
+
+lark-sync-coenzyme-q10-daily-now:
+	@sudo systemctl start paipai-coenzyme-q10-sync.service
+
+lark-sync-coenzyme-q10-daily-status:
+	@systemctl status paipai-coenzyme-q10-sync.timer paipai-coenzyme-q10-sync.service --no-pager
+
+lark-sync-coenzyme-q10-daily-logs:
+	@journalctl -u paipai-coenzyme-q10-sync.service -n 100 --no-pager
 
 lark-sync-status:
 	@curl -sS http://127.0.0.1:18081/v1/sync/manuscripts/status
