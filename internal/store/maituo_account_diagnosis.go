@@ -363,7 +363,7 @@ func (p *Postgres) maituoSearchUserOverlapPoints(ctx context.Context, spu, start
 
 	result := make([]model.SearchUserOverlapPoint, 0, maituoAccountOverviewDays)
 	for rows.Next() {
-		var point model.SearchUserOverlapPoint
+		point := model.SearchUserOverlapPoint{PlacementCoefficients: []model.SearchUserPlacementCoefficient{}}
 		var spuUsers, subaccountUsers, overlapUsers, noteUsers, noteOverlapUsers pgtype.Int8
 		var coefficient, deduplicationFactor, noteCoefficient, noteDeduplicationFactor pgtype.Float8
 		if err := rows.Scan(
@@ -414,7 +414,69 @@ func (p *Postgres) maituoSearchUserOverlapPoints(ctx context.Context, spu, start
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate Maituo search-user overlap history: %w", err)
 	}
+	rows.Close()
+	if err := p.maituoSearchUserPlacementCoefficients(ctx, spu, startDate, endDate, result); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, spu, startDate, endDate string, points []model.SearchUserOverlapPoint) error {
+	pointIndexes := make(map[string]int, len(points))
+	for index := range points {
+		pointIndexes[points[index].ReportDate] = index
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT accounts.report_date::DATE::TEXT, accounts.placement,
+			SUM(accounts.search_users)::BIGINT,
+			CASE WHEN spus.search_users > 0
+				THEN SUM(accounts.search_users)::NUMERIC / spus.search_users
+			END::DOUBLE PRECISION
+		FROM maituo_customer_daily_subaccounts accounts
+		JOIN maituo_customer_daily_spus spus
+		  ON spus.report_date = accounts.report_date
+		 AND spus.spu = accounts.spu
+		 AND spus.deleted_at IS NULL
+		WHERE accounts.deleted_at IS NULL
+		  AND accounts.spu = $1
+		  AND accounts.report_date BETWEEN $2::DATE AND $3::DATE
+		GROUP BY accounts.report_date, accounts.placement, spus.search_users
+		ORDER BY accounts.report_date,
+			CASE accounts.placement
+				WHEN '信息流' THEN 1
+				WHEN '搜索' THEN 2
+				WHEN '视频内流' THEN 3
+				ELSE 4
+			END,
+			accounts.placement
+	`, spu, startDate, endDate)
+	if err != nil {
+		return fmt.Errorf("query Maituo search-user placement coefficients: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var reportDate, placement string
+		var searchUsers int64
+		var coefficient pgtype.Float8
+		if err := rows.Scan(&reportDate, &placement, &searchUsers, &coefficient); err != nil {
+			return fmt.Errorf("scan Maituo search-user placement coefficient: %w", err)
+		}
+		pointIndex, ok := pointIndexes[reportDate]
+		if !ok {
+			continue
+		}
+		item := model.SearchUserPlacementCoefficient{Placement: placement, SearchUsers: searchUsers}
+		if coefficient.Valid {
+			value := coefficient.Float64
+			item.Coefficient = &value
+		}
+		points[pointIndex].PlacementCoefficients = append(points[pointIndex].PlacementCoefficients, item)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate Maituo search-user placement coefficients: %w", err)
+	}
+	return nil
 }
 
 func (p *Postgres) maituoDiagnosisDandelionNotes(ctx context.Context, noteIDs []string) (map[string]maituo.DandelionNoteSupplement, string, error) {

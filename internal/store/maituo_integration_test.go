@@ -132,6 +132,26 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		overlapPoint.NoteOverlapCoefficient == nil || *overlapPoint.NoteOverlapCoefficient != 12 {
 		t.Fatalf("overlap latest point: %+v", overlapPoint)
 	}
+	if len(overlapPoint.PlacementCoefficients) != 2 {
+		t.Fatalf("placement coefficients: %+v", overlapPoint.PlacementCoefficients)
+	}
+	expectedPlacements := map[string]struct {
+		users       int64
+		coefficient float64
+	}{
+		"搜索":  {users: 6, coefficient: 6},
+		"信息流": {users: 8, coefficient: 8},
+	}
+	for _, item := range overlapPoint.PlacementCoefficients {
+		expected, ok := expectedPlacements[item.Placement]
+		if !ok || item.SearchUsers != expected.users || item.Coefficient == nil || *item.Coefficient != expected.coefficient {
+			t.Fatalf("placement coefficient: %+v", item)
+		}
+		delete(expectedPlacements, item.Placement)
+	}
+	if len(expectedPlacements) != 0 {
+		t.Fatalf("missing placement coefficients: %+v", expectedPlacements)
+	}
 	overview := diagnosis.AccountOverviews[0]
 	overviewPoint := overview.Points[len(overview.Points)-1]
 	if overview.CurrentTotalSpend != 12 || overviewPoint.TotalSpend == nil || *overviewPoint.TotalSpend != 12 ||

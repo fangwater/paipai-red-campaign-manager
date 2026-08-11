@@ -27,10 +27,15 @@ type OverviewMetric = {
   points: MetricPoint[];
 };
 
+type SearchUserPlacementCoefficient = {
+  placement: string;
+  search_users: number;
+  coefficient: number | null;
+};
+
 type SearchUserOverlapPoint = {
   report_date: string;
-  overlap_coefficient: number | null;
-  note_overlap_coefficient: number | null;
+  placement_coefficients: SearchUserPlacementCoefficient[];
 };
 
 type OverviewNote = {
@@ -82,10 +87,13 @@ const METRIC_COLORS: Record<string, string> = {
   search_uv: "#2e6f9e",
   order_uv: "#b17b27"
 };
-const OVERLAP_SERIES = [
-  { key: "overlap_coefficient", label: "子账户 ÷ SPU", color: "#276f7c" },
-  { key: "note_overlap_coefficient", label: "笔记 ÷ SPU", color: "#c45a62" }
-] as const;
+const PLACEMENT_ORDER: string[] = ["信息流", "搜索", "视频内流"];
+const PLACEMENT_COLORS: Record<string, string> = {
+  信息流: "#c45a62",
+  搜索: "#276f7c",
+  视频内流: "#b17b27"
+};
+const PLACEMENT_FALLBACK_COLORS = ["#5f6f82", "#6f7153", "#8a5f72"];
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const moneyFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -189,7 +197,26 @@ function TrendChart({ metric, days }: { metric: OverviewMetric; days: PeriodDays
 
 function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[]; days: PeriodDays }) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const visiblePoints = useMemo(() => points.filter((point) => OVERLAP_SERIES.some((series) => typeof point[series.key] === "number")), [points]);
+  const placements = useMemo(() => {
+    const names = new Set<string>();
+    for (const point of points) {
+      for (const item of point.placement_coefficients ?? []) {
+        if (typeof item.coefficient === "number") names.add(item.placement);
+      }
+    }
+    return [...names].sort((left, right) => {
+      const leftIndex = PLACEMENT_ORDER.indexOf(left);
+      const rightIndex = PLACEMENT_ORDER.indexOf(right);
+      return (leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex)
+        || left.localeCompare(right, "zh-CN");
+    });
+  }, [points]);
+  const placementSeries = useMemo(() => placements.map((placement, index) => ({
+    placement,
+    label: placement + " ÷ SPU",
+    color: PLACEMENT_COLORS[placement] ?? PLACEMENT_FALLBACK_COLORS[index % PLACEMENT_FALLBACK_COLORS.length]
+  })), [placements]);
+  const visiblePoints = useMemo(() => points.filter((point) => (point.placement_coefficients ?? []).some((item) => typeof item.coefficient === "number")), [points]);
   const option = useMemo<EChartsCoreOption>(() => ({
     animationDuration: 320,
     grid: { left: 54, right: 22, top: days === 7 ? 46 : 26, bottom: 38 },
@@ -210,15 +237,15 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
     },
     yAxis: {
       type: "value",
-      scale: true,
+      min: 0,
       splitNumber: 4,
       axisLabel: { color: "#858c92", fontSize: 10, formatter: (value: number) => `${value.toFixed(2)}×` },
       splitLine: { lineStyle: { color: "#edf0f1", type: "dashed" } }
     },
-    series: OVERLAP_SERIES.map((series, index) => ({
+    series: placementSeries.map((series) => ({
       name: series.label,
       type: "line",
-      data: visiblePoints.map((point) => point[series.key]),
+      data: visiblePoints.map((point) => point.placement_coefficients.find((item) => item.placement === series.placement)?.coefficient ?? null),
       connectNulls: true,
       smooth: 0.16,
       showSymbol: days === 7,
@@ -228,8 +255,8 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
       itemStyle: { color: series.color, borderColor: "#fff", borderWidth: 2 },
       tooltip: { valueFormatter: (value: number) => `${value.toFixed(2)}×` },
       label: {
-        show: days === 7,
-        position: index === 0 ? "bottom" : "top",
+        show: days === 7 && placementSeries.length === 1,
+        position: "top",
         distance: 6,
         color: series.color,
         fontSize: 9,
@@ -237,7 +264,7 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
       },
       emphasis: { focus: "series", scale: 1.15 }
     }))
-  }), [days, visiblePoints]);
+  }), [days, placementSeries, visiblePoints]);
 
   useEffect(() => {
     if (!chartRef.current || visiblePoints.length === 0) return;
@@ -253,14 +280,14 @@ function OverlapTrendChart({ points, days }: { points: SearchUserOverlapPoint[];
 
   return <article className="overview-overlap-card">
     <header>
-      <div><h3>综合加权回搜重合系数</h3><p>聚合回搜人数 ÷ SPU 去重回搜人数</p></div>
+      <div><h3>场域 / SPU 回搜系数</h3><p>场域内子账户回搜人数合计 ÷ SPU 去重回搜人数</p></div>
       <div className="overview-overlap-legend">
-        {OVERLAP_SERIES.map((series) => <span key={series.key}><i style={{ background: series.color }} />{series.label}</span>)}
+        {placementSeries.map((series) => <span key={series.placement}><i style={{ background: series.color }} />{series.label}</span>)}
       </div>
     </header>
     {visiblePoints.length > 0
-      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label="综合加权回搜重合系数折线图" />
-      : <div className="overview-overlap-empty">当前周期暂无重合系数</div>}
+      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label="场域与 SPU 回搜系数折线图" />
+      : <div className="overview-overlap-empty">当前周期暂无场域系数</div>}
   </article>;
 }
 
@@ -375,7 +402,7 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
     {loading && !result ? <div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在读取业务数据</div> : result ? <>
       <section className="overview-overlap-section">
         <header className="overview-section-heading">
-          <div><h2>整体回搜重合</h2><p>{result.spu} · SPU 级综合加权口径，所有子账户共用</p></div>
+          <div><h2>整体回搜系数</h2><p>{result.spu} · SPU 级场域口径，按日报日计算</p></div>
         </header>
         <OverlapTrendChart points={result.overlap_points ?? []} days={result.days} />
       </section>

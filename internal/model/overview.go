@@ -59,17 +59,24 @@ type OverviewNewNotes struct {
 	SourceSyncedAt *time.Time           `json:"source_synced_at"`
 }
 
+type SearchUserPlacementCoefficient struct {
+	Placement   string   `json:"placement"`
+	SearchUsers int64    `json:"search_users"`
+	Coefficient *float64 `json:"coefficient"`
+}
+
 type SearchUserOverlapPoint struct {
-	ReportDate              string   `json:"report_date"`
-	SPUSearchUsers          *int64   `json:"spu_search_users"`
-	SubaccountSearchUsers   *int64   `json:"subaccount_search_users"`
-	OverlapUsers            *int64   `json:"overlap_users"`
-	OverlapCoefficient      *float64 `json:"overlap_coefficient"`
-	DeduplicationFactor     *float64 `json:"deduplication_factor"`
-	NoteSearchUsers         *int64   `json:"note_search_users"`
-	NoteOverlapUsers        *int64   `json:"note_overlap_users"`
-	NoteOverlapCoefficient  *float64 `json:"note_overlap_coefficient"`
-	NoteDeduplicationFactor *float64 `json:"note_deduplication_factor"`
+	ReportDate              string                           `json:"report_date"`
+	SPUSearchUsers          *int64                           `json:"spu_search_users"`
+	SubaccountSearchUsers   *int64                           `json:"subaccount_search_users"`
+	OverlapUsers            *int64                           `json:"overlap_users"`
+	OverlapCoefficient      *float64                         `json:"overlap_coefficient"`
+	DeduplicationFactor     *float64                         `json:"deduplication_factor"`
+	NoteSearchUsers         *int64                           `json:"note_search_users"`
+	NoteOverlapUsers        *int64                           `json:"note_overlap_users"`
+	NoteOverlapCoefficient  *float64                         `json:"note_overlap_coefficient"`
+	NoteDeduplicationFactor *float64                         `json:"note_deduplication_factor"`
+	PlacementCoefficients   []SearchUserPlacementCoefficient `json:"placement_coefficients"`
 }
 
 type BusinessOverview struct {

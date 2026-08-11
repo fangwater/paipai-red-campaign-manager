@@ -19,8 +19,11 @@ function makeOverview(days: number, spu: "辅酶" | "磷虾油") {
     spu,
     overlap_points: dates.map((date, index) => ({
       report_date: date,
-      overlap_coefficient: index === 1 ? null : 1.8 + index * 0.02,
-      note_overlap_coefficient: index === 1 ? null : 2.3 + index * 0.03
+      placement_coefficients: [
+        { placement: "信息流", search_users: 30 + index, coefficient: index === 1 ? null : 0.3 + index * 0.01 },
+        { placement: "搜索", search_users: 150 + index, coefficient: index === 1 ? null : 1.5 + index * 0.02 },
+        { placement: "视频内流", search_users: 0, coefficient: index === 1 ? null : 0 }
+      ]
     })),
     trend: {
       start_date: dates[0],
@@ -83,11 +86,13 @@ test("renders overview trends and agency note details", async ({ page }) => {
 
   await page.goto("/paipai/overview");
   await expect(page.getByRole("heading", { name: "数据总览" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "整体回搜重合" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "综合加权回搜重合系数" })).toBeVisible();
-  await expect(page.getByText("子账户 ÷ SPU", { exact: true })).toBeVisible();
-  await expect(page.getByText("笔记 ÷ SPU", { exact: true })).toBeVisible();
-  await expect(page.getByRole("img", { name: "综合加权回搜重合系数折线图" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "整体回搜系数" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "场域 / SPU 回搜系数" })).toBeVisible();
+  await expect(page.getByText("信息流 ÷ SPU", { exact: true })).toBeVisible();
+  await expect(page.getByText("搜索 ÷ SPU", { exact: true })).toBeVisible();
+  await expect(page.getByText("视频内流 ÷ SPU", { exact: true })).toBeVisible();
+  await expect(page.getByText("子账户 ÷ SPU", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "场域与 SPU 回搜系数折线图" })).toBeVisible();
   await expect(page.locator(".overview-metric-card")).toHaveCount(4);
   await expect.poll(() => requestedQueries).toContain("辅酶:7");
   await expect(page.getByText("较前周期 +25.0%")).toBeVisible();
