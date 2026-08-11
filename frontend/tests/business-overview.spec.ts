@@ -108,25 +108,30 @@ test("renders overview trends and agency note details", async ({ page }) => {
   await expect(page.locator(".overview-overlap-card")).toHaveCount(1);
   await expect(page.locator(".overview-metric-card")).toHaveCount(4);
   await expect(page.getByRole("heading", { name: "cid数据 · 辅酶" })).toBeVisible();
-  const cidRows = page.getByRole("table", { name: "cid每日数据" }).locator("tbody tr");
-  await expect(cidRows).toHaveCount(7);
-  await expect(cidRows.first()).toContainText("2026-07-07");
-  await expect(cidRows.first()).toContainText("¥5,060.00");
-  await expect(cidRows.first()).toContainText("2.70");
+  const cidChart = page.getByRole("img", { name: "CID消耗与辅酶成交ROI双轴折线图，图例可点击筛选" });
+  await expect(cidChart).toBeVisible();
+  await expect(page.getByText("有效数据 7/7 日", { exact: true })).toBeVisible();
+  await expect(page.getByRole("table", { name: "cid每日数据" })).toHaveCount(0);
   await expect.poll(() => requestedQueries).toContain("辅酶:7");
   await expect(page.getByText("较前周期 +25.0%")).toBeVisible();
   await expect(page.getByText("辅酶选购", { exact: true })).toBeVisible();
   await expect(page.locator(".agency-table tbody tr")).toHaveCount(2);
   await expect(page.locator(".agency-detail, .overview-overlap-section").evaluateAll((elements) => elements.map((element) => element.className))).resolves.toEqual(["agency-detail", "overview-overlap-section"]);
 
-  await expect.poll(async () => page.locator(".overview-overlap-card canvas, .overview-metric-card canvas, .new-notes-chart canvas").evaluateAll((canvases) => canvases.map((canvas) => {
+  await expect.poll(async () => page.locator(".overview-overlap-card canvas, .overview-metric-card canvas, .overview-cid-canvas canvas, .new-notes-chart canvas").evaluateAll((canvases) => canvases.map((canvas) => {
     const element = canvas as HTMLCanvasElement;
     const context = element.getContext("2d");
     if (!context || element.width === 0 || element.height === 0) return false;
     const pixels = context.getImageData(0, 0, element.width, element.height).data;
     for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 0) return true;
     return false;
-  }))).toEqual([true, true, true, true, true, true]);
+  }))).toEqual([true, true, true, true, true, true, true]);
+
+  await cidChart.hover({ position: { x: 64, y: 150 } });
+  await expect(cidChart).toContainText("消耗");
+  await expect(cidChart).toContainText("辅酶成交ROI");
+  await expect(cidChart).toContainText("¥5,000.00");
+  await expect(cidChart).toContainText("2.10");
 
   await coefficientChart.hover({ position: { x: 54, y: 120 } });
   await expect(coefficientChart).toContainText("笔记回搜");
@@ -145,8 +150,9 @@ test("renders overview trends and agency note details", async ({ page }) => {
 
   await page.getByRole("button", { name: "14日" }).click();
   await expect.poll(() => requestedQueries).toContain("磷虾油:14");
-  await expect(cidRows).toHaveCount(14);
-  await expect(cidRows.first()).toContainText("2026-07-14");
+  await expect(page.getByText("2026-07-01 - 2026-07-14 · 按日", { exact: true })).toBeVisible();
+  await expect(page.getByText("有效数据 14/14 日", { exact: true })).toBeVisible();
+  await expect(cidChart).toBeVisible();
 });
 
 test("overview remains usable on mobile", async ({ page }) => {
@@ -159,7 +165,7 @@ test("overview remains usable on mobile", async ({ page }) => {
   await expect(page.locator(".overview-overlap-card")).toHaveCount(1);
   await expect(page.locator(".overview-overlap-card").first()).toBeVisible();
   await expect(page.locator(".overview-metric-card").first()).toBeVisible();
-  await expect(page.getByRole("table", { name: "cid每日数据" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "CID消耗与辅酶成交ROI双轴折线图，图例可点击筛选" })).toBeVisible();
   await expect(page.getByRole("button", { name: /智元/ })).toBeVisible();
   await expect(page.locator("body")).toHaveCSS("overflow-x", "visible");
 });

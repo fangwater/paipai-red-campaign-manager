@@ -131,6 +131,13 @@ type PlacementTooltipParam = {
   seriesName: string;
 };
 
+type CIDTooltipParam = {
+  data: number | null;
+  dataIndex: number;
+  marker: string;
+  seriesName: string;
+};
+
 function escapeTooltipText(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -450,28 +457,122 @@ function NewNotesChart({ result }: { result: OverviewResult }) {
   return <div ref={chartRef} className="new-notes-chart" role="img" aria-label="每日新增笔记图" />;
 }
 
-function CIDDailyTable({ cid }: { cid?: OverviewCID }) {
-  const points = [...(cid?.points ?? [])].reverse();
+function CIDDailyChart({ cid, days }: { cid?: OverviewCID; days: PeriodDays }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const points = cid?.points ?? [];
+  const hasData = points.some((point) => typeof point.spend === "number" || typeof point.coenzyme_roi === "number");
   const range = cid?.start_date && cid.end_date ? `${cid.start_date} - ${cid.end_date}` : "暂无数据";
+  const option = useMemo<EChartsCoreOption>(() => ({
+    animationDuration: 320,
+    legend: {
+      data: ["消耗", "辅酶成交ROI"],
+      top: 14,
+      left: "center",
+      selectedMode: true,
+      itemWidth: 18,
+      itemHeight: 3,
+      itemGap: 24,
+      icon: "roundRect",
+      textStyle: { color: "#697177", fontSize: 10 }
+    },
+    grid: { left: 64, right: 58, top: 66, bottom: 40 },
+    tooltip: {
+      trigger: "axis",
+      confine: true,
+      backgroundColor: "rgba(31, 35, 38, 0.94)",
+      borderWidth: 0,
+      padding: [8, 10],
+      textStyle: { color: "#fff", fontSize: 11 },
+      formatter: (rawParams: unknown) => {
+        const params = (Array.isArray(rawParams) ? rawParams : [rawParams]) as CIDTooltipParam[];
+        if (params.length === 0) return "";
+        const reportDate = points[params[0].dataIndex]?.report_date ?? "";
+        const rows = params.flatMap((param) => {
+          if (typeof param.data !== "number") return [];
+          const value = param.seriesName === "消耗"
+            ? `¥${moneyFormatter.format(param.data)}`
+            : roiFormatter.format(param.data);
+          return [`<div style="margin-top:6px">${param.marker}<span>${escapeTooltipText(param.seriesName)}</span><strong style="float:right;margin-left:20px">${value}</strong></div>`];
+        });
+        return `<strong>${escapeTooltipText(reportDate)}</strong>${rows.join("")}`;
+      }
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: points.map((point) => point.report_date.slice(5)),
+      axisLine: { lineStyle: { color: "#dfe3e5" } },
+      axisTick: { show: false },
+      axisLabel: { color: "#858c92", fontSize: 10, interval: days === 7 ? 0 : "auto" }
+    },
+    yAxis: [{
+      type: "value",
+      scale: true,
+      name: "消耗 (¥)",
+      nameGap: 12,
+      nameTextStyle: { color: "#858c92", fontSize: 9 },
+      splitNumber: 4,
+      axisLabel: { color: "#858c92", fontSize: 10, formatter: (value: number) => `¥${compactNumber(value)}` },
+      splitLine: { lineStyle: { color: "#edf0f1", type: "dashed" } }
+    }, {
+      type: "value",
+      scale: true,
+      name: "ROI",
+      nameGap: 12,
+      nameTextStyle: { color: "#858c92", fontSize: 9 },
+      splitNumber: 4,
+      axisLabel: { color: "#858c92", fontSize: 10, formatter: (value: number) => value.toFixed(1) },
+      splitLine: { show: false }
+    }],
+    series: [{
+      name: "消耗",
+      type: "line",
+      yAxisIndex: 0,
+      data: points.map((point) => point.spend),
+      connectNulls: false,
+      smooth: 0.18,
+      showSymbol: days === 7,
+      symbol: "circle",
+      symbolSize: 7,
+      lineStyle: { width: 2.5, color: "#2f7d67" },
+      itemStyle: { color: "#2f7d67", borderColor: "#fff", borderWidth: 2 },
+      emphasis: { focus: "series", scale: 1.2 }
+    }, {
+      name: "辅酶成交ROI",
+      type: "line",
+      yAxisIndex: 1,
+      data: points.map((point) => point.coenzyme_roi),
+      connectNulls: false,
+      smooth: 0.18,
+      showSymbol: days === 7,
+      symbol: "diamond",
+      symbolSize: 8,
+      lineStyle: { width: 2.5, color: "#c5545c" },
+      itemStyle: { color: "#c5545c", borderColor: "#fff", borderWidth: 2 },
+      emphasis: { focus: "series", scale: 1.2 }
+    }]
+  }), [days, points]);
+
+  useEffect(() => {
+    if (!chartRef.current || !hasData) return;
+    const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas" });
+    chart.setOption(option);
+    const observer = new ResizeObserver(() => chart.resize());
+    observer.observe(chartRef.current);
+    return () => {
+      observer.disconnect();
+      chart.dispose();
+    };
+  }, [hasData, option]);
 
   return <section className="overview-cid-section">
     <header className="overview-section-heading">
       <div><h2>cid数据 · 辅酶</h2><p>{range} · 按日</p></div>
       <span>有效数据 {cid?.available_days ?? 0}/{points.length} 日</span>
     </header>
-    <div className="overview-cid-table-wrap">
-      <table className="overview-cid-table" aria-label="cid每日数据">
-        <thead><tr><th>日期</th><th>消耗</th><th>辅酶成交ROI</th></tr></thead>
-        <tbody>
-          {points.map((point) => <tr key={point.report_date}>
-            <td>{point.report_date}</td>
-            <td>{typeof point.spend === "number" ? `¥${moneyFormatter.format(point.spend)}` : "--"}</td>
-            <td>{typeof point.coenzyme_roi === "number" ? roiFormatter.format(point.coenzyme_roi) : "--"}</td>
-          </tr>)}
-          {points.length === 0 ? <tr><td className="overview-cid-empty" colSpan={3}>当前周期暂无 cid 数据</td></tr> : null}
-        </tbody>
-      </table>
-    </div>
+    {hasData
+      ? <div ref={chartRef} className="overview-cid-canvas" role="img" aria-label="CID消耗与辅酶成交ROI双轴折线图，图例可点击筛选" />
+      : <div className="overview-cid-empty">当前周期暂无 cid 数据</div>}
   </section>;
 }
 
@@ -543,7 +644,7 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
         {result.trend.metrics.map((metric) => <TrendChart key={metric.key} metric={metric} days={result.days} />)}
       </section>
 
-      <CIDDailyTable cid={result.cid} />
+      <CIDDailyChart cid={result.cid} days={result.days} />
 
       <section className="overview-notes-section">
         <header>

@@ -175,7 +175,7 @@ make frontend-deploy
 
 数据库视图 `maituo_customer_daily_search_user_overlap` 按“报表日期 + SPU”保留“子账户合计 / SPU”和“笔记合计 / SPU”及其倒数。数据总览接口的 `overlap_points[].placement_coefficients` 按“报表日期 + SPU + 场域”计算“笔记回搜人数合计 / 同场域子账户回搜人数合计”：笔记通过日期、拆分后的子账户和场域映射到 SPU，同一笔记行映射到同一 SPU 时只计一次；场域动态取自日报，当前包括信息流、搜索和视频内流。每日“笔记 / SPU”只使用 `overlap_points[].note_overlap_coefficient`，即当日全部笔记回搜人数加总除以 SPU 去重回搜人数；前端将它与各场域“笔记 / 子账户”合并在一张系数图中。子账户与计划诊断不使用任何上述系数：接口中的 `cost` 和兼容字段 `original_cost` 均为日报原始成本，`correction_coefficient` 返回 `null`，所有 KPI 状态、连续超标和动作建议也均按日报原始成本判断。
 
-数据总览接口的 `cid` 区块独立读取 `coenzyme_q10_daily`，以 CID 最新数据日为终点返回所选 7/14/30 个自然日的 `spend` 和 `coenzyme_roi`，缺失日期保留为空值。前端“cid数据 · 辅酶”表按日期倒序展示，不随总览的 SPU 选择变化。
+数据总览接口的 `cid` 区块独立读取 `coenzyme_q10_daily`，以 CID 最新数据日为终点返回所选 7/14/30 个自然日的 `spend` 和 `coenzyme_roi`，缺失日期保留为空值。前端“cid数据 · 辅酶”使用左右双轴折线图按日期展示消耗和辅酶成交ROI，不随总览的 SPU 选择变化。
 
 - 成本为空：今日未投放
 - 成本低于 KPI：建议放大
