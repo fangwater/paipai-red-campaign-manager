@@ -136,20 +136,18 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		t.Fatalf("placement coefficients: %+v", overlapPoint.PlacementCoefficients)
 	}
 	expectedPlacements := map[string]struct {
-		noteUsers          int64
-		subaccountUsers    int64
-		coefficient        float64
-		noteSPUCoefficient float64
+		noteUsers       int64
+		subaccountUsers int64
+		coefficient     float64
 	}{
-		"搜索":  {noteUsers: 12, subaccountUsers: 6, coefficient: 2, noteSPUCoefficient: 12},
-		"信息流": {noteUsers: 0, subaccountUsers: 8, coefficient: 0, noteSPUCoefficient: 0},
+		"搜索":  {noteUsers: 12, subaccountUsers: 6, coefficient: 2},
+		"信息流": {noteUsers: 0, subaccountUsers: 8, coefficient: 0},
 	}
 	for _, item := range overlapPoint.PlacementCoefficients {
 		expected, ok := expectedPlacements[item.Placement]
 		if !ok || item.SearchUsers != expected.subaccountUsers ||
 			item.NoteSearchUsers != expected.noteUsers || item.SubaccountSearchUsers != expected.subaccountUsers ||
-			item.SPUSearchUsers != 1 || item.Coefficient == nil || *item.Coefficient != expected.coefficient ||
-			item.NoteSPUCoefficient == nil || *item.NoteSPUCoefficient != expected.noteSPUCoefficient {
+			item.Coefficient == nil || *item.Coefficient != expected.coefficient {
 			t.Fatalf("placement coefficient: %+v", item)
 		}
 		delete(expectedPlacements, item.Placement)

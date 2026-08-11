@@ -64,9 +64,7 @@ type SearchUserPlacementCoefficient struct {
 	SearchUsers           int64    `json:"search_users"`
 	NoteSearchUsers       int64    `json:"note_search_users"`
 	SubaccountSearchUsers int64    `json:"subaccount_search_users"`
-	SPUSearchUsers        int64    `json:"spu_search_users"`
 	Coefficient           *float64 `json:"coefficient"`
-	NoteSPUCoefficient    *float64 `json:"note_spu_coefficient"`
 }
 
 type SearchUserOverlapPoint struct {

@@ -464,22 +464,14 @@ func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, sp
 			SELECT accounts.report_date::DATE::TEXT, accounts.placement,
 				COALESCE(notes.note_search_users, 0)::BIGINT,
 				accounts.subaccount_search_users,
-				COALESCE(spus.search_users, 0)::BIGINT,
 				CASE WHEN accounts.subaccount_search_users > 0
 					THEN COALESCE(notes.note_search_users, 0)::NUMERIC / accounts.subaccount_search_users
-				END::DOUBLE PRECISION,
-				CASE WHEN spus.search_users > 0
-					THEN COALESCE(notes.note_search_users, 0)::NUMERIC / spus.search_users
 				END::DOUBLE PRECISION
 			FROM account_totals accounts
 			LEFT JOIN note_totals notes
 			  ON notes.report_date = accounts.report_date
 			 AND notes.spu = accounts.spu
 			 AND notes.placement = accounts.placement
-			LEFT JOIN maituo_customer_daily_spus spus
-			  ON spus.report_date = accounts.report_date
-			 AND spus.spu = accounts.spu
-			 AND spus.deleted_at IS NULL
 			ORDER BY accounts.report_date,
 				CASE accounts.placement
 				WHEN '信息流' THEN 1
@@ -496,11 +488,10 @@ func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, sp
 
 	for rows.Next() {
 		var reportDate, placement string
-		var noteSearchUsers, subaccountSearchUsers, spuSearchUsers int64
-		var coefficient, noteSPUCoefficient pgtype.Float8
+		var noteSearchUsers, subaccountSearchUsers int64
+		var coefficient pgtype.Float8
 		if err := rows.Scan(
-			&reportDate, &placement, &noteSearchUsers, &subaccountSearchUsers, &spuSearchUsers,
-			&coefficient, &noteSPUCoefficient,
+			&reportDate, &placement, &noteSearchUsers, &subaccountSearchUsers, &coefficient,
 		); err != nil {
 			return fmt.Errorf("scan Maituo search-user placement coefficient: %w", err)
 		}
@@ -510,15 +501,11 @@ func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, sp
 		}
 		item := model.SearchUserPlacementCoefficient{
 			Placement: placement, SearchUsers: subaccountSearchUsers,
-			NoteSearchUsers: noteSearchUsers, SubaccountSearchUsers: subaccountSearchUsers, SPUSearchUsers: spuSearchUsers,
+			NoteSearchUsers: noteSearchUsers, SubaccountSearchUsers: subaccountSearchUsers,
 		}
 		if coefficient.Valid {
 			value := coefficient.Float64
 			item.Coefficient = &value
-		}
-		if noteSPUCoefficient.Valid {
-			value := noteSPUCoefficient.Float64
-			item.NoteSPUCoefficient = &value
 		}
 		points[pointIndex].PlacementCoefficients = append(points[pointIndex].PlacementCoefficients, item)
 	}

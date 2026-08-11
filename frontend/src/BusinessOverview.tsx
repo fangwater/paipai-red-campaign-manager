@@ -32,13 +32,14 @@ type SearchUserPlacementCoefficient = {
   search_users: number;
   note_search_users: number;
   subaccount_search_users: number;
-  spu_search_users: number;
   coefficient: number | null;
-  note_spu_coefficient: number | null;
 };
 
 type SearchUserOverlapPoint = {
   report_date: string;
+  spu_search_users: number | null;
+  note_search_users: number | null;
+  note_overlap_coefficient: number | null;
   placement_coefficients: SearchUserPlacementCoefficient[];
 };
 
@@ -98,6 +99,8 @@ const PLACEMENT_COLORS: Record<string, string> = {
   视频内流: "#b17b27"
 };
 const PLACEMENT_FALLBACK_COLORS = ["#5f6f82", "#6f7153", "#8a5f72"];
+const NOTE_SPU_SERIES = "笔记加总 / SPU";
+const NOTE_SPU_COLOR = "#3f4850";
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const moneyFormatter = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -105,6 +108,7 @@ type PlacementChartDatum = {
   value: number;
   noteSearchUsers: number;
   denominatorSearchUsers: number;
+  denominatorLabel: string;
 };
 
 type PlacementTooltipParam = {
@@ -222,19 +226,16 @@ function TrendChart({ metric, days }: { metric: OverviewMetric; days: PeriodDays
   </article>;
 }
 
-function PlacementCoefficientChart({ points, days, denominator }: {
+function PlacementCoefficientChart({ points, days }: {
   points: SearchUserOverlapPoint[];
   days: PeriodDays;
-  denominator: "subaccount" | "spu";
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const denominatorLabel = denominator === "spu" ? "SPU 回搜" : "子账户回搜";
   const placements = useMemo(() => {
     const names = new Set<string>();
     for (const point of points) {
       for (const item of point.placement_coefficients ?? []) {
-        const coefficient = denominator === "spu" ? item.note_spu_coefficient : item.coefficient;
-        if (typeof coefficient === "number") names.add(item.placement);
+        if (typeof item.coefficient === "number") names.add(item.placement);
       }
     }
     return [...names].sort((left, right) => {
@@ -243,19 +244,21 @@ function PlacementCoefficientChart({ points, days, denominator }: {
       return (leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex)
         || left.localeCompare(right, "zh-CN");
     });
-  }, [denominator, points]);
+  }, [points]);
   const placementSeries = useMemo(() => placements.map((placement, index) => ({
     placement,
     color: PLACEMENT_COLORS[placement] ?? PLACEMENT_FALLBACK_COLORS[index % PLACEMENT_FALLBACK_COLORS.length]
   })), [placements]);
-  const visiblePoints = useMemo(() => points.filter((point) => (point.placement_coefficients ?? []).some((item) => {
-    const coefficient = denominator === "spu" ? item.note_spu_coefficient : item.coefficient;
-    return typeof coefficient === "number";
-  })), [denominator, points]);
+  const hasNoteSPUSeries = useMemo(() => points.some((point) => typeof point.note_overlap_coefficient === "number"), [points]);
+  const visiblePoints = useMemo(() => points.filter((point) =>
+    typeof point.note_overlap_coefficient === "number"
+    || (point.placement_coefficients ?? []).some((item) => typeof item.coefficient === "number")
+  ), [points]);
+  const seriesCount = placementSeries.length + (hasNoteSPUSeries ? 1 : 0);
   const option = useMemo<EChartsCoreOption>(() => ({
     animationDuration: 320,
     legend: {
-      data: placementSeries.map((series) => series.placement),
+      data: [...placementSeries.map((series) => series.placement), ...(hasNoteSPUSeries ? [NOTE_SPU_SERIES] : [])],
       top: 14,
       left: 54,
       right: 22,
@@ -266,7 +269,7 @@ function PlacementCoefficientChart({ points, days, denominator }: {
       icon: "roundRect",
       textStyle: { color: "#697177", fontSize: 10 }
     },
-    grid: { left: 54, right: 22, top: 58, bottom: 38 },
+    grid: { left: 54, right: 22, top: 70, bottom: 38 },
     tooltip: {
       trigger: "axis",
       confine: true,
@@ -281,7 +284,7 @@ function PlacementCoefficientChart({ points, days, denominator }: {
         const rows = params.flatMap((param) => {
           const datum = param.data;
           if (!datum || typeof datum.value !== "number") return [];
-          return [`<div style="margin-top:6px">${param.marker}<span>${escapeTooltipText(param.seriesName)}</span><strong style="float:right;margin-left:18px">${datum.value.toFixed(2)}×</strong><div style="margin-left:14px;color:#cfd4d7">笔记回搜 ${numberFormatter.format(datum.noteSearchUsers)} / ${denominatorLabel} ${numberFormatter.format(datum.denominatorSearchUsers)}</div></div>`];
+          return [`<div style="margin-top:6px">${param.marker}<span>${escapeTooltipText(param.seriesName)}</span><strong style="float:right;margin-left:18px">${datum.value.toFixed(2)}×</strong><div style="margin-left:14px;color:#cfd4d7">笔记回搜 ${numberFormatter.format(datum.noteSearchUsers)} / ${datum.denominatorLabel} ${numberFormatter.format(datum.denominatorSearchUsers)}</div></div>`];
         });
         return `<strong>${escapeTooltipText(reportDate)}</strong>${rows.join("")}`;
       }
@@ -301,19 +304,17 @@ function PlacementCoefficientChart({ points, days, denominator }: {
       axisLabel: { color: "#858c92", fontSize: 10, formatter: (value: number) => `${value.toFixed(2)}×` },
       splitLine: { lineStyle: { color: "#edf0f1", type: "dashed" } }
     },
-    series: placementSeries.map((series) => ({
+    series: [...placementSeries.map((series) => ({
       name: series.placement,
       type: "line",
       data: visiblePoints.map((point) => {
         const item = point.placement_coefficients.find((candidate) => candidate.placement === series.placement);
-        const coefficient = denominator === "spu" ? item?.note_spu_coefficient : item?.coefficient;
-        if (!item || typeof coefficient !== "number") return null;
+        if (!item || typeof item.coefficient !== "number") return null;
         return {
-          value: coefficient,
+          value: item.coefficient,
           noteSearchUsers: item.note_search_users,
-          denominatorSearchUsers: denominator === "spu"
-            ? item.spu_search_users
-            : item.subaccount_search_users ?? item.search_users
+          denominatorSearchUsers: item.subaccount_search_users ?? item.search_users,
+          denominatorLabel: "子账户回搜"
         };
       }),
       connectNulls: true,
@@ -324,7 +325,7 @@ function PlacementCoefficientChart({ points, days, denominator }: {
       lineStyle: { width: 2.5, color: series.color },
       itemStyle: { color: series.color, borderColor: "#fff", borderWidth: 2 },
       label: {
-        show: days === 7 && placementSeries.length === 1,
+        show: days === 7 && seriesCount === 1,
         position: "top",
         distance: 6,
         color: series.color,
@@ -332,8 +333,38 @@ function PlacementCoefficientChart({ points, days, denominator }: {
         formatter: (params: { value: number | null }) => params.value === null ? "" : `${params.value.toFixed(2)}×`
       },
       emphasis: { focus: "series", scale: 1.15 }
-    }))
-  }), [days, denominator, denominatorLabel, placementSeries, visiblePoints]);
+    })), ...(hasNoteSPUSeries ? [{
+      name: NOTE_SPU_SERIES,
+      type: "line",
+      data: visiblePoints.map((point) => {
+        if (typeof point.note_overlap_coefficient !== "number"
+          || typeof point.note_search_users !== "number"
+          || typeof point.spu_search_users !== "number") return null;
+        return {
+          value: point.note_overlap_coefficient,
+          noteSearchUsers: point.note_search_users,
+          denominatorSearchUsers: point.spu_search_users,
+          denominatorLabel: "SPU 回搜"
+        };
+      }),
+      connectNulls: true,
+      smooth: 0.16,
+      showSymbol: days === 7,
+      symbol: "diamond",
+      symbolSize: 8,
+      lineStyle: { width: 3, color: NOTE_SPU_COLOR, type: "dashed" },
+      itemStyle: { color: NOTE_SPU_COLOR, borderColor: "#fff", borderWidth: 2 },
+      label: {
+        show: days === 7 && seriesCount === 1,
+        position: "top",
+        distance: 6,
+        color: NOTE_SPU_COLOR,
+        fontSize: 9,
+        formatter: (params: { value: number | null }) => params.value === null ? "" : `${params.value.toFixed(2)}×`
+      },
+      emphasis: { focus: "series", scale: 1.15 }
+    }] : [])]
+  }), [days, hasNoteSPUSeries, placementSeries, seriesCount, visiblePoints]);
 
   useEffect(() => {
     if (!chartRef.current || visiblePoints.length === 0) return;
@@ -349,13 +380,11 @@ function PlacementCoefficientChart({ points, days, denominator }: {
 
   return <article className="overview-overlap-card">
     <header>
-      {denominator === "spu"
-        ? <div><h3>笔记 / SPU</h3><p>场域笔记回搜人数合计 ÷ SPU 去重回搜人数</p></div>
-        : <div><h3>笔记 / 子账户</h3><p>场域笔记回搜人数合计 ÷ 同场域子账户回搜人数合计</p></div>}
+      <div><h3>笔记 / 子账户</h3><p>各场域笔记 ÷ 同场域子账户；笔记加总 ÷ SPU</p></div>
     </header>
     {visiblePoints.length > 0
-      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label={`按场域的笔记与${denominator === "spu" ? "SPU" : "子账户"}回搜系数折线图，图例可点击筛选`} />
-      : <div className="overview-overlap-empty">当前周期暂无{denominator === "spu" ? "笔记 / SPU" : "笔记 / 子账户"}系数</div>}
+      ? <div ref={chartRef} className="overview-overlap-canvas" role="img" aria-label="笔记与子账户、SPU回搜系数折线图，图例可点击筛选" />
+      : <div className="overview-overlap-empty">当前周期暂无笔记回搜系数</div>}
   </article>;
 }
 
@@ -519,11 +548,10 @@ function BusinessOverview({ serviceState }: { serviceState: ServiceState }) {
 
       <section className="overview-overlap-section">
         <header className="overview-section-heading">
-          <div><h2>场域回搜系数</h2><p>{result.spu} · 按日报日分别计算笔记 / 子账户与笔记 / SPU</p></div>
+          <div><h2>回搜系数</h2><p>{result.spu} · 场域笔记 / 子账户与笔记加总 / SPU</p></div>
         </header>
         <div className="overview-overlap-grid">
-          <PlacementCoefficientChart points={result.overlap_points ?? []} days={result.days} denominator="subaccount" />
-          <PlacementCoefficientChart points={result.overlap_points ?? []} days={result.days} denominator="spu" />
+          <PlacementCoefficientChart points={result.overlap_points ?? []} days={result.days} />
         </div>
       </section>
     </> : null}
