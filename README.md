@@ -88,6 +88,12 @@ cp .env.example .env
 - `XHS_JG_APP_ID`：聚光开放平台应用 ID
 - `XHS_JG_SECRET`：聚光开放平台应用 Secret
 - `XHS_JG_SESSION_FILE`：OAuth Token 会话文件，默认 `.xhs-jg/session.json`
+- `XHS_JG_AUTHD_URL`：投流服务访问 Token Broker 的环回地址，默认 `http://127.0.0.1:18080`
+- `XHS_JG_INTERNAL_API_KEY`：Token Broker 内部网关密钥，使用至少 32 字符的随机值
+- `DELIVERY_API_CREDENTIALS_JSON`：可选。脚本或独立审批身份的 API Key 到固定 `actor`、`role` 和广告主范围的服务端绑定；浏览器控制台使用共享 `delivery-console/operator` 身份直接进入
+- `DELIVERY_MEDIA_WRITES_ENABLED`：聚光写入总开关，默认且当前生产值为 `false`
+- `DELIVERY_LLM_BASE_URL`、`DELIVERY_LLM_MODEL`：可选 OpenAI-compatible 语义服务；缺失时使用确定性规则降级
+- `DELIVERY_RANKER_URL`、`DELIVERY_RANKER_API_KEY`、`DELIVERY_RANKER_MODEL`：可选 LightGBM/LambdaMART 推理服务；缺失时使用可解释启发式排序
 
 ## 初始化数据库
 
@@ -166,6 +172,22 @@ make frontend-deploy
 热力图以内容类型为行，以选定的人群标签或用户场景为列。爆文率分母只计入蒲公英“站外活跃成本（15天设备归因）”大于 0 的笔记，成本不高于 20 判定为爆文。投流按笔记和场域汇总所有已保存日报：单场域累计消耗不少于 200，且搜索回搜成本不高于 30 或信息流预计回流后成本不高于 70，即判定投流达标。薯量最新笔记快照 `total_roi` 不低于 1.2 判定 ROI 达标。
 
 接口同时返回标签覆盖率、各指标可评估样本数、单元格聚合数据和笔记明细。无标签笔记保留为“未标注”，前端默认隐藏并可手动显示；设置发布时间范围后，无有效发布时间的笔记不参与汇总。
+
+## 自建投流后端 API
+
+中台 `/paipai/self-serve-delivery` 直接使用共享 `delivery-console/operator` 身份进入聚光自建投流工作台，不要求浏览器输入 API Key。接口根目录为 `/v1/delivery`，公网代理为 `/paipai/api/delivery`，完整机器可读契约位于 `/paipai/api/delivery/openapi.json`。脚本可选用 `X-Delivery-API-Key` 切换到服务端绑定的独立身份；客户端伪造的身份头不会生效。媒体写入总开关、确定性校验和双人审批规则不受直通模式影响。
+
+当前后端包括：
+
+- 能力、资产与工具：广告主能力快照、本地/平台资产、定向字典、关键词与否词、人群预估，以及计划、单元、创意只读查询。
+- 版本化工作流：草稿创建/列表/修订、结构化建议、确定性与上游校验、运营和预算责任人双审批。
+- 发布编排：`dry_run` 或异步 `execute`，固定按计划、单元、否词、创意执行；计划强制暂停，三层创建后读回 ID、父子关系、状态和关键字段。
+- 状态与报表：人工启停，以及账户、计划、单元、创意、关键词五层实时/离线报表和原始快照。
+- 审计与隔离：草稿哈希、审批历史、幂等作业、媒体 ID 映射、脱敏上游调用记录、广告主级 RBAC 和双重媒体写开关。
+
+算法职责固定分离：LLM 只抽取语义、候选词和证据；LightGBM/LambdaMART 只对已批准的数值特征排序；贝叶斯接口只估计稀疏分群后验与不确定性；约束优化只在人工上限内返回 `executable=false` 的预算建议；Bandit 只返回 `shadow_only=true` 的影子选择。平台枚举、权限、预算、审批、发布和启停始终由确定性规则、编排器和人工角色决定。
+
+当前生产 OAuth 已包含 `ad_manage`、`ad_query`、`report_service` 和 `account_manage`，并授权 59 个广告主。中台和上游适配代码已经部署就绪，但 `DELIVERY_MEDIA_WRITES_ENABLED=false` 继续阻断所有真实创建、修改和启停；开启前必须在专用广告主完成暂停态创建、读回、错误码、频控和报表口径冒烟。
 
 ## 子账户与计划诊断 API
 

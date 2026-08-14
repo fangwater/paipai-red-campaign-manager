@@ -105,6 +105,80 @@ func TestAuthHandlerRejectsInvalidRequests(t *testing.T) {
 	}
 }
 
+func TestAuthHandlerGatewayPolicy(t *testing.T) {
+	var upstreamCalls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/api/open/oauth2/access_token":
+			_, _ = writer.Write([]byte(`{
+				"code":0,"success":true,"data":{
+					"access_token":"gateway-access","access_token_expires_in":3600,
+					"refresh_token":"gateway-refresh","refresh_token_expires_in":2592000,
+					"user_id":"user-1","app_id":11344,
+					"scope":"[\"ad_query\",\"ad_manage\"]",
+					"approval_advertisers":[{"advertiser_id":1234,"advertiser_name":"测试广告主"}]
+				}
+			}`))
+		case "/api/open/jg/target/get_available_target_info":
+			upstreamCalls++
+			_, _ = writer.Write([]byte(`{"code":0,"success":true,"data":{"age_target":[]}}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer upstream.Close()
+	client, err := xhs.NewClient(11344, "secret", xhs.WithBaseURL(upstream.URL), xhs.WithHTTPClient(upstream.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := xhs.NewTokenManager(client, filepath.Join(t.TempDir(), "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Authorize(context.Background(), "auth-code"); err != nil {
+		t.Fatal(err)
+	}
+	handler := newAuthHandler(manager, time.Second, withGatewayPolicy("internal-key", false))
+
+	callBody := `{"operation":"target.options","payload":{"advertiser_id":1234,"marketing_target":4}}`
+	assertStatusCode(t, handler, http.MethodPost, "/v1/gateway/call", bytes.NewBufferString(callBody), http.StatusUnauthorized)
+	request := httptest.NewRequest(http.MethodPost, "/v1/gateway/call", bytes.NewBufferString(callBody))
+	request.Header.Set("X-Internal-API-Key", "internal-key")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || upstreamCalls != 1 {
+		t.Fatalf("read gateway status=%d body=%s calls=%d", recorder.Code, recorder.Body.String(), upstreamCalls)
+	}
+
+	writeBody := `{"operation":"campaign.create","payload":{"advertiser_id":1234,"campaign_name":"test","enable":1}}`
+	request = httptest.NewRequest(http.MethodPost, "/v1/gateway/call", bytes.NewBufferString(writeBody))
+	request.Header.Set("X-Internal-API-Key", "internal-key")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusLocked || upstreamCalls != 1 {
+		t.Fatalf("write gateway status=%d body=%s calls=%d", recorder.Code, recorder.Body.String(), upstreamCalls)
+	}
+
+	unauthorizedAdvertiser := `{"operation":"target.options","payload":{"advertiser_id":9999,"marketing_target":4}}`
+	request = httptest.NewRequest(http.MethodPost, "/v1/gateway/call", bytes.NewBufferString(unauthorizedAdvertiser))
+	request.Header.Set("X-Internal-API-Key", "internal-key")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden || upstreamCalls != 1 {
+		t.Fatalf("advertiser gateway status=%d body=%s calls=%d", recorder.Code, recorder.Body.String(), upstreamCalls)
+	}
+
+	missingScope := `{"operation":"report.offline.account","payload":{"advertiser_id":1234,"start_date":"2026-08-01","end_date":"2026-08-02"}}`
+	request = httptest.NewRequest(http.MethodPost, "/v1/gateway/call", bytes.NewBufferString(missingScope))
+	request.Header.Set("X-Internal-API-Key", "internal-key")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden || upstreamCalls != 1 {
+		t.Fatalf("scope gateway status=%d body=%s calls=%d", recorder.Code, recorder.Body.String(), upstreamCalls)
+	}
+}
+
 func TestAuthHandlerProxiesCampaignQueries(t *testing.T) {
 	var campaignRequests []xhs.CampaignListRequest
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

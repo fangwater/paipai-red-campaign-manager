@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -37,6 +38,15 @@ type Config struct {
 	CoenzymeQ10WikiToken    string
 	CoenzymeQ10SheetID      string
 	CoenzymeQ10SheetName    string
+	XHSJGAuthdURL           string
+	XHSJGInternalAPIKey     string
+	DeliveryCredentialsJSON string
+	DeliveryMediaWrites     bool
+	DeliveryLLMBaseURL      string
+	DeliveryLLMModel        string
+	DeliveryRankerURL       string
+	DeliveryRankerAPIKey    string
+	DeliveryRankerModel     string
 }
 
 func Load() (Config, error) {
@@ -58,6 +68,14 @@ func Load() (Config, error) {
 		CoenzymeQ10WikiToken:    envOrDefault("LARK_COENZYME_Q10_WIKI_TOKEN", defaultCoenzymeQ10WikiToken),
 		CoenzymeQ10SheetID:      envOrDefault("LARK_COENZYME_Q10_SHEET_ID", defaultCoenzymeQ10SheetID),
 		CoenzymeQ10SheetName:    envOrDefault("LARK_COENZYME_Q10_SHEET_NAME", defaultCoenzymeQ10SheetName),
+		XHSJGAuthdURL:           envOrDefault("XHS_JG_AUTHD_URL", "http://127.0.0.1:18080"),
+		XHSJGInternalAPIKey:     strings.TrimSpace(os.Getenv("XHS_JG_INTERNAL_API_KEY")),
+		DeliveryCredentialsJSON: strings.TrimSpace(os.Getenv("DELIVERY_API_CREDENTIALS_JSON")),
+		DeliveryLLMBaseURL:      firstNonEmpty(strings.TrimSpace(os.Getenv("DELIVERY_LLM_BASE_URL")), strings.TrimSpace(os.Getenv("BAILIAN_BASE_URL"))),
+		DeliveryLLMModel:        strings.TrimSpace(os.Getenv("DELIVERY_LLM_MODEL")),
+		DeliveryRankerURL:       strings.TrimSpace(os.Getenv("DELIVERY_RANKER_URL")),
+		DeliveryRankerAPIKey:    strings.TrimSpace(os.Getenv("DELIVERY_RANKER_API_KEY")),
+		DeliveryRankerModel:     strings.TrimSpace(os.Getenv("DELIVERY_RANKER_MODEL")),
 	}
 
 	var err error
@@ -73,8 +91,12 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cfg.DeliveryMediaWrites, err = booleanValue("DELIVERY_MEDIA_WRITES_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
 
-	missing := make([]string, 0, 6)
+	missing := make([]string, 0, 8)
 	for name, value := range map[string]string{
 		"LARK_APP_ID":              cfg.LarkAppID,
 		"LARK_APP_SECRET":          cfg.LarkAppSecret,
@@ -82,6 +104,7 @@ func Load() (Config, error) {
 		"LARK_DANDELION_APP_TOKEN": cfg.LarkDandelionAppToken,
 		"LARK_DANDELION_TABLE_ID":  cfg.LarkDandelionTableID,
 		"DATABASE_URL":             cfg.DatabaseURL,
+		"XHS_JG_INTERNAL_API_KEY":  cfg.XHSJGInternalAPIKey,
 	} {
 		if value == "" {
 			missing = append(missing, name)
@@ -92,6 +115,18 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func booleanValue(name string, fallback bool) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false", name)
+	}
+	return value, nil
 }
 
 func positiveDuration(name string, fallback time.Duration) (time.Duration, error) {

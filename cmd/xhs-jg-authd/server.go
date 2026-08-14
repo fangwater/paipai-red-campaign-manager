@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,10 +16,12 @@ import (
 )
 
 type authServer struct {
-	manager        *xhs.TokenManager
-	requestTimeout time.Duration
-	syncContext    context.Context
-	syncService    *xhssync.Service
+	manager            *xhs.TokenManager
+	requestTimeout     time.Duration
+	syncContext        context.Context
+	syncService        *xhssync.Service
+	internalAPIKey     string
+	mediaWritesEnabled bool
 }
 
 type authorizeRequest struct {
@@ -47,11 +51,20 @@ func newAuthHandler(manager *xhs.TokenManager, requestTimeout time.Duration, syn
 	mux.HandleFunc("/v1/units/all", server.listAllUnits)
 	mux.HandleFunc("/v1/creativities/list", server.listCreativities)
 	mux.HandleFunc("/v1/creativities/all", server.listAllCreativities)
+	mux.HandleFunc("/v1/gateway/operations", server.gatewayOperationList)
+	mux.HandleFunc("/v1/gateway/call", server.gatewayCall)
 	mux.HandleFunc("/v1/sync/status", server.syncStatus)
 	mux.HandleFunc("/v1/sync/campaigns", server.syncCampaigns)
 	mux.HandleFunc("/v1/sync/units", server.syncUnits)
 	mux.HandleFunc("/v1/sync/creativities", server.syncCreativities)
 	return noStoreHeaders(mux)
+}
+
+func withGatewayPolicy(internalAPIKey string, mediaWritesEnabled bool) func(*authServer) {
+	return func(server *authServer) {
+		server.internalAPIKey = strings.TrimSpace(internalAPIKey)
+		server.mediaWritesEnabled = mediaWritesEnabled
+	}
 }
 
 func withSyncService(ctx context.Context, service *xhssync.Service) func(*authServer) {
@@ -252,6 +265,134 @@ func (server *authServer) listAllCreativities(writer http.ResponseWriter, reques
 		return
 	}
 	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: data})
+}
+
+type gatewayCallRequest struct {
+	Operation xhs.GatewayOperation `json:"operation"`
+	Payload   json.RawMessage      `json:"payload"`
+}
+
+func (server *authServer) gatewayOperationList(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	if !server.authorizeInternal(writer, request) {
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: map[string]interface{}{
+		"contract_version":     "xhs-jg/2026-05-candidate",
+		"media_writes_enabled": server.mediaWritesEnabled,
+		"operations":           xhs.GatewayOperationDetails(),
+	}})
+}
+
+func (server *authServer) gatewayCall(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(writer, http.MethodPost)
+		return
+	}
+	if !server.authorizeInternal(writer, request) {
+		return
+	}
+	var payload gatewayCallRequest
+	decoder := json.NewDecoder(io.LimitReader(request.Body, xhs.MaxGatewayPayloadBytes+64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "invalid JSON request"})
+		return
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "request body must contain one JSON object"})
+		return
+	}
+	spec, ok := xhs.LookupGatewayOperation(payload.Operation)
+	if !ok {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "gateway operation is not allowlisted"})
+		return
+	}
+	if spec.Write && !server.mediaWritesEnabled {
+		writeJSON(writer, http.StatusLocked, apiResponse{Success: false, Error: "XHS Spotlight media writes are disabled"})
+		return
+	}
+	advertiserID, err := xhs.GatewayAdvertiserID(payload.Payload)
+	if err != nil {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	status := server.manager.Status()
+	if !status.Authorized || !status.AccessTokenValid {
+		writeJSON(writer, http.StatusConflict, apiResponse{Success: false, Error: xhs.ErrNotAuthorized.Error()})
+		return
+	}
+	if !authorizedAdvertiser(status, advertiserID) {
+		writeJSON(writer, http.StatusForbidden, apiResponse{Success: false, Error: "advertiser is not present in the OAuth authorization"})
+		return
+	}
+	if !scopeGranted(status.Scope, spec.RequiredScope) {
+		writeJSON(writer, http.StatusForbidden, apiResponse{Success: false, Error: "required OAuth scope is not granted"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), server.requestTimeout)
+	defer cancel()
+	result, err := server.manager.CallGateway(ctx, payload.Operation, payload.Payload)
+	if err != nil {
+		code := http.StatusBadGateway
+		if errors.Is(err, xhs.ErrInvalidGatewayRequest) {
+			code = http.StatusBadRequest
+		} else if errors.Is(err, xhs.ErrNotAuthorized) {
+			code = http.StatusConflict
+		}
+		writeJSON(writer, code, apiResponse{Success: false, Data: result, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: result})
+}
+
+func (server *authServer) authorizeInternal(writer http.ResponseWriter, request *http.Request) bool {
+	if server.internalAPIKey == "" {
+		writeJSON(writer, http.StatusServiceUnavailable, apiResponse{Success: false, Error: "internal gateway authentication is not configured"})
+		return false
+	}
+	provided := strings.TrimSpace(request.Header.Get("X-Internal-API-Key"))
+	expectedHash := sha256.Sum256([]byte(server.internalAPIKey))
+	providedHash := sha256.Sum256([]byte(provided))
+	if provided == "" || subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) != 1 {
+		writeJSON(writer, http.StatusUnauthorized, apiResponse{Success: false, Error: "invalid internal API key"})
+		return false
+	}
+	return true
+}
+
+func authorizedAdvertiser(status xhs.ManagerStatus, advertiserID int64) bool {
+	if status.AdvertiserID == advertiserID {
+		return true
+	}
+	for _, advertiser := range status.ApprovalAdvertisers {
+		if advertiser.ID == advertiserID {
+			return true
+		}
+	}
+	return false
+}
+
+func scopeGranted(raw, required string) bool {
+	if required == "" {
+		return true
+	}
+	var scopes []string
+	if json.Unmarshal([]byte(raw), &scopes) != nil {
+		scopes = strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == ' ' || r == '[' || r == ']' || r == '"'
+		})
+	}
+	for _, scope := range scopes {
+		if strings.TrimSpace(scope) == required {
+			return true
+		}
+	}
+	return false
 }
 
 type syncRequest struct {

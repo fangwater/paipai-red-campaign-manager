@@ -1,0 +1,201 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PaiPai Self-Serve Delivery API",
+    "version": "1.0.0",
+    "description": "Versioned XHS Spotlight delivery drafts, deterministic validation, dual approval, paused-state publishing, reporting, and non-executable decision support. Requests without an explicit credential use a shared direct operator context; optional API credentials can provide distinct scripted identities. LLM, ranker, Bayesian, optimizer, and Bandit outputs never write media directly."
+  },
+  "servers": [
+    {"url": "https://pangutech.online/paipai/api", "description": "Production public proxy"},
+    {"url": "http://127.0.0.1:18081/v1", "description": "Host-local service"}
+  ],
+  "x-public-base-url": "https://pangutech.online/paipai/api/delivery",
+  "tags": [
+    {"name": "Discovery"},
+    {"name": "Assets"},
+    {"name": "Media queries"},
+    {"name": "Drafts"},
+    {"name": "Publishing"},
+    {"name": "Reports"},
+    {"name": "Intelligence"}
+  ],
+  "paths": {
+    "/delivery": {
+      "get": {"tags": ["Discovery"], "summary": "API overview and safety properties", "security": [], "responses": {"200": {"$ref": "#/components/responses/Success"}}}
+    },
+    "/delivery/openapi.json": {
+      "get": {"tags": ["Discovery"], "summary": "OpenAPI contract", "security": [], "responses": {"200": {"description": "OpenAPI JSON", "content": {"application/json": {"schema": {"type": "object"}}}}}}
+    },
+    "/delivery/session": {
+      "get": {"tags": ["Discovery"], "summary": "Inspect the direct console context and visible advertisers", "security": [], "responses": {"200": {"description": "Current actor and advertiser scope", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SessionResponse"}}}}, "401": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/capabilities": {
+      "get": {
+        "tags": ["Discovery"], "summary": "OAuth, advertiser, scope, and operation capabilities", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"],
+        "parameters": [{"$ref": "#/components/parameters/AdvertiserID"}],
+        "responses": {"200": {"description": "Capability snapshot", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CapabilityResponse"}}}}, "401": {"$ref": "#/components/responses/Error"}, "403": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/delivery/assets": {
+      "get": {
+        "tags": ["Assets"], "summary": "Local manuscript candidates and historical features", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"],
+        "parameters": [
+          {"$ref": "#/components/parameters/AdvertiserID"},
+          {"name": "search", "in": "query", "schema": {"type": "string"}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}}
+        ],
+        "responses": {"200": {"$ref": "#/components/responses/Success"}, "401": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/delivery/assets/platform": {
+      "post": {"tags": ["Assets"], "summary": "Query Spotlight notes, SPUs, qualifications, or event assets", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PlatformAssetRequest"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "400": {"$ref": "#/components/responses/Error"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/target-options": {
+      "post": {"tags": ["Media queries"], "summary": "Query currently available targeting enums", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"$ref": "#/components/requestBodies/PlatformTool"}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/keyword-candidates": {
+      "post": {"tags": ["Media queries"], "summary": "Query recommended keywords or word bags", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KeywordCandidateRequest"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/negative-keywords": {
+      "post": {"tags": ["Media queries"], "summary": "Query negative keywords; mutations require an approved publish", "description": "Only action=list is accepted. add/delete return 403 so callers cannot bypass draft approval.", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/NegativeKeywordQuery"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "403": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/audience-estimates": {
+      "post": {"tags": ["Media queries"], "summary": "Estimate target audience size", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"$ref": "#/components/requestBodies/PlatformTool"}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/campaigns/query": {
+      "post": {"tags": ["Media queries"], "summary": "Query Spotlight campaigns", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"$ref": "#/components/requestBodies/PlatformTool"}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/units/query": {
+      "post": {"tags": ["Media queries"], "summary": "Query Spotlight units", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"$ref": "#/components/requestBodies/PlatformTool"}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/creativities/query": {
+      "post": {"tags": ["Media queries"], "summary": "Query Spotlight creativities", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"$ref": "#/components/requestBodies/PlatformTool"}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/drafts": {
+      "get": {
+        "tags": ["Drafts"], "summary": "List current delivery drafts", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"],
+        "parameters": [{"name": "advertiser_id", "in": "query", "schema": {"type": "integer", "format": "int64", "minimum": 1}}, {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}}],
+        "responses": {"200": {"$ref": "#/components/responses/Success"}}
+      },
+      "post": {
+        "tags": ["Drafts"], "summary": "Create a versioned draft without media writes", "x-roles": ["operator", "admin"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateDraftInput"}}}},
+        "responses": {"201": {"description": "Created or idempotently returned draft", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DraftResponse"}}}}, "409": {"$ref": "#/components/responses/Error"}}
+      }
+    },
+    "/delivery/drafts/{draft_id}": {
+      "parameters": [{"$ref": "#/components/parameters/DraftID"}],
+      "get": {"tags": ["Drafts"], "summary": "Get current draft version", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "responses": {"200": {"description": "Draft", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DraftResponse"}}}}, "404": {"$ref": "#/components/responses/Error"}}},
+      "put": {"tags": ["Drafts"], "summary": "Create a new draft version using optimistic concurrency", "x-roles": ["operator", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateDraftInput"}}}}, "responses": {"200": {"description": "Updated draft", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DraftResponse"}}}}, "409": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/drafts/{draft_id}/workflow": {
+      "get": {"tags": ["Drafts"], "summary": "Get the current draft and persisted workflow state", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "parameters": [{"$ref": "#/components/parameters/DraftID"}], "responses": {"200": {"description": "Current workflow", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkflowResponse"}}}}, "404": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/drafts/{draft_id}/recommendations": {
+      "post": {"tags": ["Drafts", "Intelligence"], "summary": "Generate evidence-bound semantic and ranking suggestions", "description": "The result is advisory and non-executable. An empty JSON body is allowed.", "x-roles": ["operator", "admin"], "parameters": [{"$ref": "#/components/parameters/DraftID"}], "requestBody": {"content": {"application/json": {"schema": {"type": "object", "additionalProperties": false}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "422": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/drafts/{draft_id}/validate": {
+      "post": {"tags": ["Drafts"], "summary": "Run deterministic and remote guardrail validation", "x-roles": ["operator", "admin"], "parameters": [{"$ref": "#/components/parameters/DraftID"}], "requestBody": {"content": {"application/json": {"schema": {"type": "object", "additionalProperties": false}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "409": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/drafts/{draft_id}/approve": {
+      "post": {"tags": ["Drafts"], "summary": "Approve or reject the current immutable draft version", "description": "Operator and budget-owner approvals must come from distinct server-bound identities. The draft submitter cannot approve their own version.", "x-roles": ["operator", "budget_owner", "admin"], "parameters": [{"$ref": "#/components/parameters/DraftID"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ApprovalInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "403": {"$ref": "#/components/responses/Error"}, "409": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/drafts/{draft_id}/publish": {
+      "post": {"tags": ["Publishing"], "summary": "Dry-run or enqueue an approved paused-state publish Saga", "description": "dry_run completes synchronously with 200. execute returns a queued job with 202; a worker rechecks capability and approvals, creates campaign then units, negative keywords and creativities, and verifies readback. New campaigns are forced paused.", "x-roles": ["operator", "admin"], "parameters": [{"$ref": "#/components/parameters/DraftID"}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PublishInput"}}}}, "responses": {"200": {"description": "Dry-run or an already completed idempotent job", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PublishJobResponse"}}}}, "202": {"description": "Execute job queued", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PublishJobResponse"}}}}, "409": {"$ref": "#/components/responses/Error"}, "423": {"$ref": "#/components/responses/Error"}, "422": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/jobs/{job_id}": {
+      "get": {"tags": ["Publishing"], "summary": "Get a publish job and recovery state", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "parameters": [{"$ref": "#/components/parameters/JobID"}], "responses": {"200": {"description": "Job", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PublishJobResponse"}}}}, "404": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/entities/{entity_type}/{media_id}/status": {
+      "post": {"tags": ["Publishing"], "summary": "Manually activate or pause a managed media entity", "description": "Activation requires a successful execute job with verified paused-state readback and rechecks current dual approvals. Only entities created and mapped by this service are addressable. Emergency pause does not require a fresh approval.", "x-roles": ["operator", "admin"], "parameters": [{"name": "entity_type", "in": "path", "required": true, "schema": {"type": "string", "enum": ["campaign", "unit", "creativity"]}}, {"name": "media_id", "in": "path", "required": true, "schema": {"type": "integer", "format": "int64", "minimum": 1}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EntityStatusInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "403": {"$ref": "#/components/responses/Error"}, "409": {"$ref": "#/components/responses/Error"}, "423": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/performance": {
+      "get": {
+        "tags": ["Reports"], "summary": "Query a report using common fields", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"],
+        "parameters": [{"$ref": "#/components/parameters/AdvertiserID"}, {"$ref": "#/components/parameters/ReportLevel"}, {"name": "realtime", "in": "query", "schema": {"type": "boolean", "default": false}}, {"name": "start_date", "in": "query", "required": true, "schema": {"type": "string", "format": "date"}}, {"name": "end_date", "in": "query", "required": true, "schema": {"type": "string", "format": "date"}}, {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1, "default": 1}}, {"name": "page_size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100}}, {"name": "split_columns", "in": "query", "schema": {"type": "string"}, "description": "Comma-separated offline report dimensions."}],
+        "responses": {"200": {"$ref": "#/components/responses/Success"}, "502": {"$ref": "#/components/responses/Error"}}
+      },
+      "post": {"tags": ["Reports"], "summary": "Query a report with versioned upstream filter fields", "description": "filters are copied only to an allowlisted read-only report operation. Reserved identity, date, pagination, and split fields cannot be overridden.", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PerformanceQuery"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "400": {"$ref": "#/components/responses/Error"}, "502": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/intelligence/capabilities": {
+      "get": {"tags": ["Intelligence"], "summary": "Inspect algorithm responsibility boundaries and configured fallbacks", "x-roles": ["viewer", "analyst", "operator", "budget_owner", "admin"], "responses": {"200": {"$ref": "#/components/responses/Success"}}}
+    },
+    "/delivery/intelligence/bayesian": {
+      "post": {"tags": ["Intelligence"], "summary": "Compute a Beta-Binomial posterior and uncertainty interval", "description": "Read-only statistical calculation.", "x-roles": ["analyst", "operator", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BayesianInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "400": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/intelligence/optimize-budget": {
+      "post": {"tags": ["Intelligence"], "summary": "Suggest constrained budget allocation", "description": "Always returns executable=false and does not update a draft or media object.", "x-roles": ["analyst", "operator", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BudgetOptimizationInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "400": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/delivery/intelligence/bandit-shadow": {
+      "post": {"tags": ["Intelligence"], "summary": "Produce a contextual-UCB shadow suggestion", "description": "Always returns shadow_only=true and cannot activate, pause, bid, or allocate budget.", "x-roles": ["analyst", "operator", "admin"], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/BanditShadowInput"}}}}, "responses": {"200": {"$ref": "#/components/responses/Success"}, "400": {"$ref": "#/components/responses/Error"}}}
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "DeliveryAPIKey": {"type": "apiKey", "in": "header", "name": "X-Delivery-API-Key", "description": "Optional credential for scripts or distinct approval identities; actor, role, and advertiser scope are bound server-side."}
+    },
+    "parameters": {
+      "AdvertiserID": {"name": "advertiser_id", "in": "query", "required": true, "schema": {"type": "integer", "format": "int64", "minimum": 1}},
+      "DraftID": {"name": "draft_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^drf_[0-9a-f]{32}$"}},
+      "JobID": {"name": "job_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^job_[0-9a-f]{32}$"}},
+      "ReportLevel": {"name": "level", "in": "query", "required": true, "schema": {"type": "string", "enum": ["account", "campaign", "unit", "creativity", "keyword"]}}
+    },
+    "requestBodies": {
+      "PlatformTool": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PlatformToolRequest"}}}}
+    },
+    "responses": {
+      "Success": {"description": "Successful envelope", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SuccessEnvelope"}}}},
+      "Error": {"description": "Error envelope", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorEnvelope"}}}}
+    },
+    "schemas": {
+      "SuccessEnvelope": {"type": "object", "required": ["success"], "properties": {"success": {"const": true}, "data": {}}},
+      "ErrorEnvelope": {"type": "object", "required": ["success", "error"], "properties": {"success": {"const": false}, "data": {}, "error": {"type": "string"}}},
+      "CapabilityResponse": {"allOf": [{"$ref": "#/components/schemas/SuccessEnvelope"}, {"type": "object", "properties": {"data": {"$ref": "#/components/schemas/Capability"}}}]},
+      "DraftResponse": {"allOf": [{"$ref": "#/components/schemas/SuccessEnvelope"}, {"type": "object", "properties": {"data": {"$ref": "#/components/schemas/Draft"}}}]},
+      "PublishJobResponse": {"allOf": [{"$ref": "#/components/schemas/SuccessEnvelope"}, {"type": "object", "properties": {"data": {"$ref": "#/components/schemas/PublishJob"}}}]},
+      "SessionResponse": {"allOf": [{"$ref": "#/components/schemas/SuccessEnvelope"}, {"type": "object", "properties": {"data": {"$ref": "#/components/schemas/DeliverySession"}}}]},
+      "WorkflowResponse": {"allOf": [{"$ref": "#/components/schemas/SuccessEnvelope"}, {"type": "object", "properties": {"data": {"$ref": "#/components/schemas/Workflow"}}}]},
+      "PlatformToolRequest": {"type": "object", "additionalProperties": false, "required": ["advertiser_id"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "payload": {"type": "object", "description": "Operation-specific, read-only Spotlight fields.", "additionalProperties": true}}},
+      "PlatformAssetRequest": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "asset_type"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "asset_type": {"type": "string", "enum": ["notes", "spus", "qualifications", "events"]}, "payload": {"type": "object", "additionalProperties": true}}},
+      "KeywordCandidateRequest": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "source"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "source": {"type": "string", "enum": ["recommend", "word_bags"]}, "payload": {"type": "object", "additionalProperties": true}}},
+      "NegativeKeywordQuery": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "action"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "action": {"const": "list"}, "payload": {"type": "object", "additionalProperties": true}}},
+      "BudgetPolicy": {"type": "object", "additionalProperties": false, "required": ["daily_limit_fen", "total_limit_fen"], "properties": {"daily_limit_fen": {"type": "integer", "format": "int64", "minimum": 10000}, "total_limit_fen": {"type": "integer", "format": "int64", "minimum": 10000}, "advertiser_daily_cap_fen": {"type": "integer", "format": "int64", "minimum": 0}, "max_bid_fen": {"type": "integer", "format": "int64", "minimum": 0}, "stop_loss_spend_fen": {"type": "integer", "format": "int64", "minimum": 0}, "stop_loss_conversions_min": {"type": "integer", "format": "int64", "minimum": 0}}},
+      "CampaignSpec": {
+        "type": "object", "additionalProperties": false,
+        "required": ["local_key", "name", "marketing_target", "placement", "promotion_target", "enable", "time_type", "time_period_type", "bidding_strategy", "limit_day_budget", "day_budget_fen", "optimize_target"],
+        "properties": {
+          "local_key": {"type": "string"}, "name": {"type": "string", "minLength": 1, "maxLength": 50}, "marketing_target": {"type": "integer"}, "placement": {"type": "integer", "enum": [1, 2, 4, 7]}, "promotion_target": {"type": "integer"}, "enable": {"const": 0}, "time_type": {"type": "integer", "enum": [0, 1]}, "start_time": {"type": "string", "format": "date"}, "expire_time": {"type": "string", "format": "date"}, "time_period_type": {"type": "integer"}, "time_period": {"type": "object", "additionalProperties": {"type": "string"}}, "bidding_strategy": {"type": "integer"}, "limit_day_budget": {"const": 1}, "day_budget_fen": {"type": "integer", "format": "int64", "minimum": 10000}, "optimize_target": {"type": "integer"}, "constraint_type": {"type": ["integer", "null"]}, "smart_switch": {"type": ["integer", "null"]}, "pacing_mode": {"type": "integer"}, "feed_flag": {"type": ["integer", "null"]}, "build_type": {"type": ["integer", "null"]}, "event_asset_id": {"type": "integer", "format": "int64"}, "asset_event": {"type": "integer"}, "asset_event_id": {"type": "integer", "format": "int64"}, "page_category": {"type": "integer"}, "search_flag": {"type": ["integer", "null"]}, "target_extension_switch": {"type": "integer"}, "search_bid_ratio": {"type": "number"}, "deeplink_id": {"type": "integer", "format": "int64"}, "universal_link_id": {"type": "integer", "format": "int64"}, "detect_url_link": {"type": "string", "format": "uri"}
+        }
+      },
+      "CodeName": {"type": "object", "additionalProperties": false, "required": ["code", "name"], "properties": {"code": {"type": "string"}, "name": {"type": "string"}}},
+      "CrowdPackage": {"type": "object", "additionalProperties": false, "required": ["value"], "properties": {"value": {"type": "string"}, "name": {"type": "string"}, "group_id": {"type": "string"}, "type": {"type": "string"}, "sync_status": {"type": "integer"}, "status": {"type": "integer"}}},
+      "TargetSpec": {"type": "object", "additionalProperties": false, "properties": {"gender": {"type": "string"}, "age": {"type": "string"}, "device": {"type": "string"}, "cities": {"type": "string"}, "content_interests": {"type": "array", "items": {"$ref": "#/components/schemas/CodeName"}}, "shopping_interests": {"type": "array", "items": {"$ref": "#/components/schemas/CodeName"}}, "crowd_packages": {"type": "array", "items": {"$ref": "#/components/schemas/CrowdPackage"}}, "behavior_keywords": {"type": "array", "items": {"type": "string"}}, "interest_keywords": {"type": "array", "items": {"type": "string"}}, "keyword_target_period": {"type": "integer", "enum": [0, 3, 7, 15, 30]}, "keyword_target_actions": {"type": "array", "items": {"type": "integer"}}, "intelligent_expansion": {"type": "integer"}, "exclude_blogger_fans": {"type": "boolean"}, "exclude_blogger_purchasers": {"type": "boolean"}, "include_brand_recognition": {"type": "boolean"}, "include_category_interested": {"type": "boolean"}}},
+      "KeywordBid": {"type": "object", "additionalProperties": false, "required": ["keyword", "bid_fen", "phrase_match_type"], "properties": {"keyword": {"type": "string", "minLength": 1, "maxLength": 50}, "bid_fen": {"type": "integer", "format": "int64", "minimum": 1}, "feed_bid_fen": {"type": "integer", "format": "int64", "minimum": 0}, "keyword_source": {"type": "integer", "minimum": 0}, "phrase_match_type": {"type": "integer", "enum": [0, 1, 2]}}},
+      "NegativeKeyword": {"type": "object", "additionalProperties": false, "required": ["keyword", "phrase_match_type"], "properties": {"keyword": {"type": "string", "minLength": 1, "maxLength": 50}, "phrase_match_type": {"type": "integer", "enum": [0, 1]}}},
+      "SPUNoteSpec": {"type": "object", "additionalProperties": false, "required": ["spu_id", "note_ids"], "properties": {"spu_id": {"type": "string"}, "note_ids": {"type": "array", "items": {"type": "string"}}}},
+      "QualificationSpec": {"type": "object", "additionalProperties": false, "properties": {"apply_id": {"type": "string"}, "product_qual_id_list": {"type": "array", "items": {"type": "integer", "format": "int64"}}, "brand_qual_id_list": {"type": "array", "items": {"type": "integer", "format": "int64"}}}},
+      "CreativitySpec": {"type": "object", "additionalProperties": false, "required": ["local_key", "name", "note_id"], "properties": {"local_key": {"type": "string"}, "name": {"type": "string", "minLength": 1, "maxLength": 50}, "note_id": {"type": "string", "pattern": "^[0-9a-fA-F]{24}$"}, "click_urls": {"type": "array", "items": {"type": "string", "format": "uri"}}, "expo_urls": {"type": "array", "items": {"type": "string", "format": "uri"}}, "mask_prefer": {"type": "integer"}, "title_mask_prefer": {"type": "integer"}, "conversion_type": {"type": "integer"}, "jump_url": {"type": "string", "format": "uri"}, "landing_page_type": {"type": "integer"}, "bar_content": {"type": "string"}, "conversion_component_types": {"type": "array", "items": {"type": "integer"}}, "comment": {"type": "string"}, "app_component_icon": {"type": "string"}, "fallback_jump_url": {"type": "string", "format": "uri"}, "qualification": {"oneOf": [{"$ref": "#/components/schemas/QualificationSpec"}, {"type": "null"}]}}},
+      "UnitSpec": {"type": "object", "additionalProperties": false, "required": ["local_key", "name", "promotion_target", "target_type", "target", "creativities"], "properties": {"local_key": {"type": "string"}, "name": {"type": "string", "minLength": 1, "maxLength": 50}, "event_bid_fen": {"type": "integer", "format": "int64", "minimum": 0}, "note_ids": {"type": "array", "items": {"type": "string"}}, "promotion_target": {"type": "integer"}, "target_type": {"type": "integer", "enum": [1, 2, 3]}, "target": {"$ref": "#/components/schemas/TargetSpec"}, "keyword_target_period": {"type": "integer"}, "keyword_target_actions": {"type": "array", "items": {"type": "integer"}}, "business_tree_name": {"type": "string"}, "spu_notes": {"type": "array", "items": {"$ref": "#/components/schemas/SPUNoteSpec"}}, "keywords": {"type": "array", "items": {"$ref": "#/components/schemas/KeywordBid"}}, "negative_keywords": {"type": "array", "maxItems": 400, "items": {"$ref": "#/components/schemas/NegativeKeyword"}}, "substituted_user_id": {"type": "string"}, "keyword_gen_type": {"type": "integer"}, "page_id": {"type": "string"}, "landing_page_url": {"type": "string"}, "external_page_url": {"type": "string"}, "landing_page_desc": {"type": "string"}, "target_template_id": {"type": "string"}, "creativities": {"type": "array", "minItems": 1, "items": {"$ref": "#/components/schemas/CreativitySpec"}}}},
+      "ExperimentSpec": {"type": "object", "additionalProperties": false, "required": ["primary_metric"], "properties": {"primary_metric": {"type": "string", "minLength": 1}, "guardrails": {"type": "array", "items": {"type": "string"}}, "variables": {"type": "array", "items": {"type": "string"}}, "hold_constant": {"type": "array", "items": {"type": "string"}}}},
+      "DraftSpec": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "objective", "placement", "budget", "campaign", "units", "experiment"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "objective": {"type": "string", "minLength": 1}, "placement": {"type": "string", "minLength": 1}, "budget": {"$ref": "#/components/schemas/BudgetPolicy"}, "notes": {"type": "array", "items": {"type": "string"}}, "campaign": {"$ref": "#/components/schemas/CampaignSpec"}, "units": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/components/schemas/UnitSpec"}}, "experiment": {"$ref": "#/components/schemas/ExperimentSpec"}}},
+      "CreateDraftInput": {"type": "object", "additionalProperties": false, "required": ["spec", "idempotency_key"], "properties": {"spec": {"$ref": "#/components/schemas/DraftSpec"}, "idempotency_key": {"type": "string", "minLength": 8, "maxLength": 160}, "change_reason": {"type": "string"}}},
+      "UpdateDraftInput": {"type": "object", "additionalProperties": false, "required": ["spec", "expected_version", "change_reason"], "properties": {"spec": {"$ref": "#/components/schemas/DraftSpec"}, "expected_version": {"type": "integer", "minimum": 1}, "change_reason": {"type": "string", "minLength": 1}}},
+      "Draft": {"type": "object", "required": ["id", "advertiser_id", "status", "current_version", "spec", "spec_hash", "idempotency_key", "created_by", "updated_by", "created_at", "updated_at"], "properties": {"id": {"type": "string"}, "advertiser_id": {"type": "integer", "format": "int64"}, "status": {"type": "string", "enum": ["draft", "validated", "pending_approval", "approved", "publishing", "paused", "active", "failed", "cancelled"]}, "current_version": {"type": "integer"}, "spec": {"$ref": "#/components/schemas/DraftSpec"}, "spec_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "idempotency_key": {"type": "string"}, "created_by": {"type": "string"}, "updated_by": {"type": "string"}, "created_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"}}},
+      "Advertiser": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "advertiser_name"], "properties": {"advertiser_id": {"type": "integer", "format": "int64"}, "advertiser_name": {"type": "string"}}},
+      "DeliverySession": {"type": "object", "required": ["actor", "advertisers", "all_advertisers"], "properties": {"actor": {"type": "object", "required": ["id", "role"], "properties": {"id": {"type": "string"}, "role": {"type": "string", "enum": ["viewer", "analyst", "operator", "budget_owner", "admin"]}}}, "advertisers": {"type": "array", "items": {"$ref": "#/components/schemas/Advertiser"}}, "all_advertisers": {"type": "boolean"}}},
+      "Workflow": {"type": "object", "required": ["draft", "approvals", "jobs", "entities"], "properties": {"draft": {"$ref": "#/components/schemas/Draft"}, "recommendation": {"type": "object"}, "validation": {"type": "object"}, "approvals": {"type": "array", "items": {"type": "object"}}, "jobs": {"type": "array", "items": {"$ref": "#/components/schemas/PublishJob"}}, "entities": {"type": "array", "items": {"type": "object"}}}},
+      "ApprovalInput": {"type": "object", "additionalProperties": false, "required": ["role", "decision", "approved_budget_fen"], "properties": {"role": {"type": "string", "enum": ["operator", "budget_owner"]}, "decision": {"type": "string", "enum": ["approved", "rejected"]}, "comment": {"type": "string"}, "approved_budget_fen": {"type": "integer", "format": "int64", "minimum": 0}, "expires_in_minutes": {"type": "integer", "minimum": 5, "maximum": 1440, "default": 60}}},
+      "PublishInput": {"type": "object", "additionalProperties": false, "required": ["idempotency_key"], "properties": {"mode": {"type": "string", "enum": ["dry_run", "execute"], "default": "dry_run"}, "idempotency_key": {"type": "string", "minLength": 8, "maxLength": 200}}},
+      "PublishJob": {"type": "object", "required": ["id", "draft_id", "draft_version", "advertiser_id", "mode", "status", "current_step", "idempotency_key", "request_preview", "result", "retry_count", "requested_by", "requested_role", "created_at", "updated_at"], "properties": {"id": {"type": "string"}, "draft_id": {"type": "string"}, "draft_version": {"type": "integer"}, "advertiser_id": {"type": "integer", "format": "int64"}, "mode": {"type": "string", "enum": ["dry_run", "execute"]}, "status": {"type": "string", "enum": ["queued", "publishing", "succeeded", "failed"]}, "current_step": {"type": "string"}, "idempotency_key": {"type": "string"}, "request_preview": {"type": "object"}, "result": {"type": "object"}, "error_code": {"type": "string"}, "error_message": {"type": "string"}, "retry_count": {"type": "integer"}, "requested_by": {"type": "string"}, "requested_role": {"type": "string", "enum": ["operator", "admin"]}, "created_at": {"type": "string", "format": "date-time"}, "started_at": {"type": "string", "format": "date-time"}, "completed_at": {"type": "string", "format": "date-time"}, "updated_at": {"type": "string", "format": "date-time"}}},
+      "EntityStatusInput": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "status"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "status": {"type": "string", "enum": ["paused", "active"]}}},
+      "Capability": {"type": "object", "required": ["advertiser_id", "authorized", "advertiser_allowed", "scopes", "required_scopes", "missing_scopes", "advertiser_count", "media_writes_enabled", "contract_version", "operations", "checked_at"], "properties": {"advertiser_id": {"type": "integer", "format": "int64"}, "authorized": {"type": "boolean"}, "advertiser_allowed": {"type": "boolean"}, "scopes": {"type": "array", "items": {"type": "string"}}, "required_scopes": {"type": "array", "items": {"type": "string"}}, "missing_scopes": {"type": "array", "items": {"type": "string"}}, "advertiser_count": {"type": "integer"}, "media_writes_enabled": {"type": "boolean"}, "contract_version": {"type": "string"}, "operations": {"type": "object"}, "checked_at": {"type": "string", "format": "date-time"}}},
+      "PerformanceQuery": {"type": "object", "additionalProperties": false, "required": ["advertiser_id", "level", "start_date", "end_date"], "properties": {"advertiser_id": {"type": "integer", "format": "int64", "minimum": 1}, "level": {"type": "string", "enum": ["account", "campaign", "unit", "creativity", "keyword"]}, "realtime": {"type": "boolean", "default": false}, "start_date": {"type": "string", "format": "date"}, "end_date": {"type": "string", "format": "date"}, "page": {"type": "integer", "minimum": 1, "default": 1}, "page_size": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 100}, "split_columns": {"type": "array", "maxItems": 50, "items": {"type": "string"}}, "filters": {"type": "object", "maxProperties": 64, "description": "Versioned Spotlight report filter fields. Cannot override advertiser_id, dates, pagination, or split_columns.", "additionalProperties": true}}},
+      "BayesianInput": {"type": "object", "additionalProperties": false, "required": ["prior_alpha", "prior_beta", "successes", "trials"], "properties": {"prior_alpha": {"type": "number", "exclusiveMinimum": 0}, "prior_beta": {"type": "number", "exclusiveMinimum": 0}, "successes": {"type": "integer", "format": "int64", "minimum": 0}, "trials": {"type": "integer", "format": "int64", "minimum": 0}}},
+      "BudgetArm": {"type": "object", "additionalProperties": false, "required": ["key", "min_fen", "max_fen", "expected_value"], "properties": {"key": {"type": "string", "minLength": 1}, "min_fen": {"type": "integer", "format": "int64", "minimum": 0}, "max_fen": {"type": "integer", "format": "int64", "minimum": 0}, "increment_fen": {"type": "integer", "format": "int64", "minimum": 1, "default": 100}, "expected_value": {"type": "number", "minimum": 0}, "uncertainty": {"type": "number", "minimum": 0}, "risk_penalty": {"type": "number", "minimum": 0}, "minimum_sample_size": {"type": "integer", "format": "int64", "minimum": 0}, "observed_samples": {"type": "integer", "format": "int64", "minimum": 0}}},
+      "BudgetOptimizationInput": {"type": "object", "additionalProperties": false, "required": ["total_fen", "arms"], "properties": {"total_fen": {"type": "integer", "format": "int64", "minimum": 1}, "exploration_rate": {"type": "number", "minimum": 0, "maximum": 1}, "arms": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"$ref": "#/components/schemas/BudgetArm"}}}},
+      "BanditArm": {"type": "object", "additionalProperties": false, "required": ["key", "pulls", "reward_sum"], "properties": {"key": {"type": "string", "minLength": 1}, "pulls": {"type": "integer", "format": "int64", "minimum": 0}, "reward_sum": {"type": "number"}, "context_score": {"type": "number"}}},
+      "BanditShadowInput": {"type": "object", "additionalProperties": false, "required": ["arms"], "properties": {"arms": {"type": "array", "minItems": 2, "maxItems": 100, "items": {"$ref": "#/components/schemas/BanditArm"}}, "exploration_weight": {"type": "number", "minimum": 0}, "minimum_pulls_per_arm": {"type": "integer", "format": "int64", "minimum": 0}}}
+    }
+  },
+  "security": []
+}

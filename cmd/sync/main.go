@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"paipai-red-campaign-manager/internal/config"
+	"paipai-red-campaign-manager/internal/delivery"
 	"paipai-red-campaign-manager/internal/embedding"
 	larksource "paipai-red-campaign-manager/internal/lark"
 	"paipai-red-campaign-manager/internal/maituo"
@@ -65,6 +66,8 @@ type apiServer struct {
 	guoraiAnalytics      guoraiAnalyticsStore
 	businessOverview     businessOverviewStore
 	contentAnalysis      contentAnalysisStore
+	delivery             *delivery.Service
+	deliveryCredentials  []deliveryCredential
 	timeout              time.Duration
 	logger               *slog.Logger
 }
@@ -107,6 +110,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err := requireLoopbackAddress(cfg.LarkSyncListen); err != nil {
 		return err
 	}
+	deliveryCredentials, err := parseDeliveryCredentials(cfg.DeliveryCredentialsJSON)
+	if err != nil {
+		return fmt.Errorf("configure delivery API credentials: %w", err)
+	}
 
 	destination, err := store.NewPostgres(ctx, cfg.DatabaseURL, cfg.LarkAppToken)
 	if err != nil {
@@ -122,6 +129,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err := destination.FailRunningCoenzymeQ10Syncs(ctx, "manual sync service restarted before the request finished"); err != nil {
 		return err
 	}
+	if err := destination.FailInterruptedPublishJobs(ctx, "delivery service restarted before publishing completed"); err != nil {
+		return err
+	}
 	embeddingClient, err := embedding.NewClient(cfg.BailianAPIKey, cfg.BailianBaseURL, nil)
 	if err != nil {
 		return fmt.Errorf("configure Bailian embeddings: %w", err)
@@ -132,6 +142,33 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("configure note embedding refresh: %w", err)
 	}
+	deliveryGateway, err := delivery.NewHTTPGateway(cfg.XHSJGAuthdURL, cfg.XHSJGInternalAPIKey, nil)
+	if err != nil {
+		return fmt.Errorf("configure delivery XHS gateway: %w", err)
+	}
+	var semanticAdvisor delivery.SemanticAdvisor = delivery.RuleSemanticAdvisor{}
+	if cfg.DeliveryLLMBaseURL != "" && cfg.DeliveryLLMModel != "" {
+		llmAdvisor, advisorErr := delivery.NewOpenAICompatibleAdvisor(cfg.BailianAPIKey, cfg.DeliveryLLMBaseURL, cfg.DeliveryLLMModel, nil)
+		if advisorErr != nil {
+			return fmt.Errorf("configure delivery LLM: %w", advisorErr)
+		}
+		semanticAdvisor = delivery.FallbackAdvisor{Primary: llmAdvisor, Fallback: delivery.RuleSemanticAdvisor{}}
+	}
+	var deliveryRanker delivery.Ranker = delivery.HeuristicRanker{}
+	if cfg.DeliveryRankerURL != "" && cfg.DeliveryRankerModel != "" {
+		remoteRanker, rankerErr := delivery.NewRemoteRanker(cfg.DeliveryRankerURL, cfg.DeliveryRankerAPIKey, cfg.DeliveryRankerModel, nil)
+		if rankerErr != nil {
+			return fmt.Errorf("configure delivery ranker: %w", rankerErr)
+		}
+		deliveryRanker = delivery.FallbackRanker{Primary: remoteRanker, Fallback: delivery.HeuristicRanker{}}
+	}
+	deliveryService, err := delivery.NewService(destination, deliveryGateway, semanticAdvisor, deliveryRanker, cfg.DeliveryMediaWrites)
+	if err != nil {
+		return fmt.Errorf("configure delivery service: %w", err)
+	}
+	go deliveryService.RunPublisher(ctx, func(publishErr error) {
+		logger.Error("delivery publisher failed", "error", publishErr)
+	})
 
 	dandelionDestination, err := store.NewTableScopedPostgres(ctx, cfg.DatabaseURL, cfg.LarkDandelionAppToken)
 	if err != nil {
@@ -163,6 +200,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		guoraiAnalytics:      destination,
 		businessOverview:     destination,
 		contentAnalysis:      destination,
+		delivery:             deliveryService,
+		deliveryCredentials:  deliveryCredentials,
 		timeout:              cfg.SyncTimeout,
 		logger:               logger,
 	})
@@ -235,6 +274,28 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/analytics/content-analysis", server.contentAnalysisHandler)
 	mux.HandleFunc("/v1/sync/manuscripts", server.syncManuscripts)
 	mux.HandleFunc("/v1/sync/manuscripts/status", server.manuscriptStatus)
+	mux.HandleFunc("/v1/delivery", server.deliveryOverview)
+	mux.HandleFunc("/v1/delivery/openapi.json", server.deliveryOpenAPI)
+	mux.HandleFunc("/v1/delivery/session", server.deliverySession)
+	mux.HandleFunc("/v1/delivery/capabilities", server.deliveryCapabilities)
+	mux.HandleFunc("/v1/delivery/assets", server.deliveryAssets)
+	mux.HandleFunc("/v1/delivery/assets/platform", server.deliveryPlatformAssets)
+	mux.HandleFunc("/v1/delivery/target-options", server.deliveryTargetOptions)
+	mux.HandleFunc("/v1/delivery/keyword-candidates", server.deliveryKeywordCandidates)
+	mux.HandleFunc("/v1/delivery/negative-keywords", server.deliveryNegativeKeywords)
+	mux.HandleFunc("/v1/delivery/audience-estimates", server.deliveryAudienceEstimates)
+	mux.HandleFunc("/v1/delivery/campaigns/query", server.deliveryCampaignQuery)
+	mux.HandleFunc("/v1/delivery/units/query", server.deliveryUnitQuery)
+	mux.HandleFunc("/v1/delivery/creativities/query", server.deliveryCreativityQuery)
+	mux.HandleFunc("/v1/delivery/drafts", server.deliveryDrafts)
+	mux.HandleFunc("/v1/delivery/drafts/", server.deliveryDraft)
+	mux.HandleFunc("/v1/delivery/jobs/", server.deliveryJob)
+	mux.HandleFunc("/v1/delivery/entities/", server.deliveryEntity)
+	mux.HandleFunc("/v1/delivery/performance", server.deliveryPerformance)
+	mux.HandleFunc("/v1/delivery/intelligence/capabilities", server.deliveryIntelligenceCapabilities)
+	mux.HandleFunc("/v1/delivery/intelligence/bayesian", server.deliveryBayesian)
+	mux.HandleFunc("/v1/delivery/intelligence/optimize-budget", server.deliveryOptimizeBudget)
+	mux.HandleFunc("/v1/delivery/intelligence/bandit-shadow", server.deliveryBanditShadow)
 	return noStoreHeaders(mux)
 }
 

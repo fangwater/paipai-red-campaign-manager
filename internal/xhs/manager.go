@@ -2,6 +2,7 @@ package xhs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -252,6 +253,17 @@ func (manager *TokenManager) ListAllCreativities(ctx context.Context, request Cr
 		return CreativityCollection{}, err
 	}
 	return manager.client.ListAllCreativities(ctx, accessToken, request)
+}
+
+func (manager *TokenManager) CallGateway(ctx context.Context, operation GatewayOperation, payload json.RawMessage) (GatewayResult, error) {
+	if _, ok := LookupGatewayOperation(operation); !ok {
+		return GatewayResult{}, fmt.Errorf("%w: operation %q is not allowlisted", ErrInvalidGatewayRequest, operation)
+	}
+	accessToken, err := manager.AccessToken(ctx)
+	if err != nil {
+		return GatewayResult{}, err
+	}
+	return manager.client.CallGateway(ctx, accessToken, operation, payload)
 }
 
 func (manager *TokenManager) Status() ManagerStatus {

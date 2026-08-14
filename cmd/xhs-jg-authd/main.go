@@ -99,6 +99,8 @@ func runServe(ctx context.Context, args []string) error {
 	flags.DurationVar(&syncTimeout, "sync-timeout", syncTimeout, "maximum duration of one manual sync")
 	requestTimeout := flags.Duration("request-timeout", 30*time.Second, "upstream request timeout")
 	shutdownTimeout := flags.Duration("shutdown-timeout", 10*time.Second, "HTTP shutdown timeout")
+	internalAPIKey := flags.String("internal-api-key", os.Getenv("XHS_JG_INTERNAL_API_KEY"), "shared key for loopback gateway requests")
+	mediaWritesEnabled := flags.Bool("media-writes-enabled", boolFromEnvironment("DELIVERY_MEDIA_WRITES_ENABLED", false), "allow audited media write operations")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -110,6 +112,9 @@ func runServe(ctx context.Context, args []string) error {
 	}
 	if strings.TrimSpace(*databaseURL) == "" {
 		return errors.New("--database-url or DATABASE_URL is required")
+	}
+	if strings.TrimSpace(*internalAPIKey) == "" {
+		return errors.New("XHS_JG_INTERNAL_API_KEY is required for the loopback delivery gateway")
 	}
 	location, err := time.LoadLocation(*syncTimezone)
 	if err != nil {
@@ -154,7 +159,10 @@ func runServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("listen on %s: %w", *listenAddress, err)
 	}
 	server := &http.Server{
-		Handler:           newAuthHandler(manager, *requestTimeout, withSyncService(ctx, syncService)),
+		Handler: newAuthHandler(manager, *requestTimeout,
+			withSyncService(ctx, syncService),
+			withGatewayPolicy(*internalAPIKey, *mediaWritesEnabled),
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       *requestTimeout + 5*time.Second,
 		WriteTimeout:      *requestTimeout + 5*time.Second,
@@ -178,6 +186,8 @@ func runServe(ctx context.Context, args []string) error {
 		"retry_interval", retryInterval,
 		"sync_timezone", location.String(),
 		"sync_timeout", syncTimeout,
+		"gateway_configured", strings.TrimSpace(*internalAPIKey) != "",
+		"media_writes_enabled", *mediaWritesEnabled,
 	)
 	select {
 	case <-ctx.Done():
@@ -357,6 +367,18 @@ func durationFromEnvironment(name string, fallback time.Duration) (time.Duration
 		return 0, fmt.Errorf("%s must be a positive duration", name)
 	}
 	return value, nil
+}
+
+func boolFromEnvironment(name string, fallback bool) bool {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 func envOrDefault(name, fallback string) string {

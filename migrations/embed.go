@@ -101,3 +101,8 @@ var ProviderNoteSourceTitleSQL string
 //
 //go:embed 022_coenzyme_q10_daily.sql
 var CoenzymeQ10DailySQL string
+
+// SelfServeDeliverySQL stores versioned delivery drafts, approvals, jobs, and audit data.
+//
+//go:embed 023_self_serve_delivery.sql
+var SelfServeDeliverySQL string

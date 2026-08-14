@@ -3,7 +3,7 @@ import type { CellValue, Worksheet } from "exceljs";
 import {
   AlertCircle, ArrowRight, Bell, CalendarDays, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, Clock3, Database,
   FileSpreadsheet, FileText, GitCompareArrows, Image as ImageIcon, LayoutDashboard, Lightbulb, Link2, LoaderCircle, Menu, Megaphone,
-  PanelLeftClose, RefreshCw, Rows3, Search, Settings, Stethoscope, Trash2, UploadCloud
+  PanelLeftClose, RefreshCw, Route, Rows3, Search, Settings, Stethoscope, Trash2, UploadCloud
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SavedReportHistory, { type SavedImport } from "./SavedReportHistory";
@@ -20,6 +20,7 @@ const BusinessOverview = lazy(() => import("./BusinessOverview"));
 const GuoraiData = lazy(() => import("./GuoraiData"));
 const RedMaterials = lazy(() => import("./RedMaterials"));
 const ContentAnalysis = lazy(() => import("./ContentAnalysis"));
+const SelfServeDeliveryConsole = lazy(() => import("./SelfServeDeliveryConsole"));
 const DandelionUpdate = lazy(() => import("./DandelionUpdate"));
 
 type TableImportResult = {
@@ -98,6 +99,7 @@ const navGroups = [
   {
     label: "投放管理",
     items: [
+      { label: "自建投流", icon: Route, path: "/self-serve-delivery" },
       { label: "推广计划", icon: Megaphone, path: "/xhs-jg-sync/campaigns" },
       { label: "广告单元", icon: Rows3, path: "/xhs-jg-sync/units" },
       { label: "创意", icon: Lightbulb, path: "/xhs-jg-sync/creativities" }
@@ -157,6 +159,7 @@ function MaituoConsole() {
   const dashboard = location.pathname === "/";
   const businessOverview = location.pathname === "/overview";
   const contentAnalysis = location.pathname === "/content-analysis";
+  const selfServeDelivery = location.pathname === "/self-serve-delivery";
   const redMaterials = location.pathname === "/red-materials";
   const guoraiData = location.pathname === "/guorai-data";
   const dandelionUpload = location.pathname === "/dandelion-upload";
@@ -171,8 +174,8 @@ function MaituoConsole() {
   const dataSyncTarget = location.pathname.endsWith("/cid") || location.pathname.endsWith("/coenzyme-q10") ? "cid" : location.pathname.endsWith("/manuscripts") ? "manuscripts" : "dandelion";
   const dataSyncTargetLabel = dataSyncTarget === "cid" ? "cid数据" : dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
-  const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : sync ? "投放管理" : settings ? "系统" : "数据中心";
-  const breadcrumbPage = redMaterials ? "红薯素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
+  const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : selfServeDelivery || sync ? "投放管理" : settings ? "系统" : "数据中心";
+  const breadcrumbPage = redMaterials ? "红薯素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
   const inputRef = useRef<HTMLInputElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -345,13 +348,13 @@ function MaituoConsole() {
         </header>
 
         <main className="main-content">
-          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : dashboard ? <>
+          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : selfServeDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载自建投流工作台</div>}><SelfServeDeliveryConsole /></Suspense> : dashboard ? <>
             <section className="page-heading">
               <div><h1>数据中台</h1><p>PaiPai RED · 业务数据工作台</p></div>
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>
             </section>
             <section className="entry-section">
-              <div className="entry-header"><h2>业务入口</h2><span>10 个可用功能</span></div>
+              <div className="entry-header"><h2>业务入口</h2><span>11 个可用功能</span></div>
               <button className="entry-row" onClick={() => navigate("/overview")}>
                 <span className="entry-icon analysis-entry-icon"><LayoutDashboard size={22} /></span>
                 <span className="entry-copy"><strong>查看数据总览</strong><small>辅酶投放趋势与机构每日新增笔记</small></span>
@@ -360,6 +363,11 @@ function MaituoConsole() {
               <button className="entry-row" onClick={() => navigate("/content-analysis")}>
                 <span className="entry-icon analysis-entry-icon"><Rows3 size={22} /></span>
                 <span className="entry-copy"><strong>查看内容分析</strong><small>内容类型、人群与场景表现热力图</small></span>
+                <span className="entry-action">进入<ArrowRight size={17} /></span>
+              </button>
+              <button className="entry-row" onClick={() => navigate("/self-serve-delivery")}>
+                <span className="entry-icon sync-entry-icon"><Route size={22} /></span>
+                <span className="entry-copy"><strong>进入自建投流</strong><small>草稿、校验审批、发布、资产报表与算法建议</small></span>
                 <span className="entry-action">进入<ArrowRight size={17} /></span>
               </button>
               <button className="entry-row" onClick={() => navigate("/red-materials")}>
