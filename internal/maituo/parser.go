@@ -21,6 +21,8 @@ var ErrInvalidWorkbook = errors.New("invalid Maituo customer daily workbook")
 
 var reportDatePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 
+const defaultNoteCategory = "信息流"
+
 var expectedHeaders = map[string][]string{
 	SheetKPI:        {"指标", "数值", "数据口径"},
 	SheetNotes:      {"笔记ID", "笔记链接", "分类", "子账户", "计划名", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"},
@@ -28,6 +30,8 @@ var expectedHeaders = map[string][]string{
 	SheetSubaccount: {"SPU", "子账户", "场域", "回搜成本", "预计回流后成本", "消耗", "回搜", "回搜率(%)", "CPC", "CTR(%)", "笔记数"},
 	SheetTrend:      {"日期", "辅酶消耗(元)", "辅酶淘搜UV", "辅酶成交UV", "辅酶淘搜成本(元/人)", "磷虾油消耗(元)", "磷虾油淘搜UV", "磷虾油成交UV", "磷虾油淘搜成本(元/人)", "合计淘搜UV", "合计成交UV", "合计淘搜成本(元/人)", "合计消耗(元)", "合计回搜成本(元/人)"},
 }
+
+var noteHeadersWithoutCategory = []string{"笔记ID", "笔记链接", "子账户", "计划名", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"}
 
 func Parse(reader io.Reader, fileName string) (Snapshot, error) {
 	data, err := io.ReadAll(reader)
@@ -102,6 +106,9 @@ func sheetRows(workbook *excelize.File, sheet string) ([][]string, error) {
 	if len(rows) == 0 {
 		return nil, invalid("工作表 %q 为空", sheet)
 	}
+	if sheet == SheetNotes && headersMatch(rows[0], noteHeadersWithoutCategory) {
+		return normalizeNoteRowsWithoutCategory(rows[1:]), nil
+	}
 	expected := expectedHeaders[sheet]
 	if len(rows[0]) != len(expected) {
 		return nil, invalid("工作表 %q 表头应有 %d 列，实际为 %d", sheet, len(expected), len(rows[0]))
@@ -112,6 +119,44 @@ func sheetRows(workbook *excelize.File, sheet string) ([][]string, error) {
 		}
 	}
 	return rows[1:], nil
+}
+
+func headersMatch(actual, expected []string) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	for index, header := range expected {
+		if strings.TrimSpace(actual[index]) != header {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeNoteRowsWithoutCategory(rows [][]string) [][]string {
+	result := make([][]string, len(rows))
+	for index, row := range rows {
+		if rowBlank(row) {
+			result[index] = row
+			continue
+		}
+		length := len(row) + 1
+		if length < 3 {
+			length = 3
+		}
+		normalized := make([]string, length)
+		prefixLength := len(row)
+		if prefixLength > 2 {
+			prefixLength = 2
+		}
+		copy(normalized[:prefixLength], row[:prefixLength])
+		normalized[2] = defaultNoteCategory
+		if len(row) > 2 {
+			copy(normalized[3:], row[2:])
+		}
+		result[index] = normalized
+	}
+	return result
 }
 
 func parseKPIs(workbook *excelize.File) ([]KPI, error) {
@@ -156,7 +201,10 @@ func parseNotes(workbook *excelize.File) ([]NoteDetail, error) {
 		}
 		n := index + 2
 		item := NoteDetail{NoteID: required(row, 0), NoteURL: required(row, 1), Category: required(row, 2), Subaccount: required(row, 3), CampaignName: required(row, 4), Placement: required(row, 5), KeywordCategoryNote: optionalString(row, 6), RowMetadata: RowMetadata{SourceRow: n}}
-		if item.NoteID == "" || item.NoteURL == "" || item.Category == "" || item.Subaccount == "" || item.CampaignName == "" || item.Placement == "" {
+		if item.Category == "" {
+			item.Category = defaultNoteCategory
+		}
+		if item.NoteID == "" || item.NoteURL == "" || item.Subaccount == "" || item.CampaignName == "" || item.Placement == "" {
 			return nil, invalid("工作表 %q 第 %d 行关键字段为空", SheetNotes, n)
 		}
 		if item.Spend, err = requiredFloat(row, 7, SheetNotes, n); err != nil {
