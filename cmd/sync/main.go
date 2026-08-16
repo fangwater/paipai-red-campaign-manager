@@ -59,6 +59,7 @@ type apiServer struct {
 	embeddingRefresh     noteEmbeddingService
 	statusStore          manuscriptStatusStore
 	manuscriptAssets     manuscriptAssetStore
+	manualMaterials      manualMaterialStore
 	maituoImport         maituoImportStore
 	maituoSubaccounts    maituoSubaccountStore
 	maituoAnalytics      maituoAnalyticsStore
@@ -193,6 +194,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		embeddingRefresh:     embeddingRefresher,
 		statusStore:          destination,
 		manuscriptAssets:     destination,
+		manualMaterials:      destination,
 		maituoImport:         destination,
 		maituoSubaccounts:    destination,
 		maituoAnalytics:      destination,
@@ -264,6 +266,9 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/analytics/maituo/note-content", server.maituoNoteContent)
 	mux.HandleFunc("/v1/analytics/maituo/reference-materials", server.maituoReferenceMaterials)
 	mux.HandleFunc("/v1/analytics/maituo/reference-material-content", server.maituoReferenceMaterialContent)
+	mux.HandleFunc("/v1/analytics/maituo/manual-materials", server.maituoManualMaterials)
+	mux.HandleFunc("/v1/analytics/maituo/manual-material", server.maituoManualMaterial)
+	mux.HandleFunc("/v1/analytics/maituo/manual-material-tags", server.maituoManualMaterialTags)
 	mux.HandleFunc(manuscriptAssetPrefix, server.manuscriptAsset)
 	mux.HandleFunc("/v1/analytics/maituo/account-plan-diagnosis", server.maituoAccountPlanDiagnosis)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparisons", server.maituoTrafficComparison)

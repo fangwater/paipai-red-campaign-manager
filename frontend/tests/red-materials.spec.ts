@@ -164,15 +164,15 @@ test("opens the first-level red materials directory from the homepage", async ({
   });
 
   await page.goto("/paipai/");
-  await expect(page.getByText("10 个可用功能", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /进入红薯素材/ }).click();
+  await expect(page.getByText("13 个可用功能", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /进入检索素材/ }).click();
   await expect(page).toHaveURL(/\/paipai\/red-materials$/);
-  await expect(page.getByRole("heading", { name: "红薯素材" })).toBeVisible();
-  await expect(page.locator(".nav-item.active")).toContainText("红薯素材");
+  await expect(page.getByRole("heading", { name: "检索素材" })).toBeVisible();
+  await expect(page.locator(".nav-item.active")).toContainText("检索素材");
   await expect(page.locator(".red-material-stats")).toContainText("30");
   await expect(page.locator(".red-material-stats")).toContainText("34");
-  await expect(page.getByText("智元", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("曼杰", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "按机构筛选 智元" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "按机构筛选 曼杰" })).toBeVisible();
   await page.getByRole("combobox", { name: "内容类型" }).selectOption("科普");
   await expect.poll(() => requestedFilters.some((filters) => filters.noteType === "科普")).toBe(true);
   await page.getByRole("button", { name: "按对话人群筛选 职场人" }).click();
@@ -192,7 +192,7 @@ test("opens the first-level red materials directory from the homepage", async ({
   await expect(materialLink).toHaveAttribute("href", `https://www.xiaohongshu.com/explore/${materialID}`);
   await expect(page.getByText("未填充", { exact: true })).toHaveCount(1);
   await expect(page.getByText("已填充", { exact: true })).toHaveCount(1);
-  await expect(page.locator(".red-material-sources")).not.toContainText(sourceNoteIDs[0]);
+  await expect(page.locator(".red-material-sources").first()).not.toContainText(sourceNoteIDs[0]);
   await expect(page.getByRole("button", { name: `查看已存稿件 ${sourceManuscripts[0].title}` })).toBeVisible();
   await expect(page.getByRole("link", { name: `打开飞书稿件 ${sourceManuscripts[0].title}` }))
     .toHaveAttribute("href", sourceManuscripts[0].url);

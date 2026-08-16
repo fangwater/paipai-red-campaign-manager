@@ -106,3 +106,13 @@ var CoenzymeQ10DailySQL string
 //
 //go:embed 023_self_serve_delivery.sql
 var SelfServeDeliverySQL string
+
+// ManualMaterialsSQL stores independently composed structured materials.
+//
+//go:embed 024_manual_materials.sql
+var ManualMaterialsSQL string
+
+// ManualMaterialNotesSQL stores note identity and annotation tags for manual materials.
+//
+//go:embed 025_manual_material_notes.sql
+var ManualMaterialNotesSQL string

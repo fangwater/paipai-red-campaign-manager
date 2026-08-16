@@ -91,6 +91,85 @@ type ReferenceMaterialContentInput struct {
 	NoteContent     string
 }
 
+type ManualMaterialImage struct {
+	AssetID string `json:"asset_id"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+}
+
+type ManualMaterialImageInput struct {
+	AssetID     string
+	ContentType string
+	Width       int
+	Height      int
+	Content     []byte
+}
+
+type ManualMaterialTags struct {
+	NoteType            string `json:"note_type"`
+	CoverType           string `json:"cover_type"`
+	CommercialIntensity string `json:"commercial_intensity"`
+	Audience            string `json:"audience"`
+	UserScenario        string `json:"user_scenario"`
+}
+
+func (tags ManualMaterialTags) Complete() bool {
+	return tags.NoteType != "" && tags.CoverType != "" && tags.CommercialIntensity != "" &&
+		tags.Audience != "" && tags.UserScenario != ""
+}
+
+type ManualMaterialInput struct {
+	MaterialID       string
+	NoteID           string
+	NoteURL          string
+	Title            string
+	Body             string
+	Comments         []string
+	ExistingImageIDs []string
+	UploadedImages   []ManualMaterialImageInput
+}
+
+type ManualMaterial struct {
+	MaterialID   string                `json:"material_id"`
+	NoteID       string                `json:"note_id"`
+	NoteURL      string                `json:"note_url"`
+	Title        string                `json:"title"`
+	Body         string                `json:"body"`
+	Comments     []string              `json:"comments"`
+	Tags         ManualMaterialTags    `json:"tags"`
+	Tagged       bool                  `json:"tagged"`
+	Images       []ManualMaterialImage `json:"images"`
+	ImageCount   int                   `json:"image_count"`
+	CommentCount int                   `json:"comment_count"`
+	CreatedAt    time.Time             `json:"created_at"`
+	UpdatedAt    time.Time             `json:"updated_at"`
+}
+
+type ManualMaterialsQuery struct {
+	Search   string
+	Untagged bool
+	Page     int
+	PageSize int
+}
+
+type ManualMaterialTagOptions struct {
+	NoteType            []string `json:"note_type"`
+	CoverType           []string `json:"cover_type"`
+	CommercialIntensity []string `json:"commercial_intensity"`
+	Audience            []string `json:"audience"`
+	UserScenario        []string `json:"user_scenario"`
+}
+
+type ManualMaterials struct {
+	Search     string                   `json:"search"`
+	Untagged   bool                     `json:"untagged"`
+	Total      int                      `json:"total"`
+	Page       int                      `json:"page"`
+	PageSize   int                      `json:"page_size"`
+	TagOptions ManualMaterialTagOptions `json:"tag_options"`
+	Items      []ManualMaterial         `json:"items"`
+}
+
 type ReferenceMaterialStats struct {
 	MaterialCount   int `json:"material_count"`
 	SourceNoteCount int `json:"source_note_count"`

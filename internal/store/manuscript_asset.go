@@ -15,9 +15,15 @@ func (p *Postgres) ManuscriptAsset(ctx context.Context, assetID string) (maituo.
 		SELECT assets.asset_id, assets.content_type, assets.content, assets.created_at
 		FROM manuscript_assets assets
 		WHERE assets.asset_id = $1
-		  AND EXISTS (
-			SELECT 1 FROM service_provider_note_assets links
-			WHERE links.asset_id = assets.asset_id
+		  AND (
+			EXISTS (
+				SELECT 1 FROM service_provider_note_assets links
+				WHERE links.asset_id = assets.asset_id
+			)
+			OR EXISTS (
+				SELECT 1 FROM manual_material_assets links
+				WHERE links.asset_id = assets.asset_id
+			)
 		  )
 	`, assetID).Scan(&asset.AssetID, &asset.ContentType, &asset.Content, &asset.CreatedAt)
 	if err == nil {

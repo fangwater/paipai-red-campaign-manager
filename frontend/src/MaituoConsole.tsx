@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import type { CellValue, Worksheet } from "exceljs";
 import {
   AlertCircle, ArrowRight, Bell, CalendarDays, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, Clock3, Database,
-  FileSpreadsheet, FileText, GitCompareArrows, Image as ImageIcon, LayoutDashboard, Lightbulb, Link2, LoaderCircle, Menu, Megaphone,
+  FilePlus2, FileSpreadsheet, FileText, GitCompareArrows, Image as ImageIcon, LayoutDashboard, Lightbulb, Link2, LoaderCircle, Menu, Megaphone, Tags,
   PanelLeftClose, RefreshCw, Route, Rows3, Search, Settings, Stethoscope, Trash2, UploadCloud
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -19,6 +19,8 @@ const SystemSettings = lazy(() => import("./SystemSettings"));
 const BusinessOverview = lazy(() => import("./BusinessOverview"));
 const GuoraiData = lazy(() => import("./GuoraiData"));
 const RedMaterials = lazy(() => import("./RedMaterials"));
+const RedMaterialComposer = lazy(() => import("./RedMaterialComposer"));
+const RedMaterialPending = lazy(() => import("./RedMaterialPending"));
 const ContentAnalysis = lazy(() => import("./ContentAnalysis"));
 const SelfServeDeliveryConsole = lazy(() => import("./SelfServeDeliveryConsole"));
 const DandelionUpdate = lazy(() => import("./DandelionUpdate"));
@@ -83,7 +85,11 @@ const navGroups = [
   },
   {
     label: "素材中心",
-    items: [{ label: "红薯素材", icon: ImageIcon, path: "/red-materials" }]
+    items: [
+      { label: "添加素材", icon: FilePlus2, path: "/red-materials/new" },
+      { label: "待标注素材", icon: Tags, path: "/red-materials/pending" },
+      { label: "检索素材", icon: ImageIcon, path: "/red-materials" }
+    ]
   },
   {
     label: "分析中心",
@@ -160,7 +166,10 @@ function MaituoConsole() {
   const businessOverview = location.pathname === "/overview";
   const contentAnalysis = location.pathname === "/content-analysis";
   const selfServeDelivery = location.pathname === "/self-serve-delivery";
-  const redMaterials = location.pathname === "/red-materials";
+  const redMaterialsSearch = location.pathname === "/red-materials";
+  const redMaterialsCompose = location.pathname === "/red-materials/new";
+  const redMaterialsPending = location.pathname === "/red-materials/pending";
+  const redMaterials = redMaterialsSearch || redMaterialsCompose || redMaterialsPending;
   const guoraiData = location.pathname === "/guorai-data";
   const dandelionUpload = location.pathname === "/dandelion-upload";
   const analysis = location.pathname === "/note-campaign-analysis";
@@ -175,7 +184,7 @@ function MaituoConsole() {
   const dataSyncTargetLabel = dataSyncTarget === "cid" ? "cid数据" : dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
   const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : selfServeDelivery || sync ? "投放管理" : settings ? "系统" : "数据中心";
-  const breadcrumbPage = redMaterials ? "红薯素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
+  const breadcrumbPage = redMaterialsCompose ? "添加素材" : redMaterialsPending ? "待标注素材" : redMaterialsSearch ? "检索素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记计划分析" : accountDiagnosis ? "子账户与计划诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
   const inputRef = useRef<HTMLInputElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -354,7 +363,7 @@ function MaituoConsole() {
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>
             </section>
             <section className="entry-section">
-              <div className="entry-header"><h2>业务入口</h2><span>11 个可用功能</span></div>
+              <div className="entry-header"><h2>业务入口</h2><span>13 个可用功能</span></div>
               <button className="entry-row" onClick={() => navigate("/overview")}>
                 <span className="entry-icon analysis-entry-icon"><LayoutDashboard size={22} /></span>
                 <span className="entry-copy"><strong>查看数据总览</strong><small>辅酶投放趋势与机构每日新增笔记</small></span>
@@ -370,9 +379,19 @@ function MaituoConsole() {
                 <span className="entry-copy"><strong>进入自建投流</strong><small>草稿、校验审批、发布、资产报表与算法建议</small></span>
                 <span className="entry-action">进入<ArrowRight size={17} /></span>
               </button>
+              <button className="entry-row" onClick={() => navigate("/red-materials/new")}>
+                <span className="entry-icon material-entry-icon"><FilePlus2 size={22} /></span>
+                <span className="entry-copy"><strong>进入添加素材</strong><small>配置笔记 ID、链接、图片、评论、标题和正文</small></span>
+                <span className="entry-action">进入<ArrowRight size={17} /></span>
+              </button>
+              <button className="entry-row" onClick={() => navigate("/red-materials/pending")}>
+                <span className="entry-icon material-entry-icon"><Tags size={22} /></span>
+                <span className="entry-copy"><strong>进入待标注素材</strong><small>为手动添加的素材补齐标签</small></span>
+                <span className="entry-action">进入<ArrowRight size={17} /></span>
+              </button>
               <button className="entry-row" onClick={() => navigate("/red-materials")}>
                 <span className="entry-icon material-entry-icon"><ImageIcon size={22} /></span>
-                <span className="entry-copy"><strong>进入红薯素材</strong><small>稿件引用的参考小红书笔记</small></span>
+                <span className="entry-copy"><strong>进入检索素材</strong><small>查找稿件引用的参考小红书笔记</small></span>
                 <span className="entry-action">进入<ArrowRight size={17} /></span>
               </button>
               <button className="entry-row" onClick={() => navigate("/maituo-daily-report")}>
@@ -411,7 +430,7 @@ function MaituoConsole() {
                 <span className="entry-action">进入<ArrowRight size={17} /></span>
               </button>
             </section>
-          </> : redMaterials ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载红薯素材</div>}><RedMaterials serviceState={serviceState} /></Suspense> : businessOverview ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载数据总览</div>}><BusinessOverview serviceState={serviceState} /></Suspense> : guoraiData ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载薯量数据</div>}><GuoraiData serviceState={serviceState} /></Suspense> : analysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载分析页面</div>}><NoteCampaignAnalysis serviceState={serviceState} /></Suspense> : accountDiagnosis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载诊断页面</div>}><AccountPlanDiagnosis serviceState={serviceState} /></Suspense> : trafficComparison ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载投流对比</div>}><TrafficComparison serviceState={serviceState} /></Suspense> : xhsLinkQuery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载关联查询</div>}><XhsLinkQuery /></Suspense> : sync ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载同步页面</div>}><XhsSyncCenter activeTarget={syncTarget} /></Suspense> : dataSync ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载同步页面</div>}><DataSyncCenter activeTarget={dataSyncTarget} /></Suspense> : settings ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载系统状态</div>}><SystemSettings /></Suspense> : <>
+          </> : redMaterialsCompose ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载添加素材</div>}><RedMaterialComposer serviceState={serviceState} /></Suspense> : redMaterialsPending ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载待标注素材</div>}><RedMaterialPending serviceState={serviceState} /></Suspense> : redMaterialsSearch ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载检索素材</div>}><RedMaterials serviceState={serviceState} /></Suspense> : businessOverview ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载数据总览</div>}><BusinessOverview serviceState={serviceState} /></Suspense> : guoraiData ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载薯量数据</div>}><GuoraiData serviceState={serviceState} /></Suspense> : analysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载分析页面</div>}><NoteCampaignAnalysis serviceState={serviceState} /></Suspense> : accountDiagnosis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载诊断页面</div>}><AccountPlanDiagnosis serviceState={serviceState} /></Suspense> : trafficComparison ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载投流对比</div>}><TrafficComparison serviceState={serviceState} /></Suspense> : xhsLinkQuery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载关联查询</div>}><XhsLinkQuery /></Suspense> : sync ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载同步页面</div>}><XhsSyncCenter activeTarget={syncTarget} /></Suspense> : dataSync ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载同步页面</div>}><DataSyncCenter activeTarget={dataSyncTarget} /></Suspense> : settings ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载系统状态</div>}><SystemSettings /></Suspense> : <>
             <section className="page-heading">
               <div><h1>Maituo 客户日报</h1><p>数据中心 · 多文件导入</p></div>
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>

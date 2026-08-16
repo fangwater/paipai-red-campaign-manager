@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, ExternalLink, FileText, Link2, LoaderCircle, Pencil, RotateCcw, Search } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, ExternalLink, FilePlus2, FileText, Link2, LoaderCircle, Pencil, RotateCcw, Search } from "lucide-react";
+
+import { useNavigate } from "react-router-dom";
 
 import ReferenceMaterialEditor from "./ReferenceMaterialEditor";
 import StoredManuscriptDialog from "./StoredManuscriptDialog";
@@ -156,6 +158,7 @@ function MaterialTags({ tags, filters, onSelect }: {
 }
 
 function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
+  const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ReferenceMaterialFilters>(EMPTY_FILTERS);
@@ -251,8 +254,11 @@ function RedMaterials({ serviceState }: { serviceState: ServiceState }) {
 
   return <>
     <section className="page-heading red-material-page-heading">
-      <div><h1>红薯素材</h1><p>稿件参考笔记库</p></div>
-      <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "素材服务已连接" : serviceState === "offline" ? "素材服务未连接" : "正在检查连接"}</div>
+      <div><h1>检索素材</h1><p>查找稿件引用的参考笔记</p></div>
+      <div className="heading-status">
+        <span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "素材服务已连接" : serviceState === "offline" ? "素材服务未连接" : "正在检查连接"}
+        <button className="primary-button" type="button" onClick={() => navigate("/red-materials/new")}><FilePlus2 size={15} />添加素材</button>
+      </div>
     </section>
 
     <section className="red-material-toolbar">
