@@ -17,10 +17,14 @@ function makeNote(id: string, overrides: Record<string, unknown> = {}) {
     boom: id === "note-1",
     search_spend: id === "note-1" ? 480 : 60,
     search_cost: id === "note-1" ? 24 : 40,
+    latest_search_cost: id === "note-1" ? 28 : 55,
+    search_cost_change: id === "note-1" ? 4 : 15,
     search_qualified: id === "note-1",
     feed_spend: id === "note-2" ? 500 : 0,
-    feed_cost: null,
+    feed_cost: id === "note-2" ? 88 : null,
     feed_qualified: false,
+    latest_spend: id === "note-2" ? 0 : 12,
+    stopped: id === "note-2",
     flow_evaluated: id === "note-1",
     flow_qualified: id === "note-1",
     roi: id === "note-1" ? 1.8 : 0.4,
@@ -37,7 +41,12 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
   const paginationNotes = Array.from({ length: 21 }, (_, index) => makeNote("page-" + String(index + 1).padStart(2, "0"), {
     title: "分页笔记 " + (index + 1),
     content_type: "经验分享",
-    search_spend: 39 - index
+    search_spend: 39 - index,
+    search_cost: 20,
+    latest_search_cost: 20,
+    search_cost_change: 0,
+    feed_spend: 0,
+    feed_cost: null
   }));
   return {
     spu,
@@ -93,7 +102,7 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
         roi_evaluated: 0,
         roi_qualified: 0,
         all_qualified: 0,
-        notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", roi: null, roi_qualified: false, all_qualified: false })]
+        notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", search_cost: 20, latest_search_cost: 18, search_cost_change: -2, roi: null, roi_qualified: false, all_qualified: false })]
       },
       {
         content_type: "经验分享",
@@ -170,11 +179,40 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(publishedEndDate).toHaveValue("");
   await expect.poll(() => requested.at(-1)).toBe("辅酶:全部:audience::");
 
-  await expect(page.getByText("按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗")).toBeVisible();
-  const sortedNotes = page.getByRole("table", { name: "按累计消耗排序的笔记" });
-  await expect(sortedNotes.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "搜索累计消耗 · 成本", "信息流累计消耗 · 成本", "薯量 ROI"]);
+  await expect(page.getByText("默认按搜索累计消耗降序；回搜成本变化 = 当日回搜成本 − 累计回搜成本")).toBeVisible();
+  const sortedNotes = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" });
+  await expect(sortedNotes.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "搜索累计消耗 · 成本", "信息流累计消耗 · 成本", "回搜成本变化", "薯量 ROI"]);
   await expect(sortedNotes.locator("tbody tr")).toHaveCount(20);
-  await expect(sortedNotes.locator("tbody tr").first()).toContainText("一周辅酶记录");
+  await expect(sortedNotes.locator("tbody tr").first()).toContainText("通勤精力管理实测");
+  await expect(sortedNotes.getByRole("link", { name: "查看笔记计划分析 note-1" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-1");
+  await expect(sortedNotes.locator("tbody tr").first().locator(".content-note-stopped")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜索累计消耗" })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "信息流累计消耗" }).click();
+  const feedSortedNotes = page.getByRole("table", { name: "按信息流累计消耗排序的笔记" });
+  await expect(feedSortedNotes.locator("tbody tr").first()).toContainText("一周辅酶记录");
+  await page.getByRole("button", { name: "回搜成本变化" }).click();
+  const changeSortedNotes = page.getByRole("table", { name: "按回搜成本变化排序的笔记" });
+  await expect(changeSortedNotes.locator("tbody tr").first()).toContainText("一周辅酶记录");
+  await expect(changeSortedNotes.locator("tbody tr").first()).toContainText("+¥15.00");
+  await page.getByRole("button", { name: "搜索累计消耗" }).click();
+  await expect(page.getByRole("button", { name: "搜索成本不达标" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "信息流成本不达标" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "已停投" })).toContainText("1");
+  await page.getByRole("button", { name: "搜索成本不达标" }).click();
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
+  await page.getByLabel("搜索成本不达标阈值").fill("50");
+  await expect(page.getByText("当前筛选条件下暂无笔记")).toBeVisible();
+  await page.getByRole("button", { name: "搜索成本不达标" }).click();
+  await page.getByRole("button", { name: "信息流成本不达标" }).click();
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
+  await page.getByRole("button", { name: "信息流成本不达标" }).click();
+  await page.getByRole("button", { name: "已停投" }).click();
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator(".content-note-stopped")).toHaveText("已停投");
+  await page.getByRole("button", { name: "已停投" }).click();
   await expect(page.getByText("共 24 篇 · 每页 20 篇")).toBeVisible();
   const pageSelect = page.getByLabel("选择笔记页码");
   await expect(pageSelect).toHaveValue("1");
@@ -191,6 +229,7 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   const drawerNotes = page.getByRole("table", { name: "热力图笔记明细" });
   await expect(drawerNotes.locator("tbody tr")).toHaveCount(2);
   await expect(drawerNotes.getByRole("link", { name: /通勤精力管理实测/ })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/note-1");
+  await expect(drawerNotes.getByRole("link", { name: "查看笔记计划分析 note-1" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-1");
   await page.getByRole("button", { name: "三项达标 1" }).click();
   await expect(drawerNotes.locator("tbody tr")).toHaveCount(1);
   await page.getByRole("button", { name: "关闭", exact: true }).click();
@@ -220,7 +259,7 @@ test("content heatmap remains usable on mobile", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "内容分析" })).toBeVisible();
   await expect(page.getByRole("button", { name: "科普 职场人 爆文率50%" })).toBeVisible();
   await expect(page.locator(".content-heatmap-scroll")).toBeVisible();
-  await expect(page.getByRole("table", { name: "按累计消耗排序的笔记" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toBeVisible();
   const noteTableScroll = page.locator(".content-note-section .content-note-table-wrap");
   expect(await noteTableScroll.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   await expect(page.locator("body")).toHaveCSS("overflow-x", "visible");

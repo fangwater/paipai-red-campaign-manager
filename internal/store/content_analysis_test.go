@@ -39,6 +39,29 @@ func TestBuildContentAnalysisUsesEligibleCostAsBoomDenominator(t *testing.T) {
 	}
 }
 
+func TestContentAnalysisStoppedWhenLatestSpendIsZero(t *testing.T) {
+	if !contentAnalysisStopped(0) {
+		t.Fatal("expected zero latest spend to be stopped")
+	}
+	if contentAnalysisStopped(0.01) {
+		t.Fatal("expected positive latest spend to stay active")
+	}
+}
+
+func TestContentAnalysisSearchCostChange(t *testing.T) {
+	latest, cumulative := 40.0, 30.0
+	got := contentAnalysisSearchCostChange(&latest, &cumulative)
+	if got == nil || *got != 10 {
+		t.Fatalf("change=%v", got)
+	}
+	if contentAnalysisSearchCostChange(nil, &cumulative) != nil {
+		t.Fatal("expected nil when latest search cost is missing")
+	}
+	if contentAnalysisSearchCostChange(&latest, nil) != nil {
+		t.Fatal("expected nil when cumulative search cost is missing")
+	}
+}
+
 func TestNormalizeContentAnalysisLabel(t *testing.T) {
 	tests := map[string]string{
 		"audience:中老年人":   "中老年",

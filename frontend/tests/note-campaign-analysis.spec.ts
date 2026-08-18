@@ -137,3 +137,45 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   await page.getByRole("button", { name: "回搜成本差值" }).click();
   await expect.poll(() => requestedSorts).toContain("search_cost_change");
 });
+
+test("opens note campaign analysis from a note id query", async ({ page }) => {
+  const requestedQueries: string[] = [];
+  await page.route("**/paipai/api/analytics/maituo/note-campaigns?*", async (route) => {
+    requestedQueries.push(new URL(route.request().url()).searchParams.get("q") ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          window: "7d",
+          sort: "cumulative_spend",
+          report_dates: points.map((point) => point.report_date),
+          total: 1,
+          page: 1,
+          page_size: 25,
+          items: [{
+            note_id: "note-1",
+            campaign_name: "辅酶搜索计划",
+            placement: "搜索",
+            first_report_date: "2026-07-21",
+            last_report_date: "2026-07-23",
+            active_days: 2,
+            latest_spend: 20,
+            total_spend: 30,
+            total_search_users: 6,
+            latest_search_cost: 5,
+            search_cost_change: 5,
+            points
+          }]
+        }
+      })
+    });
+  });
+
+  await page.goto("/paipai/note-campaign-analysis?q=note-1");
+  await expect(page.getByRole("heading", { name: "笔记计划分析" })).toBeVisible();
+  await expect(page.getByPlaceholder("搜索笔记ID、计划或场域")).toHaveValue("note-1");
+  await expect.poll(() => requestedQueries).toContain("note-1");
+  await expect(page.locator(".focus-identity")).toContainText("note-1");
+});

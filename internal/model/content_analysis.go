@@ -30,28 +30,32 @@ type ContentAnalysisCoverage struct {
 }
 
 type ContentAnalysisNote struct {
-	NoteID          string   `json:"note_id"`
-	Title           string   `json:"title"`
-	URL             string   `json:"url"`
-	Author          string   `json:"author"`
-	PublishedDate   string   `json:"published_date"`
-	Agency          string   `json:"agency"`
-	ContentType     string   `json:"content_type"`
-	Audience        string   `json:"audience"`
-	Scenario        string   `json:"scenario"`
-	DandelionCost   *float64 `json:"dandelion_cost"`
-	Boom            bool     `json:"boom"`
-	SearchSpend     float64  `json:"search_spend"`
-	SearchCost      *float64 `json:"search_cost"`
-	SearchQualified bool     `json:"search_qualified"`
-	FeedSpend       float64  `json:"feed_spend"`
-	FeedCost        *float64 `json:"feed_cost"`
-	FeedQualified   bool     `json:"feed_qualified"`
-	FlowEvaluated   bool     `json:"flow_evaluated"`
-	FlowQualified   bool     `json:"flow_qualified"`
-	ROI             *float64 `json:"roi"`
-	ROIQualified    bool     `json:"roi_qualified"`
-	AllQualified    bool     `json:"all_qualified"`
+	NoteID           string   `json:"note_id"`
+	Title            string   `json:"title"`
+	URL              string   `json:"url"`
+	Author           string   `json:"author"`
+	PublishedDate    string   `json:"published_date"`
+	Agency           string   `json:"agency"`
+	ContentType      string   `json:"content_type"`
+	Audience         string   `json:"audience"`
+	Scenario         string   `json:"scenario"`
+	DandelionCost    *float64 `json:"dandelion_cost"`
+	Boom             bool     `json:"boom"`
+	SearchSpend      float64  `json:"search_spend"`
+	SearchCost       *float64 `json:"search_cost"`
+	LatestSearchCost *float64 `json:"latest_search_cost"`
+	SearchCostChange *float64 `json:"search_cost_change"`
+	SearchQualified  bool     `json:"search_qualified"`
+	FeedSpend        float64  `json:"feed_spend"`
+	FeedCost         *float64 `json:"feed_cost"`
+	FeedQualified    bool     `json:"feed_qualified"`
+	LatestSpend      float64  `json:"latest_spend"`
+	Stopped          bool     `json:"stopped"`
+	FlowEvaluated    bool     `json:"flow_evaluated"`
+	FlowQualified    bool     `json:"flow_qualified"`
+	ROI              *float64 `json:"roi"`
+	ROIQualified     bool     `json:"roi_qualified"`
+	AllQualified     bool     `json:"all_qualified"`
 }
 
 type ContentAnalysisCell struct {

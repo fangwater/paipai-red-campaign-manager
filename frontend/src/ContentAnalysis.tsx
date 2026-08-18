@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, X } from "lucide-react";
+import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import "./content-analysis.css";
 
 type ServiceState = "checking" | "online" | "offline";
@@ -7,6 +8,8 @@ type SPUOption = "辅酶" | "磷虾油";
 type AgencyOption = "全部" | "曼杰" | "有一有二" | "智元";
 type DimensionOption = "audience" | "scenario";
 type DetailFilter = "all" | "boom" | "flow" | "roi" | "qualified";
+type NoteSortOption = "search_spend" | "feed_spend" | "search_cost_change";
+type CostFilter = "search" | "feed" | "stopped";
 
 type ContentNote = {
   note_id: string;
@@ -22,10 +25,14 @@ type ContentNote = {
   boom: boolean;
   search_spend: number;
   search_cost: number | null;
+  latest_search_cost: number | null;
+  search_cost_change: number | null;
   search_qualified: boolean;
   feed_spend: number;
   feed_cost: number | null;
   feed_qualified: boolean;
+  latest_spend: number;
+  stopped: boolean;
   flow_evaluated: boolean;
   flow_qualified: boolean;
   roi: number | null;
@@ -88,6 +95,13 @@ const DETAIL_FILTERS: Array<{ value: DetailFilter; label: string }> = [
   { value: "qualified", label: "三项达标" }
 ];
 const NOTE_PAGE_SIZE = 20;
+const DEFAULT_SEARCH_COST_LIMIT = 30;
+const DEFAULT_FEED_COST_LIMIT = 70;
+const NOTE_SORT_OPTIONS: Array<{ value: NoteSortOption; label: string; description: string }> = [
+  { value: "search_spend", label: "搜索累计消耗", description: "按搜索累计消耗从高到低排序" },
+  { value: "feed_spend", label: "信息流累计消耗", description: "按信息流累计消耗从高到低排序" },
+  { value: "search_cost_change", label: "回搜成本变化", description: "按当日回搜成本 − 累计回搜成本从高到低排序" }
+];
 const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const decimal = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -123,6 +137,26 @@ function metricCost(spend: number, cost: number | null): string {
   return cost === null ? "¥" + money.format(spend) + " · 暂无成本" : "¥" + money.format(spend) + " · ¥" + money.format(cost);
 }
 
+function formatCostChange(value: number | null): string {
+  if (value === null) return "--";
+  if (value > 0) return "+¥" + money.format(value);
+  if (value < 0) return "-¥" + money.format(Math.abs(value));
+  return "¥" + money.format(0);
+}
+
+function parseCostLimit(value: string, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function costExceeds(cost: number | null, limit: number): boolean {
+  return cost !== null && cost > limit;
+}
+
+function noteCampaignAnalysisPath(noteID: string): string {
+  return "/note-campaign-analysis?" + new URLSearchParams({ q: noteID }).toString();
+}
+
 function NoteStatus({ note }: { note: ContentNote }) {
   return <div className="content-note-status">
     {note.all_qualified ? <span className="all">三项达标</span> : null}
@@ -139,18 +173,20 @@ function ContentNoteTable({ notes, showStatus = true, label }: {
   label: string;
 }) {
   return <div className="content-note-table-wrap"><table className={"content-note-table" + (showStatus ? "" : " content-note-table-summary")} aria-label={label}>
-    <thead><tr><th>笔记</th><th>机构与标签</th><th>站外成本 15 天</th><th>搜索累计消耗 · 成本</th><th>信息流累计消耗 · 成本</th><th>薯量 ROI</th>{showStatus ? <th>状态</th> : null}</tr></thead>
+    <thead><tr><th>笔记</th><th>机构与标签</th><th>站外成本 15 天</th><th>搜索累计消耗 · 成本</th><th>信息流累计消耗 · 成本</th><th>回搜成本变化</th><th>薯量 ROI</th>{showStatus ? <th>状态</th> : null}</tr></thead>
     <tbody>{notes.map((note) => {
       const noteURL = safeURL(note.url);
       return <tr key={note.note_id}>
         <td><div className="content-note-identity">
-          {noteURL ? <a href={noteURL} target="_blank" rel="noreferrer" title={note.title}>{note.title}<ExternalLink size={12} /></a> : <strong title={note.title}>{note.title}</strong>}
-          <span>{note.note_id}</span><small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
+          {noteURL ? <a className="content-note-title" href={noteURL} target="_blank" rel="noreferrer" title={note.title}>{note.title}<ExternalLink size={12} /></a> : <strong className="content-note-title" title={note.title}>{note.title}</strong>}
+          <Link className="content-note-id" to={noteCampaignAnalysisPath(note.note_id)} title="查看笔记计划分析" aria-label={"查看笔记计划分析 " + note.note_id}>{note.note_id}</Link>
+          <small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
         </div></td>
-        <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span></div></td>
+        <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span>{note.stopped ? <em className="content-note-stopped">已停投</em> : null}</div></td>
         <td className={note.boom ? "metric-good" : ""}>{note.dandelion_cost === null || note.dandelion_cost <= 0 ? "--" : "¥" + money.format(note.dandelion_cost)}</td>
         <td className={note.search_qualified ? "metric-good" : ""}>{metricCost(note.search_spend, note.search_cost)}</td>
         <td className={note.feed_qualified ? "metric-good" : ""}>{metricCost(note.feed_spend, note.feed_cost)}</td>
+        <td className={"search-cost-change" + (note.search_cost_change !== null && note.search_cost_change > 0 ? " increase" : note.search_cost_change !== null && note.search_cost_change < 0 ? " decrease" : "")} title={note.latest_search_cost === null || note.search_cost === null ? "暂无完整回搜成本" : "当日回搜成本 ¥" + money.format(note.latest_search_cost) + " − 累计回搜成本 ¥" + money.format(note.search_cost)}>{formatCostChange(note.search_cost_change)}</td>
         <td className={note.roi_qualified ? "metric-good" : ""}>{note.roi === null ? "--" : decimal.format(note.roi)}</td>
         {showStatus ? <td><NoteStatus note={note} /></td> : null}
       </tr>;
@@ -215,6 +251,10 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const [publishedStartDate, setPublishedStartDate] = useState("");
   const [publishedEndDate, setPublishedEndDate] = useState("");
   const [includeUnlabeled, setIncludeUnlabeled] = useState(false);
+  const [noteSort, setNoteSort] = useState<NoteSortOption>("search_spend");
+  const [costFilters, setCostFilters] = useState<CostFilter[]>([]);
+  const [searchCostLimitInput, setSearchCostLimitInput] = useState(String(DEFAULT_SEARCH_COST_LIMIT));
+  const [feedCostLimitInput, setFeedCostLimitInput] = useState(String(DEFAULT_FEED_COST_LIMIT));
   const [notePage, setNotePage] = useState(1);
   const noteSectionRef = useRef<HTMLElement>(null);
   const [result, setResult] = useState<ContentResult | null>(null);
@@ -249,26 +289,57 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const types = result?.types.filter((value) => includeUnlabeled || value !== "未标注") ?? [];
   const dimensions = result?.dimensions.filter((value) => includeUnlabeled || value !== "未标注") ?? [];
   const cells = useMemo(() => new Map((result?.cells ?? []).map((cell) => [cell.content_type + "\u0000" + cell.dimension, cell])), [result]);
-  const spendSortedNotes = useMemo(() => {
+  const searchCostLimit = parseCostLimit(searchCostLimitInput, DEFAULT_SEARCH_COST_LIMIT);
+  const feedCostLimit = parseCostLimit(feedCostLimitInput, DEFAULT_FEED_COST_LIMIT);
+  const visibleNotes = useMemo(() => {
     const notesByID = new Map<string, ContentNote>();
     for (const cell of result?.cells ?? []) {
       if (!includeUnlabeled && (cell.content_type === "未标注" || cell.dimension === "未标注")) continue;
       for (const note of cell.notes) notesByID.set(note.note_id, note);
     }
-    return Array.from(notesByID.values()).sort((left, right) => {
-      const spendDifference = right.search_spend + right.feed_spend - left.search_spend - left.feed_spend;
-      return spendDifference || left.note_id.localeCompare(right.note_id);
+    return Array.from(notesByID.values()).filter((note) => {
+      if (costFilters.length === 0) return true;
+      return costFilters.some((filter) => {
+        if (filter === "search") return costExceeds(note.search_cost, searchCostLimit);
+        if (filter === "feed") return costExceeds(note.feed_cost, feedCostLimit);
+        return note.stopped;
+      });
+    }).sort((left, right) => {
+      const sortValue = (note: ContentNote) => {
+        if (noteSort === "feed_spend") return note.feed_spend;
+        if (noteSort === "search_cost_change") return note.search_cost_change ?? Number.NEGATIVE_INFINITY;
+        return note.search_spend;
+      };
+      return sortValue(right) - sortValue(left) || left.note_id.localeCompare(right.note_id);
     });
-  }, [includeUnlabeled, result]);
-  const notePageCount = Math.max(1, Math.ceil(spendSortedNotes.length / NOTE_PAGE_SIZE));
-  const pagedSpendSortedNotes = useMemo(() => {
+  }, [costFilters, feedCostLimit, includeUnlabeled, noteSort, result, searchCostLimit]);
+  const notePageCount = Math.max(1, Math.ceil(visibleNotes.length / NOTE_PAGE_SIZE));
+  const pagedVisibleNotes = useMemo(() => {
     const start = (notePage - 1) * NOTE_PAGE_SIZE;
-    return spendSortedNotes.slice(start, start + NOTE_PAGE_SIZE);
-  }, [notePage, spendSortedNotes]);
+    return visibleNotes.slice(start, start + NOTE_PAGE_SIZE);
+  }, [notePage, visibleNotes]);
+  const unqualifiedCounts = useMemo(() => {
+    const notesByID = new Map<string, ContentNote>();
+    for (const cell of result?.cells ?? []) {
+      if (!includeUnlabeled && (cell.content_type === "未标注" || cell.dimension === "未标注")) continue;
+      for (const note of cell.notes) notesByID.set(note.note_id, note);
+    }
+    const notes = Array.from(notesByID.values());
+    return {
+      search: notes.filter((note) => costExceeds(note.search_cost, searchCostLimit)).length,
+      feed: notes.filter((note) => costExceeds(note.feed_cost, feedCostLimit)).length,
+      stopped: notes.filter((note) => note.stopped).length
+    };
+  }, [feedCostLimit, includeUnlabeled, result, searchCostLimit]);
+  const sortLabel = NOTE_SORT_OPTIONS.find((option) => option.value === noteSort)?.label ?? "搜索累计消耗";
+
+  const toggleCostFilter = (value: CostFilter) => {
+    setCostFilters((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  };
 
   useEffect(() => {
     setNotePage(1);
-  }, [agency, dimension, includeUnlabeled, publishedEndDate, publishedStartDate, spu]);
+  }, [agency, costFilters, dimension, feedCostLimit, includeUnlabeled, noteSort, publishedEndDate, publishedStartDate, searchCostLimit, spu]);
 
   useEffect(() => {
     setNotePage((current) => Math.min(current, notePageCount));
@@ -362,11 +433,42 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
       </section>
 
       <section className="content-note-section" ref={noteSectionRef}>
-        <header><div><h2>笔记表现</h2><p>按总消耗从高到低排序；总消耗 = 搜索累计消耗 + 信息流累计消耗</p></div><span>{integer.format(spendSortedNotes.length)} 篇笔记</span></header>
-        {spendSortedNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无笔记</div> : <>
-          <ContentNoteTable notes={pagedSpendSortedNotes} showStatus={false} label="按累计消耗排序的笔记" />
+        <header>
+          <div><h2>笔记表现</h2><p>默认按搜索累计消耗降序；回搜成本变化 = 当日回搜成本 − 累计回搜成本</p></div>
+          <span>{integer.format(visibleNotes.length)} 篇笔记</span>
+        </header>
+        <div className="content-note-controls">
+          <div className="content-note-sort">
+            <ArrowDownWideNarrow size={14} />
+            <span>排序</span>
+            <div className="content-note-sort-buttons" aria-label="笔记排序方式">
+              {NOTE_SORT_OPTIONS.map((option) => <button type="button" className={noteSort === option.value ? "active" : ""} aria-pressed={noteSort === option.value} key={option.value} title={option.description} onClick={() => setNoteSort(option.value)}>{option.label}</button>)}
+            </div>
+          </div>
+          <div className="content-note-filters" aria-label="笔记表现筛选">
+            <button type="button" className={"content-note-filter-card" + (costFilters.includes("search") ? " active" : "")} aria-pressed={costFilters.includes("search")} onClick={() => toggleCostFilter("search")}>
+              <span>搜索成本不达标</span>
+              <strong>{integer.format(unqualifiedCounts.search)}</strong>
+              <small>累计回搜成本 &gt; {searchCostLimit}</small>
+            </button>
+            <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed") ? " active" : "")} aria-pressed={costFilters.includes("feed")} onClick={() => toggleCostFilter("feed")}>
+              <span>信息流成本不达标</span>
+              <strong>{integer.format(unqualifiedCounts.feed)}</strong>
+              <small>累计成本 &gt; {feedCostLimit}</small>
+            </button>
+            <button type="button" className={"content-note-filter-card" + (costFilters.includes("stopped") ? " active" : "")} aria-pressed={costFilters.includes("stopped")} onClick={() => toggleCostFilter("stopped")}>
+              <span>已停投</span>
+              <strong>{integer.format(unqualifiedCounts.stopped)}</strong>
+              <small>最近一天消耗为 0</small>
+            </button>
+            <label className="content-note-threshold">搜索阈值<input type="number" min="0" step="1" aria-label="搜索成本不达标阈值" value={searchCostLimitInput} onChange={(event) => setSearchCostLimitInput(event.target.value)} /></label>
+            <label className="content-note-threshold">信息流阈值<input type="number" min="0" step="1" aria-label="信息流成本不达标阈值" value={feedCostLimitInput} onChange={(event) => setFeedCostLimitInput(event.target.value)} /></label>
+          </div>
+        </div>
+        {visibleNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无笔记</div> : <>
+          <ContentNoteTable notes={pagedVisibleNotes} showStatus={false} label={"按" + sortLabel + "排序的笔记"} />
           <nav className="content-note-pagination" aria-label="笔记分页">
-            <span>共 {integer.format(spendSortedNotes.length)} 篇 · 每页 {NOTE_PAGE_SIZE} 篇</span>
+            <span>共 {integer.format(visibleNotes.length)} 篇 · 每页 {NOTE_PAGE_SIZE} 篇</span>
             <div className="content-note-pagination-controls">
               <button type="button" title="上一页" aria-label="上一页" disabled={notePage === 1} onClick={() => changeNotePage(notePage - 1)}><ChevronLeft size={15} /></button>
               <select aria-label="选择笔记页码" value={notePage} onChange={(event) => changeNotePage(Number(event.target.value))}>
