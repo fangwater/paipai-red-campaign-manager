@@ -464,32 +464,34 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
               {NOTE_SORT_OPTIONS.map((option) => <button type="button" className={noteSort === option.value ? "active" : ""} aria-pressed={noteSort === option.value} key={option.value} title={option.description} onClick={() => setNoteSort(option.value)}>{option.label}</button>)}
             </div>
           </div>
-          <div className="content-note-filters" aria-label="笔记表现筛选">
-            <button type="button" className={"content-note-filter-card" + (costFilters.includes("search") ? " active" : "")} aria-pressed={costFilters.includes("search")} onClick={() => toggleCostFilter("search")}>
-              <span>搜索成本不达标</span>
-              <strong>{integer.format(unqualifiedCounts.search)}</strong>
-              <small>累计回搜成本 &gt; {searchCostLimit} 或暂无成本</small>
-            </button>
-            <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed") ? " active" : "")} aria-pressed={costFilters.includes("feed")} onClick={() => toggleCostFilter("feed")}>
-              <span>信息流成本不达标</span>
-              <strong>{integer.format(unqualifiedCounts.feed)}</strong>
-              <small>累计成本 &gt; {feedCostLimit} 或暂无成本</small>
-            </button>
-            <button type="button" className={"content-note-filter-card" + (costFilters.includes("search_stopped") ? " active" : "")} aria-pressed={costFilters.includes("search_stopped")} onClick={() => toggleCostFilter("search_stopped")}>
-              <span>搜索已停投</span>
-              <strong>{integer.format(unqualifiedCounts.searchStopped)}</strong>
-              <small>近一天搜索消耗为 0</small>
-            </button>
-            <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed_stopped") ? " active" : "")} aria-pressed={costFilters.includes("feed_stopped")} onClick={() => toggleCostFilter("feed_stopped")}>
-              <span>信息流已停投</span>
-              <strong>{integer.format(unqualifiedCounts.feedStopped)}</strong>
-              <small>近一天信息流消耗为 0</small>
-            </button>
-            <label className="content-note-threshold">搜索阈值<input type="number" min="0" step="1" aria-label="搜索成本不达标阈值" value={searchCostLimitInput} onChange={(event) => setSearchCostLimitInput(event.target.value)} /></label>
-            <label className="content-note-threshold">信息流阈值<input type="number" min="0" step="1" aria-label="信息流成本不达标阈值" value={feedCostLimitInput} onChange={(event) => setFeedCostLimitInput(event.target.value)} /></label>
-            <label className="content-note-id-search">笔记 ID
+          <div className="content-note-filter-row">
+            <div className="content-note-filters" aria-label="笔记表现筛选">
+              <button type="button" className={"content-note-filter-card" + (costFilters.includes("search") ? " active" : "")} aria-pressed={costFilters.includes("search")} onClick={() => toggleCostFilter("search")}>
+                <span>搜索成本不达标</span>
+                <strong>{integer.format(unqualifiedCounts.search)}</strong>
+                <small>累计回搜成本 &gt; {searchCostLimit} 或暂无成本</small>
+              </button>
+              <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed") ? " active" : "")} aria-pressed={costFilters.includes("feed")} onClick={() => toggleCostFilter("feed")}>
+                <span>信息流成本不达标</span>
+                <strong>{integer.format(unqualifiedCounts.feed)}</strong>
+                <small>累计成本 &gt; {feedCostLimit} 或暂无成本</small>
+              </button>
+              <button type="button" className={"content-note-filter-card" + (costFilters.includes("search_stopped") ? " active" : "")} aria-pressed={costFilters.includes("search_stopped")} onClick={() => toggleCostFilter("search_stopped")}>
+                <span>搜索已停投</span>
+                <strong>{integer.format(unqualifiedCounts.searchStopped)}</strong>
+                <small>近一天搜索消耗为 0</small>
+              </button>
+              <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed_stopped") ? " active" : "")} aria-pressed={costFilters.includes("feed_stopped")} onClick={() => toggleCostFilter("feed_stopped")}>
+                <span>信息流已停投</span>
+                <strong>{integer.format(unqualifiedCounts.feedStopped)}</strong>
+                <small>近一天信息流消耗为 0</small>
+              </button>
+              <label className="content-note-threshold">搜索阈值<input type="number" min="0" step="1" aria-label="搜索成本不达标阈值" value={searchCostLimitInput} onChange={(event) => setSearchCostLimitInput(event.target.value)} /></label>
+              <label className="content-note-threshold">信息流阈值<input type="number" min="0" step="1" aria-label="信息流成本不达标阈值" value={feedCostLimitInput} onChange={(event) => setFeedCostLimitInput(event.target.value)} /></label>
+            </div>
+            <label className="content-note-id-search">按笔记 ID 搜索
               <span>
-                <Search size={13} />
+                <Search size={14} />
                 <input type="search" value={noteIDQuery} placeholder="输入笔记 ID" aria-label="按笔记 ID 搜索" onChange={(event) => setNoteIDQuery(event.target.value)} />
                 {noteIDQuery ? <button type="button" title="清除笔记 ID 搜索" aria-label="清除笔记 ID 搜索" onClick={() => setNoteIDQuery("")}><X size={12} /></button> : null}
               </span>
