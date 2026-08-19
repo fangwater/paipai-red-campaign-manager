@@ -1,0 +1,11 @@
+.placement-note-table { min-width: 674px; }
+.placement-note-table th:first-child, .placement-note-table-summary th:first-child { width: 248px; }
+.placement-note-table th:nth-child(2), .placement-note-table-summary th:nth-child(2) { width: 92px; }
+.placement-note-table th:nth-child(3), .placement-note-table-summary th:nth-child(3) { width: 96px; }
+.placement-note-table th:nth-child(4), .placement-note-table-summary th:nth-child(4) { width: 138px; }
+.placement-note-table-search th:nth-child(5), .placement-note-table-search td:nth-child(5),
+.placement-note-table-search th:last-child, .placement-note-table-search td:last-child { width: 100px; text-align: right; }
+.placement-note-table-feed { min-width: 574px; }
+.placement-note-table-feed th:last-child, .placement-note-table-feed td:last-child { width: 138px; text-align: right; }
+.placement-note-labels { max-width: 84px; }
+.placement-note-labels span { display: block; }
