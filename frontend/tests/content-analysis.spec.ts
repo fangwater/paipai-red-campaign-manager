@@ -230,6 +230,11 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(searchStoppedRow.locator("td").nth(3).locator(".content-note-stopped")).toHaveText("已停投");
   await expect(searchStoppedRow.locator("td").nth(4).locator(".content-note-stopped")).toHaveCount(0);
   await page.getByRole("button", { name: "搜索已停投" }).click();
+  await page.getByLabel("按笔记 ID 搜索").fill("note-2");
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
+  await page.getByRole("button", { name: "清除笔记 ID 搜索" }).click();
+  await expect(page.getByLabel("按笔记 ID 搜索")).toHaveValue("");
   await expect(page.getByText("共 24 篇 · 每页 20 篇")).toBeVisible();
   const pageSelect = page.getByLabel("选择笔记页码");
   await expect(pageSelect).toHaveValue("1");

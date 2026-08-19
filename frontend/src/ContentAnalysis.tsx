@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, X } from "lucide-react";
+import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import "./content-analysis.css";
 
@@ -269,6 +269,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const [costFilters, setCostFilters] = useState<CostFilter[]>([]);
   const [searchCostLimitInput, setSearchCostLimitInput] = useState(String(DEFAULT_SEARCH_COST_LIMIT));
   const [feedCostLimitInput, setFeedCostLimitInput] = useState(String(DEFAULT_FEED_COST_LIMIT));
+  const [noteIDQuery, setNoteIDQuery] = useState("");
   const [notePage, setNotePage] = useState(1);
   const noteSectionRef = useRef<HTMLElement>(null);
   const [result, setResult] = useState<ContentResult | null>(null);
@@ -305,6 +306,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
   const cells = useMemo(() => new Map((result?.cells ?? []).map((cell) => [cell.content_type + "\u0000" + cell.dimension, cell])), [result]);
   const searchCostLimit = parseCostLimit(searchCostLimitInput, DEFAULT_SEARCH_COST_LIMIT);
   const feedCostLimit = parseCostLimit(feedCostLimitInput, DEFAULT_FEED_COST_LIMIT);
+  const normalizedNoteIDQuery = noteIDQuery.trim().toLowerCase();
   const visibleNotes = useMemo(() => {
     const notesByID = new Map<string, ContentNote>();
     for (const cell of result?.cells ?? []) {
@@ -312,6 +314,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
       for (const note of cell.notes) notesByID.set(note.note_id, note);
     }
     return Array.from(notesByID.values()).filter((note) => {
+      if (normalizedNoteIDQuery && !note.note_id.toLowerCase().includes(normalizedNoteIDQuery)) return false;
       if (costFilters.length === 0) return true;
       return costFilters.some((filter) => {
         if (filter === "search") return costUnqualified(note.search_spend, note.search_cost, searchCostLimit);
@@ -327,7 +330,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
       };
       return sortValue(right) - sortValue(left) || left.note_id.localeCompare(right.note_id);
     });
-  }, [costFilters, feedCostLimit, includeUnlabeled, noteSort, result, searchCostLimit]);
+  }, [costFilters, feedCostLimit, includeUnlabeled, normalizedNoteIDQuery, noteSort, result, searchCostLimit]);
   const notePageCount = Math.max(1, Math.ceil(visibleNotes.length / NOTE_PAGE_SIZE));
   const pagedVisibleNotes = useMemo(() => {
     const start = (notePage - 1) * NOTE_PAGE_SIZE;
@@ -355,7 +358,7 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
 
   useEffect(() => {
     setNotePage(1);
-  }, [agency, costFilters, dimension, feedCostLimit, includeUnlabeled, noteSort, publishedEndDate, publishedStartDate, searchCostLimit, spu]);
+  }, [agency, costFilters, dimension, feedCostLimit, includeUnlabeled, normalizedNoteIDQuery, noteSort, publishedEndDate, publishedStartDate, searchCostLimit, spu]);
 
   useEffect(() => {
     setNotePage((current) => Math.min(current, notePageCount));
@@ -484,6 +487,13 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
             </button>
             <label className="content-note-threshold">搜索阈值<input type="number" min="0" step="1" aria-label="搜索成本不达标阈值" value={searchCostLimitInput} onChange={(event) => setSearchCostLimitInput(event.target.value)} /></label>
             <label className="content-note-threshold">信息流阈值<input type="number" min="0" step="1" aria-label="信息流成本不达标阈值" value={feedCostLimitInput} onChange={(event) => setFeedCostLimitInput(event.target.value)} /></label>
+            <label className="content-note-id-search">笔记 ID
+              <span>
+                <Search size={13} />
+                <input type="search" value={noteIDQuery} placeholder="输入笔记 ID" aria-label="按笔记 ID 搜索" onChange={(event) => setNoteIDQuery(event.target.value)} />
+                {noteIDQuery ? <button type="button" title="清除笔记 ID 搜索" aria-label="清除笔记 ID 搜索" onClick={() => setNoteIDQuery("")}><X size={12} /></button> : null}
+              </span>
+            </label>
           </div>
         </div>
         {visibleNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无笔记</div> : <>
