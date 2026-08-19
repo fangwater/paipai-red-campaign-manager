@@ -364,6 +364,21 @@ type PerformanceQuery struct {
 	Filters      map[string]any `json:"filters,omitempty"`
 }
 
+type CampaignStatusInput struct {
+	AdvertiserID int64   `json:"advertiser_id"`
+	CampaignIDs  []int64 `json:"campaign_ids"`
+	ActionType   int     `json:"action_type"`
+}
+
+type CampaignStatusResult struct {
+	AdvertiserID         int64           `json:"advertiser_id"`
+	ActionType           int             `json:"action_type"`
+	RequestedCampaignIDs []int64         `json:"requested_campaign_ids"`
+	CampaignIDs          []int64         `json:"campaign_ids"`
+	LocalEntityIDs       []int64         `json:"local_entity_ids,omitempty"`
+	Gateway              GatewayResponse `json:"gateway"`
+}
+
 func NewID(prefix string) (string, error) {
 	var bytes [16]byte
 	if _, err := rand.Read(bytes[:]); err != nil {

@@ -229,7 +229,13 @@ func (gateway *serviceTestGateway) Call(_ context.Context, operation string, pay
 			"creativity_name": "测试创意", "note_id": "0123456789abcdef01234567",
 		}}}
 	case "campaign.status":
-		data = map[string]any{}
+		ids := []any{}
+		if raw, ok := payload["campaign_ids"].([]int64); ok {
+			for _, id := range raw {
+				ids = append(ids, float64(id))
+			}
+		}
+		data = map[string]any{"campaign_ids": ids}
 	case "report.realtime.account":
 		data = gateway.reportData
 	default:
@@ -342,6 +348,79 @@ func TestPublisherRechecksExpiredApprovalsBeforeMediaWrites(t *testing.T) {
 	}
 	if job.Result["executed"] != false || job.Result["partial_failure"] != false {
 		t.Fatalf("preflight failure was marked as a partial media write: %+v", job.Result)
+	}
+}
+
+func TestUpdateCampaignStatusPausesUnmappedCampaigns(t *testing.T) {
+	service, store, gateway := newPublishTestService(t, false)
+	result, err := service.UpdateCampaignStatus(context.Background(), CampaignStatusInput{
+		AdvertiserID: store.draft.AdvertiserID, CampaignIDs: []int64{1, 12, 123}, ActionType: 2,
+	}, Actor{ID: "operator-a", Role: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ActionType != 2 || fmt.Sprint(result.CampaignIDs) != "[1 12 123]" || len(result.LocalEntityIDs) != 0 {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(gateway.calls) != 1 || gateway.calls[0].operation != "campaign.status" {
+		t.Fatalf("calls = %+v", gateway.calls)
+	}
+	payload := gateway.calls[0].payload
+	if numericInt64(payload["advertiser_id"]) != store.draft.AdvertiserID || numericInt64(payload["action_type"]) != 2 {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if fmt.Sprint(payload["campaign_ids"]) != "[1 12 123]" {
+		t.Fatalf("campaign_ids = %#v", payload["campaign_ids"])
+	}
+	if store.audits == 0 {
+		t.Fatal("expected a campaign status audit event")
+	}
+}
+
+func TestUpdateCampaignStatusUpdatesLocalCampaignEntity(t *testing.T) {
+	service, store, _ := newPublishTestService(t, false)
+	store.entities = append(store.entities, MediaEntity{
+		ID: "ent_0123456789abcdef0123456789abcdef", AdvertiserID: store.draft.AdvertiserID,
+		EntityType: "campaign", MediaID: 12, DesiredStatus: "active", ObservedStatus: "active",
+	})
+	result, err := service.UpdateCampaignStatus(context.Background(), CampaignStatusInput{
+		AdvertiserID: store.draft.AdvertiserID, CampaignIDs: []int64{12}, ActionType: 2,
+	}, Actor{ID: "operator-a", Role: "operator"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(result.LocalEntityIDs) != "[12]" || store.entities[0].ObservedStatus != "paused" {
+		t.Fatalf("result=%+v entity=%+v", result, store.entities[0])
+	}
+}
+
+func TestUpdateCampaignStatusRejectsInvalidInputAndRole(t *testing.T) {
+	service, store, gateway := newPublishTestService(t, false)
+	_, err := service.UpdateCampaignStatus(context.Background(), CampaignStatusInput{
+		AdvertiserID: store.draft.AdvertiserID, CampaignIDs: []int64{1}, ActionType: 4,
+	}, Actor{ID: "operator-a", Role: "operator"})
+	if err == nil || !strings.Contains(err.Error(), "action_type") {
+		t.Fatalf("invalid action error = %v", err)
+	}
+	_, err = service.UpdateCampaignStatus(context.Background(), CampaignStatusInput{
+		AdvertiserID: store.draft.AdvertiserID, CampaignIDs: []int64{1}, ActionType: 2,
+	}, Actor{ID: "viewer-a", Role: "viewer"})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("viewer error = %v", err)
+	}
+	if len(gateway.calls) != 0 {
+		t.Fatalf("unexpected gateway calls = %+v", gateway.calls)
+	}
+}
+
+func TestUpdateCampaignStatusRespectsWriteSwitch(t *testing.T) {
+	service, store, gateway := newPublishTestService(t, false)
+	service.mediaWritesEnabled = false
+	_, err := service.UpdateCampaignStatus(context.Background(), CampaignStatusInput{
+		AdvertiserID: store.draft.AdvertiserID, CampaignIDs: []int64{1}, ActionType: 2,
+	}, Actor{ID: "operator-a", Role: "operator"})
+	if !errors.Is(err, ErrWritesDisabled) || len(gateway.calls) != 0 {
+		t.Fatalf("error=%v calls=%v", err, gateway.calls)
 	}
 }
 

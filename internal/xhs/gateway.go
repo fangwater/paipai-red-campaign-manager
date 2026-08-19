@@ -180,6 +180,12 @@ func (client *Client) CallGateway(ctx context.Context, accessToken string, opera
 			return GatewayResult{}, err
 		}
 	}
+	if operation == OperationCampaignStatus {
+		normalized, err = normalizeCampaignStatusPayload(normalized)
+		if err != nil {
+			return GatewayResult{}, err
+		}
+	}
 	hash := sha256.Sum256(normalized)
 	result := GatewayResult{Operation: operation, RequestHash: hex.EncodeToString(hash[:])}
 
@@ -271,6 +277,54 @@ func normalizeGatewayPayload(payload json.RawMessage) ([]byte, int64, error) {
 func GatewayAdvertiserID(payload json.RawMessage) (int64, error) {
 	_, advertiserID, err := normalizeGatewayPayload(payload)
 	return advertiserID, err
+}
+
+func normalizeCampaignStatusPayload(payload []byte) ([]byte, error) {
+	var object map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	if err := decoder.Decode(&object); err != nil || object == nil {
+		return nil, fmt.Errorf("%w: decode campaign status payload", ErrInvalidGatewayRequest)
+	}
+	rawIDs, ok := object["campaign_ids"].([]any)
+	if !ok || len(rawIDs) == 0 {
+		return nil, fmt.Errorf("%w: campaign_ids must contain at least one value", ErrInvalidGatewayRequest)
+	}
+	if len(rawIDs) > 20 {
+		return nil, fmt.Errorf("%w: campaign_ids cannot contain more than 20 values", ErrInvalidGatewayRequest)
+	}
+	ids := make([]int64, 0, len(rawIDs))
+	seen := make(map[int64]struct{}, len(rawIDs))
+	for _, raw := range rawIDs {
+		number, ok := raw.(json.Number)
+		if !ok {
+			return nil, fmt.Errorf("%w: campaign_ids must contain only integers", ErrInvalidGatewayRequest)
+		}
+		campaignID, err := number.Int64()
+		if err != nil || campaignID <= 0 {
+			return nil, fmt.Errorf("%w: campaign_ids must contain only positive values", ErrInvalidGatewayRequest)
+		}
+		if _, exists := seen[campaignID]; exists {
+			return nil, fmt.Errorf("%w: campaign_ids cannot contain duplicates", ErrInvalidGatewayRequest)
+		}
+		seen[campaignID] = struct{}{}
+		ids = append(ids, campaignID)
+	}
+	actionNumber, ok := object["action_type"].(json.Number)
+	if !ok {
+		return nil, fmt.Errorf("%w: action_type is required", ErrInvalidGatewayRequest)
+	}
+	actionType, err := actionNumber.Int64()
+	if err != nil || actionType < 1 || actionType > 3 {
+		return nil, fmt.Errorf("%w: action_type must be 1, 2, or 3", ErrInvalidGatewayRequest)
+	}
+	object["campaign_ids"] = ids
+	object["action_type"] = actionType
+	normalized, err := json.Marshal(object)
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode campaign status payload", ErrInvalidGatewayRequest)
+	}
+	return normalized, nil
 }
 
 func forceCampaignPaused(payload []byte) ([]byte, error) {

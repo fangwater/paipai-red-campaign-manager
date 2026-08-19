@@ -290,6 +290,7 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/delivery/negative-keywords", server.deliveryNegativeKeywords)
 	mux.HandleFunc("/v1/delivery/audience-estimates", server.deliveryAudienceEstimates)
 	mux.HandleFunc("/v1/delivery/campaigns/query", server.deliveryCampaignQuery)
+	mux.HandleFunc("/v1/delivery/campaigns/status", server.deliveryCampaignStatus)
 	mux.HandleFunc("/v1/delivery/units/query", server.deliveryUnitQuery)
 	mux.HandleFunc("/v1/delivery/creativities/query", server.deliveryCreativityQuery)
 	mux.HandleFunc("/v1/delivery/drafts", server.deliveryDrafts)

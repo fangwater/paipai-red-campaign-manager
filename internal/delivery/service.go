@@ -517,6 +517,62 @@ func (service *Service) Job(ctx context.Context, jobID string) (PublishJob, erro
 	return service.store.PublishJob(ctx, jobID)
 }
 
+func (service *Service) UpdateCampaignStatus(ctx context.Context, input CampaignStatusInput, actor Actor) (CampaignStatusResult, error) {
+	input, err := normalizeCampaignStatusInput(input)
+	if err != nil {
+		return CampaignStatusResult{}, err
+	}
+	if actor.Role != "operator" && actor.Role != "admin" {
+		return CampaignStatusResult{}, fmt.Errorf("%w: operator or admin role is required", ErrForbidden)
+	}
+	if !service.mediaWritesEnabled {
+		return CampaignStatusResult{}, ErrWritesDisabled
+	}
+	response, err := service.callGateway(ctx, "", input.AdvertiserID, "campaign.status", map[string]any{
+		"advertiser_id": input.AdvertiserID,
+		"campaign_ids":  input.CampaignIDs,
+		"action_type":   input.ActionType,
+	})
+	if err != nil {
+		return CampaignStatusResult{}, err
+	}
+	updated := campaignIDsFromGateway(response.Data)
+	if len(updated) == 0 {
+		updated = append([]int64(nil), input.CampaignIDs...)
+	}
+	status := campaignStatusName(input.ActionType)
+	localUpdated := make([]int64, 0)
+	for _, campaignID := range updated {
+		entity, lookupErr := service.store.MediaEntity(ctx, input.AdvertiserID, "campaign", campaignID)
+		if errors.Is(lookupErr, ErrNotFound) {
+			continue
+		}
+		if lookupErr != nil {
+			return CampaignStatusResult{}, lookupErr
+		}
+		if err := service.store.UpdateMediaEntityStatus(ctx, entity.ID, status); err != nil {
+			return CampaignStatusResult{}, err
+		}
+		localUpdated = append(localUpdated, campaignID)
+	}
+	if err := service.store.Audit(ctx, actor, "campaign_status_update", "campaign", strconv.FormatInt(input.AdvertiserID, 10), input.AdvertiserID, map[string]any{
+		"action_type":          input.ActionType,
+		"campaign_ids":         input.CampaignIDs,
+		"updated_campaign_ids": updated,
+		"local_entity_ids":     localUpdated,
+	}); err != nil {
+		return CampaignStatusResult{}, err
+	}
+	return CampaignStatusResult{
+		AdvertiserID:         input.AdvertiserID,
+		ActionType:           input.ActionType,
+		RequestedCampaignIDs: input.CampaignIDs,
+		CampaignIDs:          updated,
+		LocalEntityIDs:       localUpdated,
+		Gateway:              response,
+	}, nil
+}
+
 func (service *Service) UpdateEntityStatus(ctx context.Context, advertiserID int64, entityType string, mediaID int64, status string, actor Actor) (GatewayResponse, error) {
 	if status != "paused" && status != "active" {
 		return GatewayResponse{}, errors.New("status must be paused or active")
@@ -1061,11 +1117,80 @@ func numericInt64(value any) int64 {
 		return typed
 	case int:
 		return int64(typed)
+	case json.Number:
+		parsed, _ := typed.Int64()
+		return parsed
 	case string:
 		parsed, _ := strconv.ParseInt(typed, 10, 64)
 		return parsed
 	default:
 		return 0
+	}
+}
+
+func campaignStatusName(actionType int) string {
+	switch actionType {
+	case 1:
+		return "active"
+	case 2:
+		return "paused"
+	case 3:
+		return "deleted"
+	default:
+		return ""
+	}
+}
+
+func normalizeCampaignStatusInput(input CampaignStatusInput) (CampaignStatusInput, error) {
+	if input.AdvertiserID <= 0 {
+		return CampaignStatusInput{}, errors.New("advertiser_id must be positive")
+	}
+	if len(input.CampaignIDs) == 0 {
+		return CampaignStatusInput{}, errors.New("campaign_ids must contain at least one value")
+	}
+	if len(input.CampaignIDs) > 20 {
+		return CampaignStatusInput{}, errors.New("campaign_ids cannot contain more than 20 values")
+	}
+	seen := make(map[int64]struct{}, len(input.CampaignIDs))
+	ids := make([]int64, 0, len(input.CampaignIDs))
+	for _, campaignID := range input.CampaignIDs {
+		if campaignID <= 0 {
+			return CampaignStatusInput{}, errors.New("campaign_ids must contain only positive values")
+		}
+		if _, exists := seen[campaignID]; exists {
+			return CampaignStatusInput{}, errors.New("campaign_ids cannot contain duplicates")
+		}
+		seen[campaignID] = struct{}{}
+		ids = append(ids, campaignID)
+	}
+	if input.ActionType < 1 || input.ActionType > 3 {
+		return CampaignStatusInput{}, errors.New("action_type must be 1, 2, or 3")
+	}
+	input.CampaignIDs = ids
+	return input, nil
+}
+
+func campaignIDsFromGateway(data map[string]any) []int64 {
+	if len(data) == 0 {
+		return nil
+	}
+	return int64Slice(data["campaign_ids"])
+}
+
+func int64Slice(value any) []int64 {
+	switch typed := value.(type) {
+	case []int64:
+		return append([]int64(nil), typed...)
+	case []any:
+		result := make([]int64, 0, len(typed))
+		for _, item := range typed {
+			if id := numericInt64(item); id > 0 {
+				result = append(result, id)
+			}
+		}
+		return result
+	default:
+		return nil
 	}
 }
 

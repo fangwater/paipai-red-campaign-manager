@@ -157,6 +157,7 @@ func (server *apiServer) deliveryOverview(writer http.ResponseWriter, request *h
 			{"method": "POST", "path": "/v1/delivery/negative-keywords", "domain": "否定词查询（变更仅经审批发布）"},
 			{"method": "POST", "path": "/v1/delivery/audience-estimates", "domain": "人群规模预估"},
 			{"method": "POST", "path": "/v1/delivery/campaigns/query", "domain": "计划查询"},
+			{"method": "POST", "path": "/v1/delivery/campaigns/status", "domain": "计划启停与删除"},
 			{"method": "POST", "path": "/v1/delivery/units/query", "domain": "单元查询"},
 			{"method": "POST", "path": "/v1/delivery/creativities/query", "domain": "创意查询"},
 			{"method": "GET|POST", "path": "/v1/delivery/drafts", "domain": "版本化草稿"},
@@ -291,6 +292,28 @@ func (server *apiServer) deliveryAudienceEstimates(writer http.ResponseWriter, r
 
 func (server *apiServer) deliveryCampaignQuery(writer http.ResponseWriter, request *http.Request) {
 	server.deliveryFixedTool(writer, request, "campaign.list")
+}
+
+func (server *apiServer) deliveryCampaignStatus(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(writer, http.MethodPost)
+		return
+	}
+	actor, ok := server.deliveryActor(writer, request, "operator", "admin")
+	if !ok {
+		return
+	}
+	var input delivery.CampaignStatusInput
+	if !decodeDeliveryJSON(writer, request, &input, false) {
+		return
+	}
+	if !server.deliveryAdvertiserAllowed(writer, actor, input.AdvertiserID) {
+		return
+	}
+	ctx, cancel := server.deliveryContext(request)
+	defer cancel()
+	result, err := server.delivery.UpdateCampaignStatus(ctx, input, actor)
+	server.writeDeliveryResult(writer, result, err)
 }
 
 func (server *apiServer) deliveryUnitQuery(writer http.ResponseWriter, request *http.Request) {

@@ -204,7 +204,7 @@ func TestDeliveryOpenAPIIsPublicAndDocumentsEveryMountedRoute(t *testing.T) {
 	for _, path := range []string{
 		"/delivery", "/delivery/capabilities", "/delivery/assets", "/delivery/drafts", "/delivery/drafts/{draft_id}",
 		"/delivery/drafts/{draft_id}/publish", "/delivery/jobs/{job_id}",
-		"/delivery/entities/{entity_type}/{media_id}/status", "/delivery/performance",
+		"/delivery/campaigns/status", "/delivery/entities/{entity_type}/{media_id}/status", "/delivery/performance",
 		"/delivery/intelligence/bandit-shadow",
 	} {
 		if _, ok := contract.Paths[path]; !ok {
@@ -241,6 +241,80 @@ func TestDeliveryAlgorithmRoutesStayNonExecutable(t *testing.T) {
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("viewer optimizer status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
+}
+
+func TestDeliveryCampaignStatusUpdatesUnmappedCampaigns(t *testing.T) {
+	gateway := &recordingDeliveryGateway{}
+	service, err := delivery.NewService(handlerStore{}, gateway, delivery.RuleSemanticAdvisor{}, delivery.HeuristicRanker{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const apiKey = "operator-key-123456789012345678901234567"
+	credentials, err := parseDeliveryCredentials(`[{"key":"` + apiKey + `","actor":"status-operator","role":"operator","advertiser_ids":[1234]}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newAPIHandler(&apiServer{delivery: service, deliveryCredentials: credentials, timeout: time.Second})
+	body := `{"advertiser_id":1234,"campaign_ids":[1,12,123],"action_type":2}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/delivery/campaigns/status", strings.NewReader(body))
+	request.Header.Set("X-Delivery-API-Key", apiKey)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"action_type":2`) || !strings.Contains(recorder.Body.String(), `"campaign_ids":[1,12,123]`) {
+		t.Fatalf("body=%s", recorder.Body.String())
+	}
+	if len(gateway.calls) != 1 || gateway.calls[0].operation != "campaign.status" {
+		t.Fatalf("calls=%+v", gateway.calls)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/v1/delivery/campaigns/status", strings.NewReader(`{"advertiser_id":9999,"campaign_ids":[1],"action_type":2}`))
+	request.Header.Set("X-Delivery-API-Key", apiKey)
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("out-of-scope status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+type recordingDeliveryGateway struct {
+	calls []struct {
+		operation string
+		payload   map[string]any
+	}
+}
+
+func (gateway *recordingDeliveryGateway) Advertisers(context.Context) ([]delivery.Advertiser, error) {
+	return []delivery.Advertiser{{ID: 1234, Name: "测试广告主"}}, nil
+}
+
+func (gateway *recordingDeliveryGateway) Capabilities(_ context.Context, advertiserID int64) (delivery.Capability, error) {
+	return delivery.Capability{
+		AdvertiserID: advertiserID, Authorized: true, AdvertiserAllowed: true,
+		Scopes:             []string{"ad_manage", "ad_query", "report_service", "account_manage"},
+		RequiredScopes:     []string{"ad_manage", "ad_query", "report_service", "account_manage"},
+		MediaWritesEnabled: true, ContractVersion: delivery.MediaContractVersion,
+		Operations: map[string]any{}, CheckedAt: time.Now(),
+	}, nil
+}
+
+func (gateway *recordingDeliveryGateway) Call(_ context.Context, operation string, payload map[string]any) (delivery.GatewayResponse, error) {
+	copyPayload := map[string]any{}
+	for key, value := range payload {
+		copyPayload[key] = value
+	}
+	gateway.calls = append(gateway.calls, struct {
+		operation string
+		payload   map[string]any
+	}{operation: operation, payload: copyPayload})
+	ids, _ := payload["campaign_ids"].([]int64)
+	dataIDs := make([]any, 0, len(ids))
+	for _, id := range ids {
+		dataIDs = append(dataIDs, float64(id))
+	}
+	return delivery.GatewayResponse{Operation: operation, Data: map[string]any{"campaign_ids": dataIDs}}, nil
 }
 
 func TestDeliveryCredentialEnforcesAdvertiserScope(t *testing.T) {
