@@ -23,8 +23,10 @@ function makeNote(id: string, overrides: Record<string, unknown> = {}) {
     feed_spend: id === "note-2" ? 500 : 0,
     feed_cost: id === "note-2" ? 88 : null,
     feed_qualified: false,
-    latest_spend: id === "note-2" ? 0 : 12,
-    stopped: id === "note-2",
+    latest_search_spend: id === "note-2" ? 8 : 12,
+    latest_feed_spend: id === "note-2" ? 0 : 6,
+    search_stopped: false,
+    feed_stopped: id === "note-2",
     flow_evaluated: id === "note-1",
     flow_qualified: id === "note-1",
     roi: id === "note-1" ? 1.8 : 0.4,
@@ -102,7 +104,7 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
         roi_evaluated: 0,
         roi_qualified: 0,
         all_qualified: 0,
-        notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", search_cost: 20, latest_search_cost: 18, search_cost_change: -2, roi: null, roi_qualified: false, all_qualified: false })]
+        notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", search_cost: 20, latest_search_cost: 18, search_cost_change: -2, latest_search_spend: 0, search_stopped: true, roi: null, roi_qualified: false, all_qualified: false })]
       },
       {
         content_type: "经验分享",
@@ -197,7 +199,8 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await page.getByRole("button", { name: "搜索累计消耗" }).click();
   await expect(page.getByRole("button", { name: "搜索成本不达标" })).toContainText("1");
   await expect(page.getByRole("button", { name: "信息流成本不达标" })).toContainText("1");
-  await expect(page.getByRole("button", { name: "已停投" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "搜索已停投" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "信息流已停投" })).toContainText("1");
   await page.getByRole("button", { name: "搜索成本不达标" }).click();
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
@@ -208,11 +211,20 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
   await page.getByRole("button", { name: "信息流成本不达标" }).click();
-  await page.getByRole("button", { name: "已停投" }).click();
+  await page.getByRole("button", { name: "信息流已停投" }).click();
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator(".content-note-stopped")).toHaveText("已停投");
-  await page.getByRole("button", { name: "已停投" }).click();
+  const feedStoppedRow = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr").first();
+  await expect(feedStoppedRow.locator("td").nth(3).locator(".content-note-stopped")).toHaveCount(0);
+  await expect(feedStoppedRow.locator("td").nth(4).locator(".content-note-stopped")).toHaveText("已停投");
+  await page.getByRole("button", { name: "信息流已停投" }).click();
+  await page.getByRole("button", { name: "搜索已停投" }).click();
+  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
+  const searchStoppedRow = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr").first();
+  await expect(searchStoppedRow).toContainText("note-3");
+  await expect(searchStoppedRow.locator("td").nth(3).locator(".content-note-stopped")).toHaveText("已停投");
+  await expect(searchStoppedRow.locator("td").nth(4).locator(".content-note-stopped")).toHaveCount(0);
+  await page.getByRole("button", { name: "搜索已停投" }).click();
   await expect(page.getByText("共 24 篇 · 每页 20 篇")).toBeVisible();
   const pageSelect = page.getByLabel("选择笔记页码");
   await expect(pageSelect).toHaveValue("1");

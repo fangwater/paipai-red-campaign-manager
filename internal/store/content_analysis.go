@@ -156,12 +156,12 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			FROM maituo_search_daily
 			ORDER BY note_id, report_date DESC
 		), maituo_latest_daily AS (
-			SELECT LOWER(BTRIM(note_id)) AS note_id,
+			SELECT LOWER(BTRIM(note_id)) AS note_id, placement,
 				SUM(spend)::DOUBLE PRECISION AS latest_spend
 			FROM maituo_customer_daily_notes
 			WHERE deleted_at IS NULL AND placement IN ('搜索','信息流')
 			  AND report_date = (SELECT MAX(report_date) FROM maituo_customer_daily_notes WHERE deleted_at IS NULL)
-			GROUP BY LOWER(BTRIM(note_id))
+			GROUP BY LOWER(BTRIM(note_id)), placement
 		), maituo AS (
 			SELECT placements.note_id,
 				COALESCE(MAX(placements.spend) FILTER (WHERE placements.placement='搜索'),0) AS search_spend,
@@ -169,7 +169,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 				MAX(latest.latest_search_cost) AS latest_search_cost,
 				COALESCE(MAX(placements.spend) FILTER (WHERE placements.placement='信息流'),0) AS feed_spend,
 				MAX(placements.cost) FILTER (WHERE placements.placement='信息流') AS feed_cost,
-				COALESCE(MAX(latest_daily.latest_spend), 0) AS latest_spend
+				COALESCE(MAX(latest_daily.latest_spend) FILTER (WHERE latest_daily.placement='搜索'), 0) AS latest_search_spend,
+				COALESCE(MAX(latest_daily.latest_spend) FILTER (WHERE latest_daily.placement='信息流'), 0) AS latest_feed_spend
 			FROM maituo_placements placements
 			LEFT JOIN maituo_latest_search latest ON latest.note_id=placements.note_id
 			LEFT JOIN maituo_latest_daily latest_daily ON latest_daily.note_id=placements.note_id
@@ -191,7 +192,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			COALESCE(execution.note_type,''), COALESCE(execution.audience,''), COALESCE(execution.user_scenario,''),
 			pgy.dandelion_cost,
 			COALESCE(maituo.search_spend,0), maituo.search_cost, maituo.latest_search_cost,
-			COALESCE(maituo.feed_spend,0), maituo.feed_cost, COALESCE(maituo.latest_spend,0),
+			COALESCE(maituo.feed_spend,0), maituo.feed_cost,
+			COALESCE(maituo.latest_search_spend,0), COALESCE(maituo.latest_feed_spend,0),
 			guorai.roi
 		FROM pgy
 		LEFT JOIN LATERAL (
@@ -215,7 +217,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 		if err := rows.Scan(
 			&note.NoteID, &note.Title, &note.URL, &note.Author, &note.PublishedDate, &note.Agency,
 			&note.ContentType, &note.Audience, &note.Scenario, &note.DandelionCost,
-			&note.SearchSpend, &note.SearchCost, &note.LatestSearchCost, &note.FeedSpend, &note.FeedCost, &note.LatestSpend, &note.ROI,
+			&note.SearchSpend, &note.SearchCost, &note.LatestSearchCost, &note.FeedSpend, &note.FeedCost,
+			&note.LatestSearchSpend, &note.LatestFeedSpend, &note.ROI,
 		); err != nil {
 			return nil, fmt.Errorf("scan content analysis note: %w", err)
 		}
@@ -229,7 +232,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 		note.Audience = normalizeContentAnalysisLabel("audience", note.Audience)
 		note.Scenario = normalizeContentAnalysisLabel("scenario", note.Scenario)
 		note.SearchCostChange = contentAnalysisSearchCostChange(note.LatestSearchCost, note.SearchCost)
-		note.Stopped = contentAnalysisStopped(note.LatestSpend)
+		note.SearchStopped = contentAnalysisStopped(note.LatestSearchSpend)
+		note.FeedStopped = contentAnalysisStopped(note.LatestFeedSpend)
 		note.Boom = note.DandelionCost != nil && *note.DandelionCost > 0 && *note.DandelionCost <= contentAnalysisBoomCost
 		note.SearchQualified = note.SearchSpend >= 200 && note.SearchCost != nil && *note.SearchCost <= 30
 		note.FeedQualified = note.FeedSpend >= 200 && note.FeedCost != nil && *note.FeedCost <= 70

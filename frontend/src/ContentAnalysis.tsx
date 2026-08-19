@@ -9,7 +9,7 @@ type AgencyOption = "全部" | "曼杰" | "有一有二" | "智元";
 type DimensionOption = "audience" | "scenario";
 type DetailFilter = "all" | "boom" | "flow" | "roi" | "qualified";
 type NoteSortOption = "search_spend" | "feed_spend" | "search_cost_change";
-type CostFilter = "search" | "feed" | "stopped";
+type CostFilter = "search" | "feed" | "search_stopped" | "feed_stopped";
 
 type ContentNote = {
   note_id: string;
@@ -31,8 +31,10 @@ type ContentNote = {
   feed_spend: number;
   feed_cost: number | null;
   feed_qualified: boolean;
-  latest_spend: number;
-  stopped: boolean;
+  latest_search_spend: number;
+  latest_feed_spend: number;
+  search_stopped: boolean;
+  feed_stopped: boolean;
   flow_evaluated: boolean;
   flow_qualified: boolean;
   roi: number | null;
@@ -153,6 +155,18 @@ function costExceeds(cost: number | null, limit: number): boolean {
   return cost !== null && cost > limit;
 }
 
+function PlacementMetric({ spend, cost, qualified, stopped }: {
+  spend: number;
+  cost: number | null;
+  qualified: boolean;
+  stopped: boolean;
+}) {
+  return <div className={"content-note-metric" + (qualified && !stopped ? " metric-good" : "")}>
+    <span>{metricCost(spend, cost)}</span>
+    {stopped ? <em className="content-note-stopped">已停投</em> : null}
+  </div>;
+}
+
 function noteCampaignAnalysisPath(noteID: string): string {
   return "/note-campaign-analysis?" + new URLSearchParams({ q: noteID }).toString();
 }
@@ -182,10 +196,10 @@ function ContentNoteTable({ notes, showStatus = true, label }: {
           <Link className="content-note-id" to={noteCampaignAnalysisPath(note.note_id)} title="查看笔记计划分析" aria-label={"查看笔记计划分析 " + note.note_id}>{note.note_id}</Link>
           <small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
         </div></td>
-        <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span>{note.stopped ? <em className="content-note-stopped">已停投</em> : null}</div></td>
+        <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span></div></td>
         <td className={note.boom ? "metric-good" : ""}>{note.dandelion_cost === null || note.dandelion_cost <= 0 ? "--" : "¥" + money.format(note.dandelion_cost)}</td>
-        <td className={note.search_qualified ? "metric-good" : ""}>{metricCost(note.search_spend, note.search_cost)}</td>
-        <td className={note.feed_qualified ? "metric-good" : ""}>{metricCost(note.feed_spend, note.feed_cost)}</td>
+        <td><PlacementMetric spend={note.search_spend} cost={note.search_cost} qualified={note.search_qualified} stopped={note.search_stopped} /></td>
+        <td><PlacementMetric spend={note.feed_spend} cost={note.feed_cost} qualified={note.feed_qualified} stopped={note.feed_stopped} /></td>
         <td className={"search-cost-change" + (note.search_cost_change !== null && note.search_cost_change > 0 ? " increase" : note.search_cost_change !== null && note.search_cost_change < 0 ? " decrease" : "")} title={note.latest_search_cost === null || note.search_cost === null ? "暂无完整回搜成本" : "当日回搜成本 ¥" + money.format(note.latest_search_cost) + " − 累计回搜成本 ¥" + money.format(note.search_cost)}>{formatCostChange(note.search_cost_change)}</td>
         <td className={note.roi_qualified ? "metric-good" : ""}>{note.roi === null ? "--" : decimal.format(note.roi)}</td>
         {showStatus ? <td><NoteStatus note={note} /></td> : null}
@@ -302,7 +316,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
       return costFilters.some((filter) => {
         if (filter === "search") return costExceeds(note.search_cost, searchCostLimit);
         if (filter === "feed") return costExceeds(note.feed_cost, feedCostLimit);
-        return note.stopped;
+        if (filter === "search_stopped") return note.search_stopped;
+        return note.feed_stopped;
       });
     }).sort((left, right) => {
       const sortValue = (note: ContentNote) => {
@@ -328,7 +343,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
     return {
       search: notes.filter((note) => costExceeds(note.search_cost, searchCostLimit)).length,
       feed: notes.filter((note) => costExceeds(note.feed_cost, feedCostLimit)).length,
-      stopped: notes.filter((note) => note.stopped).length
+      searchStopped: notes.filter((note) => note.search_stopped).length,
+      feedStopped: notes.filter((note) => note.feed_stopped).length
     };
   }, [feedCostLimit, includeUnlabeled, result, searchCostLimit]);
   const sortLabel = NOTE_SORT_OPTIONS.find((option) => option.value === noteSort)?.label ?? "搜索累计消耗";
@@ -456,10 +472,15 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
               <strong>{integer.format(unqualifiedCounts.feed)}</strong>
               <small>累计成本 &gt; {feedCostLimit}</small>
             </button>
-            <button type="button" className={"content-note-filter-card" + (costFilters.includes("stopped") ? " active" : "")} aria-pressed={costFilters.includes("stopped")} onClick={() => toggleCostFilter("stopped")}>
-              <span>已停投</span>
-              <strong>{integer.format(unqualifiedCounts.stopped)}</strong>
-              <small>最近一天消耗为 0</small>
+            <button type="button" className={"content-note-filter-card" + (costFilters.includes("search_stopped") ? " active" : "")} aria-pressed={costFilters.includes("search_stopped")} onClick={() => toggleCostFilter("search_stopped")}>
+              <span>搜索已停投</span>
+              <strong>{integer.format(unqualifiedCounts.searchStopped)}</strong>
+              <small>近一天搜索消耗为 0</small>
+            </button>
+            <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed_stopped") ? " active" : "")} aria-pressed={costFilters.includes("feed_stopped")} onClick={() => toggleCostFilter("feed_stopped")}>
+              <span>信息流已停投</span>
+              <strong>{integer.format(unqualifiedCounts.feedStopped)}</strong>
+              <small>近一天信息流消耗为 0</small>
             </button>
             <label className="content-note-threshold">搜索阈值<input type="number" min="0" step="1" aria-label="搜索成本不达标阈值" value={searchCostLimitInput} onChange={(event) => setSearchCostLimitInput(event.target.value)} /></label>
             <label className="content-note-threshold">信息流阈值<input type="number" min="0" step="1" aria-label="信息流成本不达标阈值" value={feedCostLimitInput} onChange={(event) => setFeedCostLimitInput(event.target.value)} /></label>

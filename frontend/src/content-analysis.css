@@ -205,8 +205,9 @@ button.content-heat-cell:focus-visible { outline: 2px solid #2f7d67; outline-off
 .content-note-id:focus-visible { outline: 2px solid #2f7d67; outline-offset: 2px; }
 .content-note-identity small, .content-note-labels span { overflow: hidden; color: #858c92; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .content-note-labels strong { color: #3d4449; font-size: 10px; }
+.content-note-metric { min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
 .content-note-stopped {
-  align-self: flex-start;
+  align-self: flex-end;
   min-height: 18px;
   display: inline-flex;
   align-items: center;
