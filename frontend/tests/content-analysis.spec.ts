@@ -104,7 +104,7 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
         roi_evaluated: 0,
         roi_qualified: 0,
         all_qualified: 0,
-        notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", search_cost: 20, latest_search_cost: 18, search_cost_change: -2, latest_search_spend: 0, search_stopped: true, roi: null, roi_qualified: false, all_qualified: false })]
+        notes: [makeNote("note-3", { content_type: "经验分享", audience: "健身人", scenario: "运动恢复", search_spend: 80, search_cost: null, latest_search_cost: null, search_cost_change: null, latest_search_spend: 0, search_stopped: true, feed_spend: 90, feed_cost: null, roi: null, roi_qualified: false, all_qualified: false })]
       },
       {
         content_type: "经验分享",
@@ -197,19 +197,24 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(changeSortedNotes.locator("tbody tr").first()).toContainText("一周辅酶记录");
   await expect(changeSortedNotes.locator("tbody tr").first()).toContainText("+¥15.00");
   await page.getByRole("button", { name: "搜索累计消耗" }).click();
-  await expect(page.getByRole("button", { name: "搜索成本不达标" })).toContainText("1");
-  await expect(page.getByRole("button", { name: "信息流成本不达标" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "搜索成本不达标" })).toContainText("2");
+  await expect(page.getByRole("button", { name: "信息流成本不达标" })).toContainText("2");
   await expect(page.getByRole("button", { name: "搜索已停投" })).toContainText("1");
   await expect(page.getByRole("button", { name: "信息流已停投" })).toContainText("1");
   await page.getByRole("button", { name: "搜索成本不达标" }).click();
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
+  const searchUnqualifiedNotes = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" });
+  await expect(searchUnqualifiedNotes.locator("tbody tr")).toHaveCount(2);
+  await expect(searchUnqualifiedNotes).toContainText("一周辅酶记录");
+  await expect(searchUnqualifiedNotes).toContainText("暂无成本");
   await page.getByLabel("搜索成本不达标阈值").fill("50");
-  await expect(page.getByText("当前筛选条件下暂无笔记")).toBeVisible();
+  await expect(searchUnqualifiedNotes.locator("tbody tr")).toHaveCount(1);
+  await expect(searchUnqualifiedNotes).toContainText("暂无成本");
   await page.getByRole("button", { name: "搜索成本不达标" }).click();
   await page.getByRole("button", { name: "信息流成本不达标" }).click();
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("一周辅酶记录");
+  const feedUnqualifiedNotes = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" });
+  await expect(feedUnqualifiedNotes.locator("tbody tr")).toHaveCount(2);
+  await expect(feedUnqualifiedNotes).toContainText("一周辅酶记录");
+  await expect(feedUnqualifiedNotes).toContainText("暂无成本");
   await page.getByRole("button", { name: "信息流成本不达标" }).click();
   await page.getByRole("button", { name: "信息流已停投" }).click();
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);

@@ -151,8 +151,8 @@ function parseCostLimit(value: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function costExceeds(cost: number | null, limit: number): boolean {
-  return cost !== null && cost > limit;
+function costUnqualified(spend: number, cost: number | null, limit: number): boolean {
+  return spend > 0 && (cost === null || cost > limit);
 }
 
 function PlacementMetric({ spend, cost, qualified, stopped }: {
@@ -314,8 +314,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
     return Array.from(notesByID.values()).filter((note) => {
       if (costFilters.length === 0) return true;
       return costFilters.some((filter) => {
-        if (filter === "search") return costExceeds(note.search_cost, searchCostLimit);
-        if (filter === "feed") return costExceeds(note.feed_cost, feedCostLimit);
+        if (filter === "search") return costUnqualified(note.search_spend, note.search_cost, searchCostLimit);
+        if (filter === "feed") return costUnqualified(note.feed_spend, note.feed_cost, feedCostLimit);
         if (filter === "search_stopped") return note.search_stopped;
         return note.feed_stopped;
       });
@@ -341,8 +341,8 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
     }
     const notes = Array.from(notesByID.values());
     return {
-      search: notes.filter((note) => costExceeds(note.search_cost, searchCostLimit)).length,
-      feed: notes.filter((note) => costExceeds(note.feed_cost, feedCostLimit)).length,
+      search: notes.filter((note) => costUnqualified(note.search_spend, note.search_cost, searchCostLimit)).length,
+      feed: notes.filter((note) => costUnqualified(note.feed_spend, note.feed_cost, feedCostLimit)).length,
       searchStopped: notes.filter((note) => note.search_stopped).length,
       feedStopped: notes.filter((note) => note.feed_stopped).length
     };
@@ -465,12 +465,12 @@ function ContentAnalysis({ serviceState }: { serviceState: ServiceState }) {
             <button type="button" className={"content-note-filter-card" + (costFilters.includes("search") ? " active" : "")} aria-pressed={costFilters.includes("search")} onClick={() => toggleCostFilter("search")}>
               <span>搜索成本不达标</span>
               <strong>{integer.format(unqualifiedCounts.search)}</strong>
-              <small>累计回搜成本 &gt; {searchCostLimit}</small>
+              <small>累计回搜成本 &gt; {searchCostLimit} 或暂无成本</small>
             </button>
             <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed") ? " active" : "")} aria-pressed={costFilters.includes("feed")} onClick={() => toggleCostFilter("feed")}>
               <span>信息流成本不达标</span>
               <strong>{integer.format(unqualifiedCounts.feed)}</strong>
-              <small>累计成本 &gt; {feedCostLimit}</small>
+              <small>累计成本 &gt; {feedCostLimit} 或暂无成本</small>
             </button>
             <button type="button" className={"content-note-filter-card" + (costFilters.includes("search_stopped") ? " active" : "")} aria-pressed={costFilters.includes("search_stopped")} onClick={() => toggleCostFilter("search_stopped")}>
               <span>搜索已停投</span>
