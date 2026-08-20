@@ -91,7 +91,7 @@ cp .env.example .env
 - `XHS_JG_AUTHD_URL`：投流服务访问 Token Broker 的环回地址，默认 `http://127.0.0.1:18080`
 - `XHS_JG_INTERNAL_API_KEY`：Token Broker 内部网关密钥，使用至少 32 字符的随机值
 - `DELIVERY_API_CREDENTIALS_JSON`：可选。脚本或独立审批身份的 API Key 到固定 `actor`、`role` 和广告主范围的服务端绑定；浏览器控制台使用共享 `delivery-console/operator` 身份直接进入
-- `DELIVERY_MEDIA_WRITES_ENABLED`：聚光写入总开关，默认且当前生产值为 `false`
+- `DELIVERY_MEDIA_WRITES_ENABLED`：聚光写入总开关；生产已开启，信息流/搜索页可真实启停计划
 - `DELIVERY_LLM_BASE_URL`、`DELIVERY_LLM_MODEL`：可选 OpenAI-compatible 语义服务；缺失时使用确定性规则降级
 - `DELIVERY_RANKER_URL`、`DELIVERY_RANKER_API_KEY`、`DELIVERY_RANKER_MODEL`：可选 LightGBM/LambdaMART 推理服务；缺失时使用可解释启发式排序
 
@@ -187,7 +187,7 @@ make frontend-deploy
 
 算法职责固定分离：LLM 只抽取语义、候选词和证据；LightGBM/LambdaMART 只对已批准的数值特征排序；贝叶斯接口只估计稀疏分群后验与不确定性；约束优化只在人工上限内返回 `executable=false` 的预算建议；Bandit 只返回 `shadow_only=true` 的影子选择。平台枚举、权限、预算、审批、发布和启停始终由确定性规则、编排器和人工角色决定。
 
-当前生产 OAuth 已包含 `ad_manage`、`ad_query`、`report_service` 和 `account_manage`，并授权 59 个广告主。中台和上游适配代码已经部署就绪，但 `DELIVERY_MEDIA_WRITES_ENABLED=false` 继续阻断所有真实创建、修改和启停；开启前必须在专用广告主完成暂停态创建、读回、错误码、频控和报表口径冒烟。
+当前生产 OAuth 已包含 `ad_manage`、`ad_query`、`report_service` 和 `account_manage`，并授权 59 个广告主。`DELIVERY_MEDIA_WRITES_ENABLED=true`，信息流/搜索页的一键暂停和双击改状态会真实调用聚光启停接口。
 
 ## 子账户与计划诊断 API
 

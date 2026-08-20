@@ -540,6 +540,9 @@ func (service *Service) UpdateCampaignStatus(ctx context.Context, input Campaign
 	if len(updated) == 0 {
 		updated = append([]int64(nil), input.CampaignIDs...)
 	}
+	if err := service.store.ApplyCampaignStatus(ctx, input.AdvertiserID, updated, input.ActionType); err != nil {
+		return CampaignStatusResult{}, err
+	}
 	status := campaignStatusName(input.ActionType)
 	localUpdated := make([]int64, 0)
 	for _, campaignID := range updated {

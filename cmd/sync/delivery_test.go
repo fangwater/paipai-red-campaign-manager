@@ -90,6 +90,9 @@ func (handlerStore) MediaEntity(context.Context, int64, string, int64) (delivery
 func (handlerStore) MediaEntities(context.Context, string) ([]delivery.MediaEntity, error) {
 	return []delivery.MediaEntity{}, nil
 }
+func (handlerStore) ApplyCampaignStatus(context.Context, int64, []int64, int) error {
+	return nil
+}
 func (handlerStore) UpdateMediaEntityStatus(context.Context, string, string) error { return nil }
 func (handlerStore) SaveAPIAttempt(context.Context, delivery.APIAttempt) error     { return nil }
 func (handlerStore) SavePerformanceSnapshot(context.Context, delivery.PerformanceQuery, map[string]any, string) error {

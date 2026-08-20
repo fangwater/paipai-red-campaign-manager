@@ -200,6 +200,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 				LOWER(BTRIM(creativity.note_id)) AS note_id,
 				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END AS placement,
 				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g') AS campaign_name,
+				campaign.advertiser_id,
 				campaign.campaign_id,
 				campaign.campaign_filter_state,
 				campaign.campaign_enable
@@ -225,6 +226,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			)
 				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END AS placement,
 				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g') AS campaign_name,
+				campaign.advertiser_id,
 				campaign.campaign_id,
 				campaign.campaign_filter_state,
 				campaign.campaign_enable
@@ -245,6 +247,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 						'spend', stats.spend,
 						'cost', stats.cost,
 						'latest_spend', stats.latest_spend,
+						'advertiser_id', xhs.advertiser_id,
 						'campaign_id', xhs.campaign_id,
 						'filter_state', xhs.campaign_filter_state,
 						'enable', xhs.campaign_enable
@@ -257,6 +260,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 						'spend', stats.spend,
 						'cost', stats.cost,
 						'latest_spend', stats.latest_spend,
+						'advertiser_id', xhs.advertiser_id,
 						'campaign_id', xhs.campaign_id,
 						'filter_state', xhs.campaign_filter_state,
 						'enable', xhs.campaign_enable
@@ -265,9 +269,9 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 				) FILTER (WHERE stats.placement='信息流'), '[]'::jsonb) AS feed_campaigns
 			FROM maituo_campaign_stats stats
 			LEFT JOIN LATERAL (
-				SELECT matched.campaign_id, matched.campaign_filter_state, matched.campaign_enable
+				SELECT matched.advertiser_id, matched.campaign_id, matched.campaign_filter_state, matched.campaign_enable
 				FROM (
-					SELECT xhs.campaign_id, xhs.campaign_filter_state, xhs.campaign_enable,
+					SELECT xhs.advertiser_id, xhs.campaign_id, xhs.campaign_filter_state, xhs.campaign_enable,
 						CASE
 							WHEN xhs.campaign_name=stats.campaign_name THEN 0
 							WHEN xhs.campaign_name LIKE '%-' || stats.campaign_name THEN 1
@@ -279,7 +283,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 					WHERE xhs.note_id=stats.note_id
 					  AND xhs.placement=stats.placement
 					UNION ALL
-					SELECT named.campaign_id, named.campaign_filter_state, named.campaign_enable,
+					SELECT named.advertiser_id, named.campaign_id, named.campaign_filter_state, named.campaign_enable,
 						CASE
 							WHEN named.campaign_name=stats.campaign_name THEN 4
 							WHEN named.campaign_name LIKE '%-' || stats.campaign_name THEN 5

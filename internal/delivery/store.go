@@ -68,6 +68,7 @@ type Store interface {
 	MediaEntity(context.Context, int64, string, int64) (MediaEntity, error)
 	MediaEntities(context.Context, string) ([]MediaEntity, error)
 	UpdateMediaEntityStatus(context.Context, string, string) error
+	ApplyCampaignStatus(context.Context, int64, []int64, int) error
 	SaveAPIAttempt(context.Context, APIAttempt) error
 	SavePerformanceSnapshot(context.Context, PerformanceQuery, map[string]any, string) error
 	Assets(context.Context, AssetQuery) (Assets, error)

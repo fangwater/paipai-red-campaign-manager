@@ -360,6 +360,15 @@ export type GatewayResponse = {
   latency_ms: number;
 };
 
+export type CampaignStatusResult = {
+  advertiser_id: number;
+  action_type: number;
+  requested_campaign_ids: number[];
+  campaign_ids: number[];
+  local_entity_ids?: number[];
+  gateway: GatewayResponse;
+};
+
 export function createDefaultDraftSpec(advertiserID: number): DraftSpec {
   return {
     advertiser_id: advertiserID,
@@ -444,6 +453,11 @@ export const deliveryAPI = {
   updateEntityStatus: (entity: MediaEntity, status: "paused" | "active") => post<GatewayResponse>(`/entities/${entity.entity_type}/${entity.media_id}/status`, {
     advertiser_id: entity.advertiser_id,
     status
+  }),
+  updateCampaignStatus: (advertiserID: number, campaignIDs: number[], actionType: 1 | 2 | 3) => post<CampaignStatusResult>("/campaigns/status", {
+    advertiser_id: advertiserID,
+    campaign_ids: campaignIDs,
+    action_type: actionType
   }),
   performance: (input: JSONObject) => post<JSONObject>("/performance", input),
   platformTool: (path: string, body: JSONObject) => post<GatewayResponse>(path, body),

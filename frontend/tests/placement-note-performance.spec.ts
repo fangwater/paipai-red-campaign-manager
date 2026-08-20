@@ -7,14 +7,16 @@ function campaign(
   spend: number,
   cost: number | null,
   latestSpend = spend,
-  extras: { campaign_id?: number | null; filter_state?: number | null; enable?: number | null } = {}
+  extras: { advertiser_id?: number | null; campaign_id?: number | null; filter_state?: number | null; enable?: number | null } = {}
 ) {
+  const campaignID = extras.campaign_id ?? null;
   return {
     name,
     spend,
     cost,
     latest_spend: latestSpend,
-    campaign_id: extras.campaign_id ?? null,
+    advertiser_id: extras.advertiser_id ?? (campaignID ? 9001 : null),
+    campaign_id: campaignID,
     filter_state: extras.filter_state ?? null,
     enable: extras.enable ?? null
   };
@@ -66,7 +68,8 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
       search_spend: 480, search_cost: 24, latest_search_cost: 28, search_cost_change: 4, search_qualified: true, latest_search_spend: 12,
       search_campaigns: [
         campaign("辅酶搜索计划", 360, 22, 10, { campaign_id: 101, filter_state: 1, enable: 1 }),
-        campaign("回搜计划", 120, 28, 2, { campaign_id: 102, filter_state: 2, enable: 0 })
+        campaign("回搜计划", 120, 28, 2, { campaign_id: 102, filter_state: 2, enable: 0 }),
+        campaign("未匹配搜索计划", 8, null, 0)
       ],
       feed_campaigns: [campaign("辅酶信息流计划", 80, 40, 5, { campaign_id: 201, filter_state: 1, enable: 1 })]
     }),
@@ -130,11 +133,29 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
   };
 }
 
-async function mockCommon(page: Page, requested: string[]) {
+async function mockCommon(page: Page, requested: string[], statusPosts: unknown[] = []) {
   await page.route("**/paipai/healthz", (route) => route.fulfill({ status: 200, body: "ok" }));
   await page.route("**/paipai/api/imports/maituo-customer-daily", (route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] })
   }));
+  await page.route("**/paipai/api/delivery/campaigns/status", async (route) => {
+    const body = route.request().postDataJSON();
+    statusPosts.push(body);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          advertiser_id: body.advertiser_id,
+          action_type: body.action_type,
+          requested_campaign_ids: body.campaign_ids,
+          campaign_ids: body.campaign_ids,
+          gateway: { operation: "campaign.status", data: {}, request_hash: "test", latency_ms: 1 }
+        }
+      })
+    });
+  });
   await page.route("**/paipai/api/analytics/content-analysis?*", async (route) => {
     const params = new URL(route.request().url()).searchParams;
     const spu = params.get("spu") ?? "辅酶";
@@ -172,6 +193,7 @@ test("search placement page lists only search notes with narrowed columns", asyn
   await expect(table.locator("tbody tr").first()).toContainText("通勤精力管理实测");
   await expect(table.locator("tbody tr").first()).toContainText("辅酶搜索计划");
   await expect(table.locator("tbody tr").first()).toContainText("回搜计划");
+  await expect(table.locator("tbody tr").first()).toContainText("未匹配搜索计划");
   await expect(table.locator("tbody tr").first().locator(".placement-campaign-state.healthy").first()).toHaveText("有效");
   await expect(table.locator("tbody tr").first().locator(".placement-campaign-state.paused").first()).toHaveText("暂停");
   await expect(table.locator("tbody tr").first()).toContainText("消耗 ¥360.00");
@@ -203,9 +225,10 @@ test("search placement page lists only search notes with narrowed columns", asyn
   await table.getByRole("checkbox", { name: "选择笔记 note-search" }).check();
   await expect(table.getByRole("checkbox", { name: "选择计划 辅酶搜索计划" })).toBeChecked();
   await expect(table.getByRole("checkbox", { name: "选择计划 回搜计划" })).toBeChecked();
-  await expect(page.getByText("已选 2 个计划")).toBeVisible();
+  await expect(table.getByRole("checkbox", { name: "选择计划 未匹配搜索计划" })).toBeChecked();
+  await expect(page.getByText("已选 3 个计划")).toBeVisible();
   await table.getByRole("checkbox", { name: "选择计划 回搜计划" }).uncheck();
-  await expect(page.getByText("已选 1 个计划")).toBeVisible();
+  await expect(page.getByText("已选 2 个计划")).toBeVisible();
   await table.getByRole("checkbox", { name: "全选本页笔记计划" }).check();
   await expect(page.getByText(/已选 \d+ 个计划/)).toBeVisible();
   await expect(table.getByRole("checkbox", { name: "选择计划 辅酶搜索计划" })).toBeChecked();
@@ -321,4 +344,33 @@ test("placement note tables remain usable on mobile", async ({ page }) => {
   const feedTableScroll = page.locator(".content-note-section .content-note-table-wrap");
   expect(await feedTableScroll.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("search placement can pause selected campaigns and edit one by double click", async ({ page }) => {
+  const requested: string[] = [];
+  const statusPosts: unknown[] = [];
+  await mockCommon(page, requested, statusPosts);
+  await page.goto("/paipai/delivery/search");
+
+  const table = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" });
+  await expect(page.getByRole("button", { name: "一键暂停", exact: true })).toBeDisabled();
+  await table.getByRole("checkbox", { name: "选择计划 辅酶搜索计划" }).check();
+  await table.getByRole("checkbox", { name: "选择计划 未匹配搜索计划" }).check();
+  await expect(page.getByRole("button", { name: "一键暂停 1", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "一键暂停 1", exact: true }).click();
+  const pauseDialog = page.getByRole("dialog", { name: "一键暂停已选计划" });
+  await expect(pauseDialog).toContainText("已忽略 1 个未匹配计划");
+  await pauseDialog.getByRole("button", { name: "暂停 1 个计划" }).click();
+  await expect.poll(() => statusPosts).toEqual([{ advertiser_id: 9001, campaign_ids: [101], action_type: 2 }]);
+  await expect(page.getByText("已暂停 1 个计划，并刷新状态")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "一键暂停", exact: true })).toBeDisabled();
+
+  await table.getByText("回搜计划", { exact: true }).dblclick();
+  const editDialog = page.getByRole("dialog", { name: "修改计划状态" });
+  await expect(editDialog).toContainText("当前状态：暂停");
+  await editDialog.getByRole("radio", { name: "有效" }).check();
+  await editDialog.getByRole("button", { name: "设为有效" }).click();
+  await expect.poll(() => statusPosts.at(-1)).toEqual({ advertiser_id: 9001, campaign_ids: [102], action_type: 1 });
+  await expect(page.getByText("计划「回搜计划」已设为有效，并刷新状态")).toBeVisible();
 });

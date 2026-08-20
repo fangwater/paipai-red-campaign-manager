@@ -10,13 +10,20 @@ import (
 )
 
 type serviceTestStore struct {
-	draft     Draft
-	approvals []Approval
-	jobs      map[string]PublishJob
-	jobKeys   map[string]string
-	entities  []MediaEntity
-	attempts  []APIAttempt
-	audits    int
+	draft             Draft
+	approvals         []Approval
+	jobs              map[string]PublishJob
+	jobKeys           map[string]string
+	entities          []MediaEntity
+	attempts          []APIAttempt
+	audits            int
+	campaignSnapshots []campaignSnapshotUpdate
+}
+
+type campaignSnapshotUpdate struct {
+	AdvertiserID int64
+	CampaignIDs  []int64
+	ActionType   int
 }
 
 func (store *serviceTestStore) CreateDraft(context.Context, CreateDraftInput, Actor) (Draft, error) {
@@ -121,6 +128,12 @@ func (store *serviceTestStore) MediaEntity(_ context.Context, advertiserID int64
 }
 func (store *serviceTestStore) MediaEntities(context.Context, string) ([]MediaEntity, error) {
 	return append([]MediaEntity(nil), store.entities...), nil
+}
+func (store *serviceTestStore) ApplyCampaignStatus(_ context.Context, advertiserID int64, campaignIDs []int64, actionType int) error {
+	store.campaignSnapshots = append(store.campaignSnapshots, campaignSnapshotUpdate{
+		AdvertiserID: advertiserID, CampaignIDs: append([]int64(nil), campaignIDs...), ActionType: actionType,
+	})
+	return nil
 }
 func (store *serviceTestStore) UpdateMediaEntityStatus(_ context.Context, entityID string, status string) error {
 	for index := range store.entities {
@@ -374,6 +387,9 @@ func TestUpdateCampaignStatusPausesUnmappedCampaigns(t *testing.T) {
 	}
 	if store.audits == 0 {
 		t.Fatal("expected a campaign status audit event")
+	}
+	if len(store.campaignSnapshots) != 1 || store.campaignSnapshots[0].ActionType != 2 || fmt.Sprint(store.campaignSnapshots[0].CampaignIDs) != "[1 12 123]" {
+		t.Fatalf("campaign snapshots = %+v", store.campaignSnapshots)
 	}
 }
 

@@ -660,6 +660,43 @@ func (p *Postgres) MediaEntities(ctx context.Context, draftID string) ([]deliver
 	return result, rows.Err()
 }
 
+func (p *Postgres) ApplyCampaignStatus(ctx context.Context, advertiserID int64, campaignIDs []int64, actionType int) error {
+	if advertiserID <= 0 || len(campaignIDs) == 0 {
+		return nil
+	}
+	filterState, enable, markDeleted, err := campaignSnapshotFromAction(actionType)
+	if err != nil {
+		return err
+	}
+	command := `
+		UPDATE xhs_jg_campaigns
+		SET campaign_filter_state=$2,
+		    campaign_enable=$3,
+		    deleted_at=CASE WHEN $4 THEN COALESCE(deleted_at, NOW()) ELSE deleted_at END,
+		    last_seen_at=NOW()
+		WHERE advertiser_id=$1 AND campaign_id = ANY($5)`
+	if !markDeleted {
+		command += ` AND deleted_at IS NULL`
+	}
+	if _, err := p.pool.Exec(ctx, command, advertiserID, filterState, enable, markDeleted, campaignIDs); err != nil {
+		return fmt.Errorf("apply campaign status snapshot: %w", err)
+	}
+	return nil
+}
+
+func campaignSnapshotFromAction(actionType int) (filterState int, enable int, markDeleted bool, err error) {
+	switch actionType {
+	case 1:
+		return 1, 1, false, nil
+	case 2:
+		return 2, 0, false, nil
+	case 3:
+		return 3, 0, true, nil
+	default:
+		return 0, 0, false, errors.New("action_type must be 1, 2, or 3")
+	}
+}
+
 func (p *Postgres) UpdateMediaEntityStatus(ctx context.Context, entityID, status string) error {
 	if status != "paused" && status != "active" && status != "deleted" {
 		return errors.New("invalid delivery media status")

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Pause, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
+import { DeliveryAPIError, deliveryAPI } from "./delivery-api";
 import "./content-analysis.css";
 import "./placement-note-performance.css";
 
@@ -17,10 +18,19 @@ type ContentCampaign = {
   spend: number;
   cost: number | null;
   latest_spend: number;
+  advertiser_id: number | null;
   campaign_id: number | null;
   filter_state: number | null;
   enable: number | null;
 };
+
+type CampaignActionType = 1 | 2;
+type StatusNotice = { tone: "success" | "error"; message: string } | null;
+type StatusDialogState = {
+  noteID: string;
+  campaign: ContentCampaign;
+  actionType: CampaignActionType;
+} | null;
 
 const CAMPAIGN_FILTER_STATES: Record<number, string> = {
   1: "有效",
@@ -87,6 +97,7 @@ const NOTE_SORT_OPTIONS: Array<{ value: NoteSortOption; label: string; descripti
 ];
 const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const CAMPAIGN_STATUS_BATCH = 20;
 
 function safeURL(value: string): string | null {
   try {
@@ -149,6 +160,63 @@ function campaignFilterStateTone(state: number | null | undefined): string {
   return "warning";
 }
 
+function isMatchedCampaign(campaign: ContentCampaign): boolean {
+  return Number(campaign.advertiser_id) > 0 && Number(campaign.campaign_id) > 0;
+}
+
+function campaignIdentity(campaign: ContentCampaign): string {
+  return String(campaign.advertiser_id) + ":" + String(campaign.campaign_id);
+}
+
+function uniqueMatchedCampaigns(notes: ContentNote[], placement: Placement, keys: Set<string>): ContentCampaign[] {
+  const seen = new Set<string>();
+  const matched: ContentCampaign[] = [];
+  for (const note of notes) {
+    for (const campaign of noteCampaigns(note, placement)) {
+      if (!keys.has(campaignKey(note.note_id, campaign.name)) || !isMatchedCampaign(campaign)) continue;
+      const identity = campaignIdentity(campaign);
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      matched.push(campaign);
+    }
+  }
+  return matched;
+}
+
+function chunkIDs(ids: number[], size: number): number[][] {
+  const groups: number[][] = [];
+  for (let index = 0; index < ids.length; index += size) groups.push(ids.slice(index, index + size));
+  return groups;
+}
+
+function statusErrorMessage(error: unknown): string {
+  if (error instanceof DeliveryAPIError) {
+    if (error.status === 423) return "媒体写入未开启，无法修改计划状态";
+    if (error.status === 403) return "当前身份没有修改计划状态的权限";
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return "计划状态更新失败";
+}
+
+async function updateMatchedCampaignStatus(campaigns: ContentCampaign[], actionType: CampaignActionType): Promise<number> {
+  const idsByAdvertiser = new Map<number, number[]>();
+  for (const campaign of campaigns) {
+    if (!isMatchedCampaign(campaign) || campaign.advertiser_id === null || campaign.campaign_id === null) continue;
+    const current = idsByAdvertiser.get(campaign.advertiser_id) ?? [];
+    if (!current.includes(campaign.campaign_id)) current.push(campaign.campaign_id);
+    idsByAdvertiser.set(campaign.advertiser_id, current);
+  }
+  let updated = 0;
+  for (const [advertiserID, campaignIDs] of idsByAdvertiser) {
+    for (const group of chunkIDs(campaignIDs, CAMPAIGN_STATUS_BATCH)) {
+      const result = await deliveryAPI.updateCampaignStatus(advertiserID, group, actionType);
+      updated += result.campaign_ids?.length || group.length;
+    }
+  }
+  return updated;
+}
+
 function PlacementMetric({ spend, cost, qualified, stopped }: {
   spend: number;
   cost: number | null;
@@ -161,11 +229,12 @@ function PlacementMetric({ spend, cost, qualified, stopped }: {
   </div>;
 }
 
-function PlacementCampaigns({ noteID, campaigns, selectedKeys, onToggleCampaign }: {
+function PlacementCampaigns({ noteID, campaigns, selectedKeys, onToggleCampaign, onEditCampaign }: {
   noteID: string;
   campaigns: ContentCampaign[];
   selectedKeys: Set<string>;
   onToggleCampaign: (noteID: string, campaignName: string, checked: boolean) => void;
+  onEditCampaign: (noteID: string, campaign: ContentCampaign) => void;
 }) {
   if (campaigns.length === 0) {
     return <div className="placement-note-campaigns"><span className="placement-note-campaigns-empty">暂无计划</span></div>;
@@ -175,13 +244,21 @@ function PlacementCampaigns({ noteID, campaigns, selectedKeys, onToggleCampaign 
       const key = campaignKey(noteID, campaign.name);
       const checked = selectedKeys.has(key);
       const stopped = campaign.latest_spend <= 0;
+      const matched = isMatchedCampaign(campaign);
       const stateLabel = campaignFilterStateLabel(campaign.filter_state);
       const stateTone = campaignFilterStateTone(campaign.filter_state);
-      const stateTitle = campaign.campaign_id
-        ? "聚光计划 " + campaign.campaign_id + " · " + stateLabel + (campaign.enable === 0 ? " · 开关关闭" : campaign.enable === 1 ? " · 开关开启" : "")
+      const stateTitle = matched
+        ? "聚光计划 " + campaign.campaign_id + " · " + stateLabel + (campaign.enable === 0 ? " · 开关关闭" : campaign.enable === 1 ? " · 开关开启" : "") + " · 双击修改状态"
         : "未匹配到本地同步的聚光计划";
       return <li key={campaign.name}>
-        <label className={"placement-campaign-card" + (checked ? " selected" : "") + (stopped ? " stopped" : "")}>
+        <div
+          className={"placement-campaign-card" + (checked ? " selected" : "") + (stopped ? " stopped" : "")}
+          title={matched ? "双击修改计划状态" : stateTitle}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            onEditCampaign(noteID, campaign);
+          }}
+        >
           <input
             type="checkbox"
             checked={checked}
@@ -199,13 +276,70 @@ function PlacementCampaigns({ noteID, campaigns, selectedKeys, onToggleCampaign 
               {stopped ? <span className="placement-campaign-spend-stopped">近一天 0</span> : <span>近一天 ¥{money.format(campaign.latest_spend)}</span>}
             </small>
           </span>
-        </label>
+        </div>
       </li>;
     })}
   </ul>;
 }
 
-function PlacementNoteTable({ notes, placement, label, selectedCampaignKeys, onToggleNote, onToggleCampaign, onToggleAllNotes }: {
+function CampaignStatusDialog({
+  title,
+  campaignName,
+  currentLabel,
+  actionType,
+  confirmLabel,
+  busy,
+  error,
+  hint,
+  allowEnable,
+  unmatched,
+  onActionType,
+  onCancel,
+  onConfirm
+}: {
+  title: string;
+  campaignName?: string;
+  currentLabel?: string;
+  actionType: CampaignActionType;
+  confirmLabel: string;
+  busy: boolean;
+  error: string;
+  hint?: string;
+  allowEnable: boolean;
+  unmatched?: boolean;
+  onActionType: (value: CampaignActionType) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return <div className="placement-status-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <section className="placement-status-dialog" role="dialog" aria-modal="true" aria-labelledby="placement-status-title">
+      <header>
+        <div>
+          <h2 id="placement-status-title">{title}</h2>
+          {campaignName ? <span>{campaignName}</span> : null}
+        </div>
+        <button type="button" className="placement-status-close" title="关闭" aria-label="关闭" disabled={busy} onClick={onCancel}><X size={16} /></button>
+      </header>
+      <div className="placement-status-body">
+        {currentLabel ? <p>当前状态：{currentLabel}</p> : null}
+        {unmatched ? <p className="placement-status-error">未匹配到聚光计划，无法修改状态</p> : <>
+          {allowEnable ? <div className="placement-status-options" role="radiogroup" aria-label="计划状态">
+            <label><input type="radio" name="placement-campaign-status" checked={actionType === 1} onChange={() => onActionType(1)} />有效</label>
+            <label><input type="radio" name="placement-campaign-status" checked={actionType === 2} onChange={() => onActionType(2)} />暂停</label>
+          </div> : <p>确认后会把已匹配计划设为暂停，并刷新列表状态。</p>}
+        </>}
+        {hint ? <p className="placement-status-hint">{hint}</p> : null}
+        {error ? <p className="placement-status-error" role="alert">{error}</p> : null}
+      </div>
+      <footer>
+        <button type="button" disabled={busy} onClick={onCancel}>取消</button>
+        <button type="button" className="primary" disabled={busy || unmatched} onClick={onConfirm}>{busy ? "提交中…" : confirmLabel}</button>
+      </footer>
+    </section>
+  </div>;
+}
+
+function PlacementNoteTable({ notes, placement, label, selectedCampaignKeys, onToggleNote, onToggleCampaign, onToggleAllNotes, onEditCampaign }: {
   notes: ContentNote[];
   placement: Placement;
   label: string;
@@ -213,6 +347,7 @@ function PlacementNoteTable({ notes, placement, label, selectedCampaignKeys, onT
   onToggleNote: (note: ContentNote, checked: boolean) => void;
   onToggleCampaign: (noteID: string, campaignName: string, checked: boolean) => void;
   onToggleAllNotes: (checked: boolean) => void;
+  onEditCampaign: (noteID: string, campaign: ContentCampaign) => void;
 }) {
   const pageCampaignKeys = useMemo(() => {
     const keys: string[] = [];
@@ -274,7 +409,7 @@ function PlacementNoteTable({ notes, placement, label, selectedCampaignKeys, onT
           <small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
         </div></td>
         <td><div className="content-note-labels placement-note-labels"><strong>{note.agency}</strong><span>{note.content_type}</span><span>{note.audience}</span><span>{note.scenario}</span></div></td>
-        <td><PlacementCampaigns noteID={note.note_id} campaigns={campaigns} selectedKeys={selectedCampaignKeys} onToggleCampaign={onToggleCampaign} /></td>
+        <td><PlacementCampaigns noteID={note.note_id} campaigns={campaigns} selectedKeys={selectedCampaignKeys} onToggleCampaign={onToggleCampaign} onEditCampaign={onEditCampaign} /></td>
         <td className={note.boom ? "metric-good" : ""}>{note.dandelion_cost === null || note.dandelion_cost <= 0 ? "--" : "¥" + money.format(note.dandelion_cost)}</td>
         {placement === "search"
           ? <td><PlacementMetric spend={note.search_spend} cost={note.search_cost} qualified={note.search_qualified} stopped={note.search_stopped} /></td>
@@ -304,6 +439,11 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedCampaignKeys, setSelectedCampaignKeys] = useState<Set<string>>(() => new Set());
+  const [statusNotice, setStatusNotice] = useState<StatusNotice>(null);
+  const [pauseConfirmOpen, setPauseConfirmOpen] = useState(false);
+  const [statusDialog, setStatusDialog] = useState<StatusDialogState>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusError, setStatusError] = useState("");
 
   useEffect(() => {
     setNoteSort(defaultSort);
@@ -311,6 +451,10 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
     setNoteIDQuery("");
     setNotePage(1);
     setSelectedCampaignKeys(new Set());
+    setStatusNotice(null);
+    setPauseConfirmOpen(false);
+    setStatusDialog(null);
+    setStatusError("");
   }, [defaultSort, placement]);
 
   useEffect(() => {
@@ -384,6 +528,30 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
   }), [feedCostLimit, placementNotes, searchCostLimit]);
   const sortLabel = NOTE_SORT_OPTIONS.find((option) => option.value === noteSort)?.label ?? (placement === "search" ? "搜索累计消耗" : "信息流累计消耗");
   const selectedCampaignCount = selectedCampaignKeys.size;
+  const selectedMatchedCampaigns = useMemo(
+    () => uniqueMatchedCampaigns(placementNotes, placement, selectedCampaignKeys),
+    [placement, placementNotes, selectedCampaignKeys]
+  );
+  const selectedMatchedCount = selectedMatchedCampaigns.length;
+  const selectedUnmatchedCount = useMemo(() => {
+    let count = 0;
+    for (const note of placementNotes) {
+      for (const campaign of noteCampaigns(note, placement)) {
+        if (selectedCampaignKeys.has(campaignKey(note.note_id, campaign.name)) && !isMatchedCampaign(campaign)) count += 1;
+      }
+    }
+    return count;
+  }, [placement, placementNotes, selectedCampaignKeys]);
+
+  const reloadNotes = useCallback(async () => {
+    const params = new URLSearchParams({ spu, agency, dimension: "audience" satisfies DimensionOption });
+    if (publishedStartDate) params.set("published_start_date", publishedStartDate);
+    if (publishedEndDate) params.set("published_end_date", publishedEndDate);
+    const response = await fetch(import.meta.env.BASE_URL + "api/analytics/content-analysis?" + params);
+    const payload = await response.json() as { success: boolean; data?: ContentResult; error?: string };
+    if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error || pageTitle + "笔记读取失败");
+    setResult(payload.data);
+  }, [agency, pageTitle, publishedEndDate, publishedStartDate, spu]);
 
   const toggleCostFilter = (value: CostFilter) => {
     setCostFilters((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
@@ -423,6 +591,60 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
       }
       return next;
     });
+  };
+
+  const openPauseConfirm = () => {
+    setStatusError("");
+    setPauseConfirmOpen(true);
+  };
+
+  const openCampaignStatus = (noteID: string, campaign: ContentCampaign) => {
+    const actionType: CampaignActionType = campaign.filter_state === 1 ? 2 : 1;
+    setStatusError("");
+    setStatusDialog({ noteID, campaign, actionType });
+  };
+
+  const applyCampaignStatus = async (campaigns: ContentCampaign[], actionType: CampaignActionType, successMessage: string, clearSelection: boolean) => {
+    if (campaigns.length === 0) {
+      setStatusError("没有已匹配的聚光计划可更新");
+      return false;
+    }
+    setStatusBusy(true);
+    setStatusError("");
+    try {
+      await updateMatchedCampaignStatus(campaigns, actionType);
+      await reloadNotes();
+      if (clearSelection) setSelectedCampaignKeys(new Set());
+      setPauseConfirmOpen(false);
+      setStatusDialog(null);
+      setStatusNotice({ tone: "success", message: successMessage });
+      return true;
+    } catch (updateError) {
+      setStatusError(statusErrorMessage(updateError));
+      return false;
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  const confirmPauseSelected = () => {
+    void applyCampaignStatus(
+      selectedMatchedCampaigns,
+      2,
+      "已暂停 " + integer.format(selectedMatchedCount) + " 个计划，并刷新状态",
+      true
+    );
+  };
+
+  const confirmCampaignStatus = () => {
+    if (!statusDialog) return;
+    const actionLabel = statusDialog.actionType === 1 ? "有效" : "暂停";
+    void applyCampaignStatus(
+      [statusDialog.campaign],
+      statusDialog.actionType,
+      "计划「" + statusDialog.campaign.name + "」已设为" + actionLabel + "，并刷新状态",
+      false
+    );
   };
 
   useEffect(() => {
@@ -465,12 +687,28 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
     </section>
 
     {error ? <div className="analysis-error content-error"><AlertCircle size={17} />{error}</div> : null}
+    {statusNotice ? <div className={"placement-status-notice " + statusNotice.tone} role={statusNotice.tone === "error" ? "alert" : "status"}>
+      {statusNotice.tone === "error" ? <AlertCircle size={15} /> : null}
+      <span>{statusNotice.message}</span>
+      <button type="button" onClick={() => setStatusNotice(null)} aria-label="关闭提示">×</button>
+    </div> : null}
     {loading ? <div className="content-loading"><LoaderCircle size={19} className="spin" />正在汇总{pageTitle}笔记</div> : null}
 
     {!loading && result ? <section className="content-note-section" ref={noteSectionRef}>
       <header>
-        <div><h2>笔记表现</h2><p>默认按{pageTitle}累计消耗降序；回搜成本变化 = 当日回搜成本 − 累计回搜成本</p></div>
-        <span>{integer.format(visibleNotes.length)} 篇笔记{selectedCampaignCount > 0 ? " · 已选 " + integer.format(selectedCampaignCount) + " 个计划" : ""}</span>
+        <div><h2>笔记表现</h2><p>默认按{pageTitle}累计消耗降序；回搜成本变化 = 当日回搜成本 − 累计回搜成本。双击计划可修改状态。</p></div>
+        <div className="content-note-heading-meta">
+          <span>{integer.format(visibleNotes.length)} 篇笔记{selectedCampaignCount > 0 ? " · 已选 " + integer.format(selectedCampaignCount) + " 个计划" : ""}</span>
+          <button
+            type="button"
+            className="placement-pause-button"
+            disabled={selectedMatchedCount === 0 || statusBusy}
+            title={selectedMatchedCount === 0 ? "请先勾选已匹配的聚光计划" : "将已勾选的匹配计划设为暂停"}
+            onClick={openPauseConfirm}
+          >
+            <Pause size={13} />一键暂停{selectedMatchedCount > 0 ? " " + integer.format(selectedMatchedCount) : ""}
+          </button>
+        </div>
       </header>
       <div className="content-note-controls">
         <div className="content-note-sort">
@@ -526,6 +764,7 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
           onToggleNote={toggleNote}
           onToggleCampaign={toggleCampaign}
           onToggleAllNotes={toggleAllNotes}
+          onEditCampaign={openCampaignStatus}
         />
         <nav className="content-note-pagination" aria-label="笔记分页">
           <span>共 {integer.format(visibleNotes.length)} 篇 · 每页 {NOTE_PAGE_SIZE} 篇</span>
@@ -539,6 +778,33 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
         </nav>
       </>}
     </section> : null}
+    {pauseConfirmOpen ? <CampaignStatusDialog
+      title="一键暂停已选计划"
+      actionType={2}
+      confirmLabel={"暂停 " + integer.format(selectedMatchedCount) + " 个计划"}
+      busy={statusBusy}
+      error={statusError}
+      hint={selectedUnmatchedCount > 0 ? "已忽略 " + integer.format(selectedUnmatchedCount) + " 个未匹配计划" : undefined}
+      allowEnable={false}
+      unmatched={selectedMatchedCount === 0}
+      onActionType={() => undefined}
+      onCancel={() => { if (!statusBusy) { setPauseConfirmOpen(false); setStatusError(""); } }}
+      onConfirm={confirmPauseSelected}
+    /> : null}
+    {statusDialog ? <CampaignStatusDialog
+      title="修改计划状态"
+      campaignName={statusDialog.campaign.name}
+      currentLabel={campaignFilterStateLabel(statusDialog.campaign.filter_state)}
+      actionType={statusDialog.actionType}
+      confirmLabel={statusDialog.actionType === 1 ? "设为有效" : "设为暂停"}
+      busy={statusBusy}
+      error={statusError}
+      allowEnable
+      unmatched={!isMatchedCampaign(statusDialog.campaign)}
+      onActionType={(value) => setStatusDialog((current) => current ? { ...current, actionType: value } : current)}
+      onCancel={() => { if (!statusBusy) { setStatusDialog(null); setStatusError(""); } }}
+      onConfirm={confirmCampaignStatus}
+    /> : null}
   </>;
 }
 
