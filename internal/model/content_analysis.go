@@ -29,35 +29,47 @@ type ContentAnalysisCoverage struct {
 	AllMetricsNotes    int `json:"all_metrics_notes"`
 }
 
+type ContentAnalysisCampaign struct {
+	Name        string   `json:"name"`
+	Spend       float64  `json:"spend"`
+	Cost        *float64 `json:"cost"`
+	LatestSpend float64  `json:"latest_spend"`
+	CampaignID  *int64   `json:"campaign_id"`
+	FilterState *int     `json:"filter_state"`
+	Enable      *int     `json:"enable"`
+}
+
 type ContentAnalysisNote struct {
-	NoteID            string   `json:"note_id"`
-	Title             string   `json:"title"`
-	URL               string   `json:"url"`
-	Author            string   `json:"author"`
-	PublishedDate     string   `json:"published_date"`
-	Agency            string   `json:"agency"`
-	ContentType       string   `json:"content_type"`
-	Audience          string   `json:"audience"`
-	Scenario          string   `json:"scenario"`
-	DandelionCost     *float64 `json:"dandelion_cost"`
-	Boom              bool     `json:"boom"`
-	SearchSpend       float64  `json:"search_spend"`
-	SearchCost        *float64 `json:"search_cost"`
-	LatestSearchCost  *float64 `json:"latest_search_cost"`
-	SearchCostChange  *float64 `json:"search_cost_change"`
-	SearchQualified   bool     `json:"search_qualified"`
-	FeedSpend         float64  `json:"feed_spend"`
-	FeedCost          *float64 `json:"feed_cost"`
-	FeedQualified     bool     `json:"feed_qualified"`
-	LatestSearchSpend float64  `json:"latest_search_spend"`
-	LatestFeedSpend   float64  `json:"latest_feed_spend"`
-	SearchStopped     bool     `json:"search_stopped"`
-	FeedStopped       bool     `json:"feed_stopped"`
-	FlowEvaluated     bool     `json:"flow_evaluated"`
-	FlowQualified     bool     `json:"flow_qualified"`
-	ROI               *float64 `json:"roi"`
-	ROIQualified      bool     `json:"roi_qualified"`
-	AllQualified      bool     `json:"all_qualified"`
+	NoteID            string                     `json:"note_id"`
+	Title             string                     `json:"title"`
+	URL               string                     `json:"url"`
+	Author            string                     `json:"author"`
+	PublishedDate     string                     `json:"published_date"`
+	Agency            string                     `json:"agency"`
+	ContentType       string                     `json:"content_type"`
+	Audience          string                     `json:"audience"`
+	Scenario          string                     `json:"scenario"`
+	DandelionCost     *float64                   `json:"dandelion_cost"`
+	Boom              bool                       `json:"boom"`
+	SearchSpend       float64                    `json:"search_spend"`
+	SearchCost        *float64                   `json:"search_cost"`
+	LatestSearchCost  *float64                   `json:"latest_search_cost"`
+	SearchCostChange  *float64                   `json:"search_cost_change"`
+	SearchQualified   bool                       `json:"search_qualified"`
+	FeedSpend         float64                    `json:"feed_spend"`
+	FeedCost          *float64                   `json:"feed_cost"`
+	FeedQualified     bool                       `json:"feed_qualified"`
+	LatestSearchSpend float64                    `json:"latest_search_spend"`
+	LatestFeedSpend   float64                    `json:"latest_feed_spend"`
+	SearchCampaigns   []ContentAnalysisCampaign  `json:"search_campaigns"`
+	FeedCampaigns     []ContentAnalysisCampaign  `json:"feed_campaigns"`
+	SearchStopped     bool                       `json:"search_stopped"`
+	FeedStopped       bool                       `json:"feed_stopped"`
+	FlowEvaluated     bool                       `json:"flow_evaluated"`
+	FlowQualified     bool                       `json:"flow_qualified"`
+	ROI               *float64                   `json:"roi"`
+	ROIQualified      bool                       `json:"roi_qualified"`
+	AllQualified      bool                       `json:"all_qualified"`
 }
 
 type ContentAnalysisCell struct {

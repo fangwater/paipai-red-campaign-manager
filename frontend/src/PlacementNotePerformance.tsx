@@ -12,6 +12,27 @@ type DimensionOption = "audience" | "scenario";
 type NoteSortOption = "search_spend" | "feed_spend" | "search_cost_change";
 type CostFilter = "search" | "feed" | "search_stopped" | "feed_stopped";
 
+type ContentCampaign = {
+  name: string;
+  spend: number;
+  cost: number | null;
+  latest_spend: number;
+  campaign_id: number | null;
+  filter_state: number | null;
+  enable: number | null;
+};
+
+const CAMPAIGN_FILTER_STATES: Record<number, string> = {
+  1: "有效",
+  2: "暂停",
+  3: "已删除",
+  4: "计划预算不足",
+  5: "现金余额不足",
+  7: "账户日预算不足",
+  8: "暂停阶段",
+  10: "未投放"
+};
+
 type ContentNote = {
   note_id: string;
   title: string;
@@ -34,6 +55,8 @@ type ContentNote = {
   feed_qualified: boolean;
   latest_search_spend: number;
   latest_feed_spend: number;
+  search_campaigns: ContentCampaign[];
+  feed_campaigns: ContentCampaign[];
   search_stopped: boolean;
   feed_stopped: boolean;
 };
@@ -106,6 +129,26 @@ function noteCampaignAnalysisPath(noteID: string): string {
   return "/note-campaign-analysis?" + new URLSearchParams({ q: noteID }).toString();
 }
 
+function noteCampaigns(note: ContentNote, placement: Placement): ContentCampaign[] {
+  return placement === "search" ? note.search_campaigns ?? [] : note.feed_campaigns ?? [];
+}
+
+function campaignKey(noteID: string, campaignName: string): string {
+  return noteID + "\u0000" + campaignName;
+}
+
+function campaignFilterStateLabel(state: number | null | undefined): string {
+  if (state === null || state === undefined) return "未匹配";
+  return CAMPAIGN_FILTER_STATES[state] ?? ("状态 " + state);
+}
+
+function campaignFilterStateTone(state: number | null | undefined): string {
+  if (state === null || state === undefined) return "unknown";
+  if (state === 1) return "healthy";
+  if (state === 2 || state === 8 || state === 10) return "paused";
+  return "warning";
+}
+
 function PlacementMetric({ spend, cost, qualified, stopped }: {
   spend: number;
   cost: number | null;
@@ -118,28 +161,120 @@ function PlacementMetric({ spend, cost, qualified, stopped }: {
   </div>;
 }
 
-function PlacementNoteTable({ notes, placement, label }: {
+function PlacementCampaigns({ noteID, campaigns, selectedKeys, onToggleCampaign }: {
+  noteID: string;
+  campaigns: ContentCampaign[];
+  selectedKeys: Set<string>;
+  onToggleCampaign: (noteID: string, campaignName: string, checked: boolean) => void;
+}) {
+  if (campaigns.length === 0) {
+    return <div className="placement-note-campaigns"><span className="placement-note-campaigns-empty">暂无计划</span></div>;
+  }
+  return <ul className="placement-note-campaigns">
+    {campaigns.map((campaign) => {
+      const key = campaignKey(noteID, campaign.name);
+      const checked = selectedKeys.has(key);
+      const stopped = campaign.latest_spend <= 0;
+      const stateLabel = campaignFilterStateLabel(campaign.filter_state);
+      const stateTone = campaignFilterStateTone(campaign.filter_state);
+      const stateTitle = campaign.campaign_id
+        ? "聚光计划 " + campaign.campaign_id + " · " + stateLabel + (campaign.enable === 0 ? " · 开关关闭" : campaign.enable === 1 ? " · 开关开启" : "")
+        : "未匹配到本地同步的聚光计划";
+      return <li key={campaign.name}>
+        <label className={"placement-campaign-card" + (checked ? " selected" : "") + (stopped ? " stopped" : "")}>
+          <input
+            type="checkbox"
+            checked={checked}
+            aria-label={"选择计划 " + campaign.name}
+            onChange={(event) => onToggleCampaign(noteID, campaign.name, event.target.checked)}
+          />
+          <span className="placement-campaign-body">
+            <span className="placement-campaign-title">
+              <span className={"placement-campaign-state " + stateTone} title={stateTitle}>{stateLabel}</span>
+              <strong title={campaign.name}>{campaign.name}</strong>
+            </span>
+            <small>
+              <span>消耗 ¥{money.format(campaign.spend)}</span>
+              <span>{campaign.cost === null ? "成本 --" : "成本 ¥" + money.format(campaign.cost)}</span>
+              {stopped ? <span className="placement-campaign-spend-stopped">近一天 0</span> : <span>近一天 ¥{money.format(campaign.latest_spend)}</span>}
+            </small>
+          </span>
+        </label>
+      </li>;
+    })}
+  </ul>;
+}
+
+function PlacementNoteTable({ notes, placement, label, selectedCampaignKeys, onToggleNote, onToggleCampaign, onToggleAllNotes }: {
   notes: ContentNote[];
   placement: Placement;
   label: string;
+  selectedCampaignKeys: Set<string>;
+  onToggleNote: (note: ContentNote, checked: boolean) => void;
+  onToggleCampaign: (noteID: string, campaignName: string, checked: boolean) => void;
+  onToggleAllNotes: (checked: boolean) => void;
 }) {
+  const pageCampaignKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const note of notes) {
+      for (const campaign of noteCampaigns(note, placement)) {
+        keys.push(campaignKey(note.note_id, campaign.name));
+      }
+    }
+    return keys;
+  }, [notes, placement]);
+  const selectedOnPage = pageCampaignKeys.filter((key) => selectedCampaignKeys.has(key)).length;
+  const allChecked = pageCampaignKeys.length > 0 && selectedOnPage === pageCampaignKeys.length;
+  const someChecked = selectedOnPage > 0 && !allChecked;
+
   return <div className="content-note-table-wrap"><table className={"content-note-table content-note-table-summary placement-note-table placement-note-table-" + placement} aria-label={label}>
     <thead><tr>
+      <th className="placement-note-select-col">
+        <input
+          type="checkbox"
+          checked={allChecked}
+          ref={(element) => {
+            if (element) element.indeterminate = someChecked;
+          }}
+          disabled={pageCampaignKeys.length === 0}
+          aria-label="全选本页笔记计划"
+          onChange={(event) => onToggleAllNotes(event.target.checked)}
+        />
+      </th>
       <th>笔记</th>
       <th>机构与标签</th>
+      <th>计划</th>
       <th>站外成本 15 天</th>
       {placement === "search" ? <th>搜索累计消耗 · 成本</th> : <th>信息流累计消耗 · 成本</th>}
       {placement === "search" ? <th>回搜成本变化</th> : null}
     </tr></thead>
     <tbody>{notes.map((note) => {
       const noteURL = safeURL(note.url);
+      const campaigns = noteCampaigns(note, placement);
+      const noteCampaignKeys = campaigns.map((campaign) => campaignKey(note.note_id, campaign.name));
+      const selectedCount = noteCampaignKeys.filter((key) => selectedCampaignKeys.has(key)).length;
+      const noteChecked = noteCampaignKeys.length > 0 && selectedCount === noteCampaignKeys.length;
+      const notePartial = selectedCount > 0 && !noteChecked;
       return <tr key={note.note_id}>
+        <td className="placement-note-select-col">
+          <input
+            type="checkbox"
+            checked={noteChecked}
+            ref={(element) => {
+              if (element) element.indeterminate = notePartial;
+            }}
+            disabled={noteCampaignKeys.length === 0}
+            aria-label={"选择笔记 " + note.note_id}
+            onChange={(event) => onToggleNote(note, event.target.checked)}
+          />
+        </td>
         <td><div className="content-note-identity">
           {noteURL ? <a className="content-note-title" href={noteURL} target="_blank" rel="noreferrer" title={note.title}>{note.title}<ExternalLink size={12} /></a> : <strong className="content-note-title" title={note.title}>{note.title}</strong>}
           <Link className="content-note-id" to={noteCampaignAnalysisPath(note.note_id)} title="查看笔记计划分析" aria-label={"查看笔记计划分析 " + note.note_id}>{note.note_id}</Link>
           <small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
         </div></td>
-        <td><div className="content-note-labels placement-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span></div></td>
+        <td><div className="content-note-labels placement-note-labels"><strong>{note.agency}</strong><span>{note.content_type}</span><span>{note.audience}</span><span>{note.scenario}</span></div></td>
+        <td><PlacementCampaigns noteID={note.note_id} campaigns={campaigns} selectedKeys={selectedCampaignKeys} onToggleCampaign={onToggleCampaign} /></td>
         <td className={note.boom ? "metric-good" : ""}>{note.dandelion_cost === null || note.dandelion_cost <= 0 ? "--" : "¥" + money.format(note.dandelion_cost)}</td>
         {placement === "search"
           ? <td><PlacementMetric spend={note.search_spend} cost={note.search_cost} qualified={note.search_qualified} stopped={note.search_stopped} /></td>
@@ -168,12 +303,14 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
   const [result, setResult] = useState<ContentResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedCampaignKeys, setSelectedCampaignKeys] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     setNoteSort(defaultSort);
     setCostFilters([]);
     setNoteIDQuery("");
     setNotePage(1);
+    setSelectedCampaignKeys(new Set());
   }, [defaultSort, placement]);
 
   useEffect(() => {
@@ -188,6 +325,7 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
         const payload = await response.json() as { success: boolean; data?: ContentResult; error?: string };
         if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error || pageTitle + "笔记读取失败");
         setResult(payload.data);
+        setSelectedCampaignKeys(new Set());
       })
       .catch((fetchError) => {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") return;
@@ -245,9 +383,46 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
     feedStopped: placementNotes.filter((note) => note.feed_stopped).length
   }), [feedCostLimit, placementNotes, searchCostLimit]);
   const sortLabel = NOTE_SORT_OPTIONS.find((option) => option.value === noteSort)?.label ?? (placement === "search" ? "搜索累计消耗" : "信息流累计消耗");
+  const selectedCampaignCount = selectedCampaignKeys.size;
 
   const toggleCostFilter = (value: CostFilter) => {
     setCostFilters((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  };
+
+  const toggleCampaign = (noteID: string, campaignName: string, checked: boolean) => {
+    const key = campaignKey(noteID, campaignName);
+    setSelectedCampaignKeys((current) => {
+      const next = new Set(current);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const toggleNote = (note: ContentNote, checked: boolean) => {
+    const keys = noteCampaigns(note, placement).map((campaign) => campaignKey(note.note_id, campaign.name));
+    setSelectedCampaignKeys((current) => {
+      const next = new Set(current);
+      for (const key of keys) {
+        if (checked) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllNotes = (checked: boolean) => {
+    setSelectedCampaignKeys((current) => {
+      const next = new Set(current);
+      for (const note of pagedVisibleNotes) {
+        for (const campaign of noteCampaigns(note, placement)) {
+          const key = campaignKey(note.note_id, campaign.name);
+          if (checked) next.add(key);
+          else next.delete(key);
+        }
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -295,7 +470,7 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
     {!loading && result ? <section className="content-note-section" ref={noteSectionRef}>
       <header>
         <div><h2>笔记表现</h2><p>默认按{pageTitle}累计消耗降序；回搜成本变化 = 当日回搜成本 − 累计回搜成本</p></div>
-        <span>{integer.format(visibleNotes.length)} 篇笔记</span>
+        <span>{integer.format(visibleNotes.length)} 篇笔记{selectedCampaignCount > 0 ? " · 已选 " + integer.format(selectedCampaignCount) + " 个计划" : ""}</span>
       </header>
       <div className="content-note-controls">
         <div className="content-note-sort">
@@ -343,7 +518,15 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
         </div>
       </div>
       {visibleNotes.length === 0 ? <div className="content-note-section-empty">当前筛选条件下暂无{pageTitle}笔记</div> : <>
-        <PlacementNoteTable notes={pagedVisibleNotes} placement={placement} label={"按" + sortLabel + "排序的笔记"} />
+        <PlacementNoteTable
+          notes={pagedVisibleNotes}
+          placement={placement}
+          label={"按" + sortLabel + "排序的笔记"}
+          selectedCampaignKeys={selectedCampaignKeys}
+          onToggleNote={toggleNote}
+          onToggleCampaign={toggleCampaign}
+          onToggleAllNotes={toggleAllNotes}
+        />
         <nav className="content-note-pagination" aria-label="笔记分页">
           <span>共 {integer.format(visibleNotes.length)} 篇 · 每页 {NOTE_PAGE_SIZE} 篇</span>
           <div className="content-note-pagination-controls">

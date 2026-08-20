@@ -2,6 +2,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 type Dimension = "audience" | "scenario";
 
+function campaign(
+  name: string,
+  spend: number,
+  cost: number | null,
+  latestSpend = spend,
+  extras: { campaign_id?: number | null; filter_state?: number | null; enable?: number | null } = {}
+) {
+  return {
+    name,
+    spend,
+    cost,
+    latest_spend: latestSpend,
+    campaign_id: extras.campaign_id ?? null,
+    filter_state: extras.filter_state ?? null,
+    enable: extras.enable ?? null
+  };
+}
+
 function makeNote(id: string, overrides: Record<string, unknown> = {}) {
   return {
     note_id: id,
@@ -25,6 +43,8 @@ function makeNote(id: string, overrides: Record<string, unknown> = {}) {
     feed_qualified: false,
     latest_search_spend: 0,
     latest_feed_spend: 0,
+    search_campaigns: [],
+    feed_campaigns: [],
     search_stopped: false,
     feed_stopped: false,
     ...overrides
@@ -43,14 +63,26 @@ function makeResult(spu: string, agency: string, dimension: Dimension, published
   }));
   const notes = [
     makeNote("note-search", {
-      search_spend: 480, search_cost: 24, latest_search_cost: 28, search_cost_change: 4, search_qualified: true, latest_search_spend: 12
+      search_spend: 480, search_cost: 24, latest_search_cost: 28, search_cost_change: 4, search_qualified: true, latest_search_spend: 12,
+      search_campaigns: [
+        campaign("辅酶搜索计划", 360, 22, 10, { campaign_id: 101, filter_state: 1, enable: 1 }),
+        campaign("回搜计划", 120, 28, 2, { campaign_id: 102, filter_state: 2, enable: 0 })
+      ],
+      feed_campaigns: [campaign("辅酶信息流计划", 80, 40, 5, { campaign_id: 201, filter_state: 1, enable: 1 })]
     }),
     makeNote("note-feed", {
-      title: "一周辅酶记录", feed_spend: 500, feed_cost: 88, feed_qualified: false, feed_stopped: true
+      title: "一周辅酶记录", feed_spend: 500, feed_cost: 88, feed_qualified: false, feed_stopped: true,
+      feed_campaigns: [
+        campaign("辅酶信息流计划", 320, 90, 0, { campaign_id: 201, filter_state: 2, enable: 0 }),
+        campaign("信息流放大计划", 180, 70, 0, { campaign_id: 202, filter_state: 8, enable: 0 })
+      ],
+      search_campaigns: [campaign("辅酶搜索计划", 40, 20, 1, { campaign_id: 101, filter_state: 1, enable: 1 })]
     }),
     makeNote("note-both", {
       title: "双场域笔记", search_spend: 80, search_cost: 18, latest_search_cost: 16, search_cost_change: -2,
-      search_qualified: true, feed_spend: 90, feed_cost: 50, feed_qualified: true
+      search_qualified: true, feed_spend: 90, feed_cost: 50, feed_qualified: true,
+      search_campaigns: [campaign("双场域搜索计划", 80, 18, 8, { campaign_id: 301, filter_state: 1, enable: 1 })],
+      feed_campaigns: [campaign("双场域信息流计划", 90, 50, 12, { campaign_id: 302, filter_state: 4, enable: 1 })]
     }),
     ...searchNotes
   ];
@@ -133,11 +165,50 @@ test("search placement page lists only search notes with narrowed columns", asyn
   await expect(page.getByRole("button", { name: "搜索累计消耗" })).toHaveClass(/active/);
 
   const table = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" });
-  await expect(table.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "搜索累计消耗 · 成本", "回搜成本变化"]);
+  await expect(table.getByRole("columnheader")).toHaveText(["", "笔记", "机构与标签", "计划", "站外成本 15 天", "搜索累计消耗 · 成本", "回搜成本变化"]);
   await expect(table).not.toContainText("薯量 ROI");
   await expect(table).not.toContainText("信息流累计消耗");
   await expect(table.locator("tbody tr")).toHaveCount(20);
   await expect(table.locator("tbody tr").first()).toContainText("通勤精力管理实测");
+  await expect(table.locator("tbody tr").first()).toContainText("辅酶搜索计划");
+  await expect(table.locator("tbody tr").first()).toContainText("回搜计划");
+  await expect(table.locator("tbody tr").first().locator(".placement-campaign-state.healthy").first()).toHaveText("有效");
+  await expect(table.locator("tbody tr").first().locator(".placement-campaign-state.paused").first()).toHaveText("暂停");
+  await expect(table.locator("tbody tr").first()).toContainText("消耗 ¥360.00");
+  await expect(table.locator("tbody tr").first()).toContainText("成本 ¥22.00");
+  await expect(table.locator("tbody tr").first()).not.toContainText("辅酶信息流计划");
+  await expect(table.getByRole("checkbox", { name: "全选本页笔记计划" })).toBeVisible();
+  await expect(table.getByRole("checkbox", { name: "选择笔记 note-search" })).toBeVisible();
+  await expect(table.getByRole("checkbox", { name: "选择计划 辅酶搜索计划" })).toBeVisible();
+  const firstSearchRow = table.locator("tbody tr").first();
+  await expect.poll(async () => firstSearchRow.evaluate((row) => {
+    const checkbox = row.querySelector("td:first-child");
+    const labels = row.querySelector(".placement-note-labels");
+    const campaigns = row.querySelector(".placement-note-campaigns");
+    const title = row.querySelector(".content-note-title");
+    const state = row.querySelector(".placement-campaign-state");
+    if (!(checkbox instanceof HTMLElement) || !(labels instanceof HTMLElement) || !(campaigns instanceof HTMLElement) || !(title instanceof HTMLElement) || !(state instanceof HTMLElement)) return false;
+    const visibleBox = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 8 && rect.height > 8 && getComputedStyle(element).opacity !== "0" && getComputedStyle(element).visibility !== "hidden";
+    };
+    return checkbox.getBoundingClientRect().width <= 24
+      && visibleBox(labels)
+      && visibleBox(campaigns)
+      && visibleBox(title)
+      && visibleBox(state)
+      && row.getBoundingClientRect().height > 70
+      && campaigns.querySelectorAll(".placement-campaign-card").length >= 2;
+  })).toBe(true);
+  await table.getByRole("checkbox", { name: "选择笔记 note-search" }).check();
+  await expect(table.getByRole("checkbox", { name: "选择计划 辅酶搜索计划" })).toBeChecked();
+  await expect(table.getByRole("checkbox", { name: "选择计划 回搜计划" })).toBeChecked();
+  await expect(page.getByText("已选 2 个计划")).toBeVisible();
+  await table.getByRole("checkbox", { name: "选择计划 回搜计划" }).uncheck();
+  await expect(page.getByText("已选 1 个计划")).toBeVisible();
+  await table.getByRole("checkbox", { name: "全选本页笔记计划" }).check();
+  await expect(page.getByText(/已选 \d+ 个计划/)).toBeVisible();
+  await expect(table.getByRole("checkbox", { name: "选择计划 辅酶搜索计划" })).toBeChecked();
   await expect(table.getByRole("link", { name: "查看笔记计划分析 note-search" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-search");
   await expect(table).not.toContainText("一周辅酶记录");
   await expect(page.getByRole("button", { name: "搜索成本不达标" })).toContainText("1");
@@ -198,15 +269,29 @@ test("feed placement page lists only feed notes without ROI or search columns", 
   await expect(page.getByRole("button", { name: "信息流累计消耗" })).toHaveClass(/active/);
 
   const table = page.getByRole("table", { name: "按信息流累计消耗排序的笔记" });
-  await expect(table.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "信息流累计消耗 · 成本"]);
+  await expect(table.getByRole("columnheader")).toHaveText(["", "笔记", "机构与标签", "计划", "站外成本 15 天", "信息流累计消耗 · 成本"]);
   await expect(table).not.toContainText("薯量 ROI");
   await expect(table).not.toContainText("搜索累计消耗");
   await expect(table).not.toContainText("回搜成本变化");
   await expect(table.locator("tbody tr")).toHaveCount(2);
   await expect(table.locator("tbody tr").first()).toContainText("一周辅酶记录");
+  await expect(table.locator("tbody tr").first()).toContainText("辅酶信息流计划");
+  await expect(table.locator("tbody tr").first()).toContainText("信息流放大计划");
+  await expect(table.locator("tbody tr").first().locator(".placement-campaign-state.paused").first()).toHaveText("暂停");
+  await expect(table.locator("tbody tr").first()).toContainText("暂停阶段");
+  await expect(table.locator("tbody tr").first()).toContainText("消耗 ¥320.00");
+  await expect(table.locator("tbody tr").first()).not.toContainText("辅酶搜索计划");
   await expect(table.locator("tbody tr").first().locator(".content-note-stopped")).toHaveText("已停投");
+  await expect(table.locator("tbody tr").first().locator(".placement-campaign-card.stopped").first()).toContainText("近一天 0");
+  await expect(table.getByRole("checkbox", { name: "选择笔记 note-feed" })).toBeVisible();
+  await expect(table.getByRole("checkbox", { name: "选择计划 辅酶信息流计划" })).toBeVisible();
   await expect(table).toContainText("双场域笔记");
+  await expect(table).toContainText("双场域信息流计划");
   await expect(table).not.toContainText("通勤精力管理实测");
+  await table.getByRole("checkbox", { name: "选择笔记 note-feed" }).check();
+  await expect(table.getByRole("checkbox", { name: "选择计划 辅酶信息流计划" })).toBeChecked();
+  await expect(table.getByRole("checkbox", { name: "选择计划 信息流放大计划" })).toBeChecked();
+  await expect(page.getByText("已选 2 个计划")).toBeVisible();
   await expect(page.getByRole("button", { name: "信息流成本不达标" })).toContainText("1");
   await expect(page.getByRole("button", { name: "信息流已停投" })).toContainText("1");
   await expect(page.getByRole("button", { name: "搜索成本不达标" })).toHaveCount(0);

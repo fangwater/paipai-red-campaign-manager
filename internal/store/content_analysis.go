@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
@@ -175,6 +176,128 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			LEFT JOIN maituo_latest_search latest ON latest.note_id=placements.note_id
 			LEFT JOIN maituo_latest_daily latest_daily ON latest_daily.note_id=placements.note_id
 			GROUP BY placements.note_id
+		), maituo_campaign_stats AS (
+			SELECT LOWER(BTRIM(note_id)) AS note_id, placement,
+				regexp_replace(BTRIM(campaign_name, E' \n\r\t　'), '\s+', ' ', 'g') AS campaign_name,
+				SUM(spend)::DOUBLE PRECISION AS spend,
+				CASE WHEN placement='搜索'
+					THEN (SUM(spend)/NULLIF(SUM(search_users),0))::DOUBLE PRECISION
+					ELSE (SUM(spend)/NULLIF(SUM(CASE WHEN estimated_postback_cost>0
+						THEN spend/estimated_postback_cost END),0))::DOUBLE PRECISION
+				END AS cost,
+				COALESCE(SUM(spend) FILTER (
+					WHERE report_date = (SELECT MAX(report_date) FROM maituo_customer_daily_notes WHERE deleted_at IS NULL)
+				), 0)::DOUBLE PRECISION AS latest_spend
+			FROM maituo_customer_daily_notes
+			WHERE deleted_at IS NULL AND placement IN ('搜索','信息流') AND NULLIF(BTRIM(campaign_name, E' \n\r\t　'),'') IS NOT NULL
+			GROUP BY LOWER(BTRIM(note_id)), placement, regexp_replace(BTRIM(campaign_name, E' \n\r\t　'), '\s+', ' ', 'g')
+		), xhs_campaign_status AS (
+			SELECT DISTINCT ON (
+				LOWER(BTRIM(creativity.note_id)),
+				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END,
+				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g')
+			)
+				LOWER(BTRIM(creativity.note_id)) AS note_id,
+				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END AS placement,
+				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g') AS campaign_name,
+				campaign.campaign_id,
+				campaign.campaign_filter_state,
+				campaign.campaign_enable
+			FROM xhs_jg_creativities creativity
+			JOIN xhs_jg_campaigns campaign
+			  ON campaign.advertiser_id=creativity.advertiser_id
+			 AND campaign.campaign_id=creativity.campaign_id
+			 AND campaign.deleted_at IS NULL
+			WHERE creativity.deleted_at IS NULL
+			  AND NULLIF(BTRIM(creativity.note_id),'') IS NOT NULL
+			  AND campaign.placement IN (1, 2)
+			  AND NULLIF(BTRIM(campaign.campaign_name, E' \n\r\t　'),'') IS NOT NULL
+			ORDER BY
+				LOWER(BTRIM(creativity.note_id)),
+				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END,
+				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g'),
+				campaign.synced_at DESC NULLS LAST,
+				campaign.campaign_id DESC
+		), xhs_named_campaigns AS (
+			SELECT DISTINCT ON (
+				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END,
+				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g')
+			)
+				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END AS placement,
+				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g') AS campaign_name,
+				campaign.campaign_id,
+				campaign.campaign_filter_state,
+				campaign.campaign_enable
+			FROM xhs_jg_campaigns campaign
+			WHERE campaign.deleted_at IS NULL
+			  AND campaign.placement IN (1, 2)
+			  AND NULLIF(BTRIM(campaign.campaign_name, E' \n\r\t　'),'') IS NOT NULL
+			ORDER BY
+				CASE campaign.placement WHEN 1 THEN '信息流' WHEN 2 THEN '搜索' END,
+				regexp_replace(BTRIM(campaign.campaign_name, E' \n\r\t　'), '\s+', ' ', 'g'),
+				campaign.synced_at DESC NULLS LAST,
+				campaign.campaign_id DESC
+		), maituo_campaigns AS (
+			SELECT stats.note_id,
+				COALESCE(JSONB_AGG(
+					JSONB_BUILD_OBJECT(
+						'name', stats.campaign_name,
+						'spend', stats.spend,
+						'cost', stats.cost,
+						'latest_spend', stats.latest_spend,
+						'campaign_id', xhs.campaign_id,
+						'filter_state', xhs.campaign_filter_state,
+						'enable', xhs.campaign_enable
+					)
+					ORDER BY stats.spend DESC, stats.campaign_name
+				) FILTER (WHERE stats.placement='搜索'), '[]'::jsonb) AS search_campaigns,
+				COALESCE(JSONB_AGG(
+					JSONB_BUILD_OBJECT(
+						'name', stats.campaign_name,
+						'spend', stats.spend,
+						'cost', stats.cost,
+						'latest_spend', stats.latest_spend,
+						'campaign_id', xhs.campaign_id,
+						'filter_state', xhs.campaign_filter_state,
+						'enable', xhs.campaign_enable
+					)
+					ORDER BY stats.spend DESC, stats.campaign_name
+				) FILTER (WHERE stats.placement='信息流'), '[]'::jsonb) AS feed_campaigns
+			FROM maituo_campaign_stats stats
+			LEFT JOIN LATERAL (
+				SELECT matched.campaign_id, matched.campaign_filter_state, matched.campaign_enable
+				FROM (
+					SELECT xhs.campaign_id, xhs.campaign_filter_state, xhs.campaign_enable,
+						CASE
+							WHEN xhs.campaign_name=stats.campaign_name THEN 0
+							WHEN xhs.campaign_name LIKE '%-' || stats.campaign_name THEN 1
+							WHEN stats.campaign_name LIKE '%-' || xhs.campaign_name THEN 2
+							ELSE 3
+						END AS match_rank,
+						ABS(LENGTH(xhs.campaign_name) - LENGTH(stats.campaign_name)) AS name_distance
+					FROM xhs_campaign_status xhs
+					WHERE xhs.note_id=stats.note_id
+					  AND xhs.placement=stats.placement
+					UNION ALL
+					SELECT named.campaign_id, named.campaign_filter_state, named.campaign_enable,
+						CASE
+							WHEN named.campaign_name=stats.campaign_name THEN 4
+							WHEN named.campaign_name LIKE '%-' || stats.campaign_name THEN 5
+							ELSE 6
+						END AS match_rank,
+						ABS(LENGTH(named.campaign_name) - LENGTH(stats.campaign_name)) AS name_distance
+					FROM xhs_named_campaigns named
+					WHERE named.placement=stats.placement
+					  AND (
+						named.campaign_name=stats.campaign_name
+						OR named.campaign_name LIKE '%-' || stats.campaign_name
+						OR stats.campaign_name LIKE '%-' || named.campaign_name
+					  )
+				) matched
+				ORDER BY matched.match_rank, matched.name_distance, matched.campaign_id DESC
+				LIMIT 1
+			) xhs ON TRUE
+			GROUP BY stats.note_id
 		), latest_guorai AS (
 			SELECT id FROM guorai_fetch_runs
 			WHERE entity_type='note' AND status='succeeded'
@@ -194,6 +317,8 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			COALESCE(maituo.search_spend,0), maituo.search_cost, maituo.latest_search_cost,
 			COALESCE(maituo.feed_spend,0), maituo.feed_cost,
 			COALESCE(maituo.latest_search_spend,0), COALESCE(maituo.latest_feed_spend,0),
+			COALESCE(maituo_campaigns.search_campaigns, '[]'::jsonb),
+			COALESCE(maituo_campaigns.feed_campaigns, '[]'::jsonb),
 			guorai.roi
 		FROM pgy
 		LEFT JOIN LATERAL (
@@ -204,6 +329,7 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 			LIMIT 1
 		) execution ON TRUE
 		LEFT JOIN maituo ON maituo.note_id=LOWER(BTRIM(pgy.note_id))
+		LEFT JOIN maituo_campaigns ON maituo_campaigns.note_id=LOWER(BTRIM(pgy.note_id))
 		LEFT JOIN guorai ON guorai.note_id=LOWER(BTRIM(pgy.note_id))
 		ORDER BY pgy.agency, pgy.note_id
 	`, "%"+query.SPU+"%", query.Agency, query.PublishedStartDate, query.PublishedEndDate)
@@ -214,14 +340,25 @@ func (p *Postgres) loadContentAnalysisNotes(ctx context.Context, query model.Con
 	notes := []model.ContentAnalysisNote{}
 	for rows.Next() {
 		var note model.ContentAnalysisNote
+		var searchCampaignsJSON, feedCampaignsJSON []byte
 		if err := rows.Scan(
 			&note.NoteID, &note.Title, &note.URL, &note.Author, &note.PublishedDate, &note.Agency,
 			&note.ContentType, &note.Audience, &note.Scenario, &note.DandelionCost,
 			&note.SearchSpend, &note.SearchCost, &note.LatestSearchCost, &note.FeedSpend, &note.FeedCost,
-			&note.LatestSearchSpend, &note.LatestFeedSpend, &note.ROI,
+			&note.LatestSearchSpend, &note.LatestFeedSpend, &searchCampaignsJSON, &feedCampaignsJSON, &note.ROI,
 		); err != nil {
 			return nil, fmt.Errorf("scan content analysis note: %w", err)
 		}
+		searchCampaigns, decodeErr := decodeContentAnalysisCampaigns(searchCampaignsJSON)
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode search campaigns for %s: %w", note.NoteID, decodeErr)
+		}
+		feedCampaigns, decodeErr := decodeContentAnalysisCampaigns(feedCampaignsJSON)
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode feed campaigns for %s: %w", note.NoteID, decodeErr)
+		}
+		note.SearchCampaigns = searchCampaigns
+		note.FeedCampaigns = feedCampaigns
 		if note.Title == "" {
 			note.Title = note.NoteID
 		}
@@ -403,6 +540,20 @@ func normalizeContentAnalysisLabel(kind, value string) string {
 
 func contentAnalysisStopped(latestSpend float64) bool {
 	return latestSpend <= 0
+}
+
+func decodeContentAnalysisCampaigns(raw []byte) ([]model.ContentAnalysisCampaign, error) {
+	if len(raw) == 0 {
+		return []model.ContentAnalysisCampaign{}, nil
+	}
+	campaigns := []model.ContentAnalysisCampaign{}
+	if err := json.Unmarshal(raw, &campaigns); err != nil {
+		return nil, err
+	}
+	if campaigns == nil {
+		return []model.ContentAnalysisCampaign{}, nil
+	}
+	return campaigns, nil
 }
 
 func contentAnalysisSearchCostChange(latest, cumulative *float64) *float64 {
