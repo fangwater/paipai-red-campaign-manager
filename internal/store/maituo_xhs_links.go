@@ -21,14 +21,13 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 	offset := (query.Page - 1) * query.PageSize
 	rows, err := p.pool.Query(ctx, `
 		WITH daily AS (
-			SELECT note_id, campaign_name, placement,
-				ARRAY_AGG(DISTINCT subaccount ORDER BY subaccount) AS subaccounts,
+			SELECT note_id, placement,
 				SUM(spend)::DOUBLE PRECISION AS spend,
 				SUM(search_users)::BIGINT AS search_users,
 				SUM(COALESCE(search_cost, 0))::DOUBLE PRECISION AS search_cost
 			FROM maituo_customer_daily_notes
 			WHERE report_date=$1::DATE AND deleted_at IS NULL
-			GROUP BY note_id, campaign_name, placement
+			GROUP BY note_id, placement
 		), filtered AS (
 			SELECT daily.*
 			FROM daily
@@ -41,10 +40,9 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 				 AND campaign.deleted_at IS NULL
 				WHERE creativity.deleted_at IS NULL
 				  AND creativity.note_id=daily.note_id
-				  AND campaign.campaign_name=daily.campaign_name
 				  AND ((daily.placement='信息流' AND campaign.placement=1) OR (daily.placement='搜索' AND campaign.placement=2))
 			)
-			AND ($2='%%' OR daily.note_id ILIKE $2 OR daily.campaign_name ILIKE $2 OR daily.placement ILIKE $2
+			AND ($2='%%' OR daily.note_id ILIKE $2 OR daily.placement ILIKE $2
 			  OR EXISTS (
 				SELECT 1
 				FROM xhs_jg_creativities creativity
@@ -57,17 +55,17 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 				  ON unit.advertiser_id=creativity.advertiser_id AND unit.unit_id=creativity.unit_id AND unit.deleted_at IS NULL
 				WHERE creativity.deleted_at IS NULL
 				  AND creativity.note_id=daily.note_id
-				  AND campaign.campaign_name=daily.campaign_name
 				  AND ((daily.placement='信息流' AND campaign.placement=1) OR (daily.placement='搜索' AND campaign.placement=2))
-				  AND (advertiser.advertiser_name ILIKE $2 OR campaign.campaign_id::TEXT ILIKE $2
+				  AND (advertiser.advertiser_name ILIKE $2 OR campaign.campaign_name ILIKE $2
+				    OR campaign.campaign_id::TEXT ILIKE $2
 				    OR unit.unit_id::TEXT ILIKE $2 OR unit.unit_name ILIKE $2
 				    OR creativity.creativity_id::TEXT ILIKE $2 OR creativity.creativity_name ILIKE $2)
 			  ))
 		)
-		SELECT note_id, campaign_name, placement, subaccounts, spend, search_users, search_cost,
+		SELECT note_id, placement, spend, search_users, search_cost,
 			COUNT(*) OVER()::INTEGER
 		FROM filtered
-		ORDER BY spend DESC, search_users DESC, note_id, campaign_name, placement
+		ORDER BY spend DESC, search_users DESC, note_id, placement
 		LIMIT $3 OFFSET $4
 	`, result.ReportDate, searchPattern, query.PageSize, offset)
 	if err != nil {
@@ -75,12 +73,13 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 	}
 	for rows.Next() {
 		var item maituo.XHSLinkItem
-		if err := rows.Scan(&item.NoteID, &item.CampaignName, &item.Placement, &item.Subaccounts, &item.Spend, &item.SearchUsers, &item.SearchCost, &result.Total); err != nil {
+		if err := rows.Scan(&item.NoteID, &item.Placement, &item.Spend, &item.SearchUsers, &item.SearchCost, &result.Total); err != nil {
 			rows.Close()
 			return result, fmt.Errorf("scan Maituo XHS link key: %w", err)
 		}
 		item.Spend = roundMaituoMoney(item.Spend)
 		item.SearchCost = roundMaituoMoney(item.SearchCost)
+		// Daily metrics belong to this note-placement; real plans are returned in Matches.
 		item.Matches = []maituo.XHSLinkMatch{}
 		result.Items = append(result.Items, item)
 	}
@@ -94,17 +93,15 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 	}
 
 	noteIDs := make([]string, len(result.Items))
-	campaignNames := make([]string, len(result.Items))
 	placements := make([]string, len(result.Items))
 	for index := range result.Items {
 		noteIDs[index] = result.Items[index].NoteID
-		campaignNames[index] = result.Items[index].CampaignName
 		placements[index] = result.Items[index].Placement
 	}
 	linkRows, err := p.pool.Query(ctx, `
 		WITH selected_keys AS (
-			SELECT * FROM unnest($1::TEXT[], $2::TEXT[], $3::TEXT[])
-				WITH ORDINALITY AS key(note_id, campaign_name, placement, ordinal)
+			SELECT * FROM unnest($1::TEXT[], $2::TEXT[])
+				WITH ORDINALITY AS key(note_id, placement, ordinal)
 		)
 		SELECT key.ordinal::INTEGER,
 			advertiser.advertiser_id, advertiser.advertiser_name,
@@ -129,13 +126,13 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 		JOIN xhs_jg_creativities creativity ON creativity.note_id=key.note_id AND creativity.deleted_at IS NULL
 		JOIN xhs_jg_campaigns campaign
 		  ON campaign.advertiser_id=creativity.advertiser_id AND campaign.campaign_id=creativity.campaign_id
-		 AND campaign.campaign_name=key.campaign_name AND campaign.deleted_at IS NULL
+		 AND campaign.deleted_at IS NULL
 		 AND ((key.placement='信息流' AND campaign.placement=1) OR (key.placement='搜索' AND campaign.placement=2))
 		JOIN xhs_jg_advertisers advertiser ON advertiser.advertiser_id=campaign.advertiser_id
 		LEFT JOIN xhs_jg_units unit
 		  ON unit.advertiser_id=creativity.advertiser_id AND unit.unit_id=creativity.unit_id AND unit.deleted_at IS NULL
 		ORDER BY key.ordinal, advertiser.advertiser_id, campaign.campaign_id, creativity.unit_id, creativity.creativity_id
-	`, noteIDs, campaignNames, placements)
+	`, noteIDs, placements)
 	if err != nil {
 		return result, fmt.Errorf("query linked XHS entities: %w", err)
 	}

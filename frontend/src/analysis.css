@@ -54,18 +54,17 @@
 .sort-segmented button:hover { color: #252a2e; }
 .sort-segmented button.active { background: #fff; color: #236c57; box-shadow: 0 1px 3px rgba(27, 34, 31, .12); }
 .analysis-table-wrap { overflow-x: auto; }
-.analysis-table { width: 100%; min-width: 1276px; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
+.analysis-table { width: 100%; min-width: 916px; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
 .analysis-table th, .analysis-table td { height: 46px; padding: 0 12px; overflow: hidden; border-bottom: 1px solid #eceeef; color: #50575d; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .analysis-table th { height: 36px; background: #f7f8f9; color: #737a80; font-size: 9px; font-weight: 650; }
-.analysis-table th:first-child, .analysis-table td:first-child, .analysis-table th:nth-child(2), .analysis-table td:nth-child(2), .analysis-table th:nth-child(3), .analysis-table td:nth-child(3) { text-align: left; }
+.analysis-table th:first-child, .analysis-table td:first-child, .analysis-table th:nth-child(2), .analysis-table td:nth-child(2) { text-align: left; }
 .analysis-table th:first-child { width: 184px; }
-.analysis-table th:nth-child(2) { width: 360px; }
-.analysis-table th:nth-child(3) { width: 82px; }
-.analysis-table th:nth-child(4) { width: 86px; }
-.analysis-table th:nth-child(5), .analysis-table th:nth-child(6) { width: 112px; }
-.analysis-table th:nth-child(7) { width: 118px; }
-.analysis-table th:nth-child(8) { width: 122px; }
-.analysis-table th:nth-child(9) { width: 116px; }
+.analysis-table th:nth-child(2) { width: 82px; }
+.analysis-table th:nth-child(3) { width: 86px; }
+.analysis-table th:nth-child(4), .analysis-table th:nth-child(5) { width: 112px; }
+.analysis-table th:nth-child(6) { width: 118px; }
+.analysis-table th:nth-child(7) { width: 122px; }
+.analysis-table th:nth-child(8) { width: 116px; }
 .analysis-table tbody tr { cursor: pointer; transition: background .14s; }
 .analysis-table tbody tr:hover { background: #f8faf9; }
 .analysis-table tbody tr.selected { background: #eef6f2; box-shadow: inset 3px 0 #2f7d67; }

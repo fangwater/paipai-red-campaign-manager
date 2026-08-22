@@ -20,10 +20,15 @@ const (
 type maituoImportStore interface {
 	ImportMaituoCustomerDaily(context.Context, maituo.Snapshot) (maituo.ImportResult, error)
 	SavedMaituoImports(context.Context) ([]maituo.SavedImport, error)
+	MaituoDailyNotes(context.Context, time.Time) (maituo.DailyNoteReport, error)
 }
 
 func (server *apiServer) importMaituoCustomerDaily(writer http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodGet {
+		if strings.TrimSpace(request.URL.Query().Get("report_date")) != "" {
+			server.getMaituoDailyNotes(writer, request)
+			return
+		}
 		server.listSavedMaituoImports(writer, request)
 		return
 	}
@@ -98,4 +103,20 @@ func (server *apiServer) listSavedMaituoImports(writer http.ResponseWriter, requ
 		return
 	}
 	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: items})
+}
+
+func (server *apiServer) getMaituoDailyNotes(writer http.ResponseWriter, request *http.Request) {
+	reportDate, err := time.Parse(time.DateOnly, strings.TrimSpace(request.URL.Query().Get("report_date")))
+	if err != nil {
+		writeJSON(writer, http.StatusBadRequest, apiResponse{Success: false, Error: "report_date 必须是 YYYY-MM-DD 格式"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), server.timeout)
+	defer cancel()
+	result, err := server.maituoImport.MaituoDailyNotes(ctx, reportDate)
+	if err != nil {
+		writeJSON(writer, http.StatusBadGateway, apiResponse{Success: false, Error: err.Error()})
+		return
+	}
+	writeJSON(writer, http.StatusOK, apiResponse{Success: true, Data: result})
 }

@@ -23,7 +23,6 @@ type AnalysisPoint = {
 
 type AnalysisItem = {
   note_id: string;
-  campaign_name: string;
   placement: string;
   first_report_date: string;
   last_report_date: string;
@@ -103,7 +102,7 @@ function formatCostChange(value: number): string {
 }
 
 function itemKey(item: AnalysisItem): string {
-  return `${item.note_id}\u0000${item.campaign_name}\u0000${item.placement}`;
+  return `${item.note_id}\u0000${item.placement}`;
 }
 
 function compactNumber(value: number): string {
@@ -378,14 +377,14 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
 
   return <>
     <section className="page-heading analysis-page-heading">
-      <div><h1>笔记计划分析</h1><p>笔记ID + 计划 + 场域</p></div>
+      <div><h1>笔记场域分析</h1><p>笔记ID + 场域</p></div>
       <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "分析服务已连接" : serviceState === "offline" ? "分析服务未连接" : "正在检查连接"}</div>
     </section>
 
     <section className="analysis-toolbar">
       <div className="analysis-query-controls">
-        <label className="analysis-search"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索笔记ID、计划或场域" /></label>
-        {planID ? <span className="analysis-plan-filter" title={planName || planID}><Link2 size={13} /><span>{planName || planID}</span><button title="清除计划筛选" aria-label="清除计划筛选" onClick={clearPlanFilter}><X size={13} /></button></span> : null}
+        <label className="analysis-search"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索笔记ID或场域" /></label>
+        {planID ? <span className="analysis-plan-filter" title={`薯量计划关联：${planName || planID}`}><Link2 size={13} /><span>薯量计划关联：{planName || planID}</span><button title="清除薯量计划关联筛选" aria-label="清除薯量计划关联筛选" onClick={clearPlanFilter}><X size={13} /></button></span> : null}
       </div>
       <div className="analysis-range"><span>{dateRange} · {result.report_dates.length} 个报表日</span><div className="segmented-control" aria-label="分析时间范围">
         {WINDOW_OPTIONS.map((option) => <button key={option.value} className={windowOption === option.value ? "active" : ""} onClick={() => { setWindowOption(option.value); setPage(1); }}>{option.label}</button>)}
@@ -397,22 +396,22 @@ function NoteCampaignAnalysis({ serviceState }: { serviceState: ServiceState }) 
     <section className="analysis-focus">
       {loading && !selected ? <div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在读取分析数据</div>
         : selected ? <>
-          <div className="focus-identity"><span className={`placement-swatch placement-${selected.placement}`}>{selected.placement}</span><strong>{selected.campaign_name}</strong><small>{selected.note_id}</small><button className="note-content-trigger" onClick={() => void queryNoteContent(selected.note_id)} disabled={contentLoading && contentOpen}>{contentLoading && contentOpen ? <LoaderCircle size={15} className="spin" /> : <FileSearch size={15} />}查询内容</button></div>
+          <div className="focus-identity"><span className={`placement-swatch placement-${selected.placement}`}>{selected.placement}</span><strong>{selected.note_id}</strong><button className="note-content-trigger" onClick={() => void queryNoteContent(selected.note_id)} disabled={contentLoading && contentOpen}>{contentLoading && contentOpen ? <LoaderCircle size={15} className="spin" /> : <FileSearch size={15} />}查询内容</button></div>
           <div className="metric-chart-grid">
             <MetricChart title="累计消耗" value={`¥${moneyFormatter.format(selected.total_spend)}`} color="#2f7d67" dates={selected.points.map((point) => point.report_date)} values={selected.points.map((point) => point.cumulative_spend)} />
             <MetricChart title="累计回搜人数" value={countFormatter.format(selected.total_search_users)} color="#c94e55" dates={selected.points.map((point) => point.report_date)} values={selected.points.map((point) => point.cumulative_search_users)} />
             <MetricChart title="回搜成本" value={"¥" + moneyFormatter.format(selected.latest_search_cost)} color="#b5852d" dates={selected.points.map((point) => point.report_date)} values={selected.points.map((point) => point.search_cost)} />
           </div>
-        </> : <div className="analysis-loading">没有符合条件的笔记计划</div>}
+        </> : <div className="analysis-loading">没有符合条件的笔记场域</div>}
     </section>
 
     <section className="analysis-table-section">
-      <header><div className="analysis-table-title"><h2>笔记计划列表</h2><p>{result.total.toLocaleString()} 个组合，按{sortLabel}降序</p></div><div className="analysis-table-actions"><ArrowDownWideNarrow size={15} /><span>排序</span><div className="sort-segmented" aria-label="笔记排序方式">
+      <header><div className="analysis-table-title"><h2>笔记场域列表</h2><p>{result.total.toLocaleString()} 个组合，按{sortLabel}降序</p></div><div className="analysis-table-actions"><ArrowDownWideNarrow size={15} /><span>排序</span><div className="sort-segmented" aria-label="笔记排序方式">
         {SORT_OPTIONS.map((option) => <button key={option.value} className={sortOption === option.value ? "active" : ""} onClick={() => { setSortOption(option.value); setPage(1); }}>{option.label}</button>)}
       </div>{loading ? <LoaderCircle size={18} className="spin" /> : null}</div></header>
-      <div className="analysis-table-wrap"><table className="analysis-table"><thead><tr><th>笔记ID</th><th>计划</th><th>场域</th><th>投放天数</th><th>当天消耗</th><th>累计消耗</th><th>累计回搜人数</th><th>当天回搜成本</th><th title={costChangeTitle}>较前一日</th></tr></thead><tbody>
+      <div className="analysis-table-wrap"><table className="analysis-table"><thead><tr><th>笔记ID</th><th>场域</th><th>投放天数</th><th>当天消耗</th><th>累计消耗</th><th>累计回搜人数</th><th>当天回搜成本</th><th title={costChangeTitle}>较前一日</th></tr></thead><tbody>
         {result.items.map((item) => <tr key={itemKey(item)} className={itemKey(item) === itemKey(selected ?? item) ? "selected" : ""} onClick={() => setSelectedKey(itemKey(item))}>
-          <td title={item.note_id}><strong>{item.note_id}</strong></td><td title={item.campaign_name}>{item.campaign_name}</td><td><span className={`placement-swatch placement-${item.placement}`}>{item.placement}</span></td><td>{item.active_days}/{result.report_dates.length}</td><td>¥{moneyFormatter.format(item.latest_spend)}</td><td>¥{moneyFormatter.format(item.total_spend)}</td><td>{countFormatter.format(item.total_search_users)}</td><td>¥{moneyFormatter.format(item.latest_search_cost)}</td>
+          <td title={item.note_id}><strong>{item.note_id}</strong></td><td><span className={`placement-swatch placement-${item.placement}`}>{item.placement}</span></td><td>{item.active_days}/{result.report_dates.length}</td><td>¥{moneyFormatter.format(item.latest_spend)}</td><td>¥{moneyFormatter.format(item.total_spend)}</td><td>{countFormatter.format(item.total_search_users)}</td><td>¥{moneyFormatter.format(item.latest_search_cost)}</td>
           <td className={"search-cost-change " + (item.search_cost_change > 0 ? "increase" : item.search_cost_change < 0 ? "decrease" : "")} title={costChangeTitle}>{formatCostChange(item.search_cost_change)}</td>
         </tr>)}
       </tbody></table></div>

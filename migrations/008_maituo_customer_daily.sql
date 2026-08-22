@@ -27,11 +27,10 @@ CREATE TABLE IF NOT EXISTS maituo_customer_daily_kpis (
 );
 
 CREATE TABLE IF NOT EXISTS maituo_customer_daily_notes (
+    report_date DATE NOT NULL,
     note_id TEXT NOT NULL,
     note_url TEXT NOT NULL,
     category TEXT NOT NULL,
-    subaccount TEXT NOT NULL,
-    campaign_name TEXT NOT NULL,
     placement TEXT NOT NULL,
     keyword_category_note TEXT,
     spend NUMERIC(20, 6) NOT NULL,
@@ -47,7 +46,7 @@ CREATE TABLE IF NOT EXISTS maituo_customer_daily_notes (
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
-    PRIMARY KEY (note_id, subaccount, campaign_name, placement)
+    PRIMARY KEY (report_date, note_id, placement)
 );
 
 CREATE TABLE IF NOT EXISTS maituo_customer_daily_spus (

@@ -4,13 +4,12 @@ import { GridComponent, LegendComponent, TooltipComponent } from "echarts/compon
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { AlertCircle, ExternalLink, LoaderCircle, Stethoscope, X } from "lucide-react";
+import { AlertCircle, LoaderCircle, Stethoscope } from "lucide-react";
 import "./account-plan-diagnosis.css";
 
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 type ServiceState = "checking" | "online" | "offline";
-type PlanTab = "over" | "enlarge" | "stop";
 type PeriodDays = 7 | 14 | 30;
 
 type DiagnosisPoint = {
@@ -24,37 +23,6 @@ type DiagnosisPoint = {
   cpc: number | null;
   ctr_pct: number | null;
   note_count: number | null;
-};
-
-type DandelionSupplement = {
-  title: string;
-  author: string;
-  note_type: string;
-  content_tag: string;
-  published_date: string;
-  data_updated_date: string;
-  dandelion_amount: number;
-  impressions: number;
-  reads: number;
-  interactions: number;
-  read_cost: number;
-  interaction_cost: number;
-};
-
-type PlanDiagnosis = {
-  note_id: string;
-  note_url: string;
-  campaign_name: string;
-  spend: number;
-  cost: number | null;
-  original_cost: number | null;
-  correction_coefficient: number | null;
-  cost_metric: string;
-  kpi: number;
-  over_kpi: boolean;
-  action: "inactive" | "enlarge" | "observe" | "stop";
-  consecutive_over_kpi: number;
-  dandelion?: DandelionSupplement;
 };
 
 type AccountDiagnosis = {
@@ -74,11 +42,7 @@ type AccountDiagnosis = {
   change_pct: number | null;
   kpi: number;
   status: "good" | "over" | "unattributed";
-  over_plans: number;
-  enlarge_plans: number;
-  stop_plans: number;
   points: DiagnosisPoint[];
-  plans: PlanDiagnosis[];
 };
 
 type AccountOverviewPoint = {
@@ -106,21 +70,14 @@ type DiagnosisResult = {
   report_date: string;
   spu: string;
   account_kpi: number;
-  plan_kpis: Record<string, number>;
-  dandelion_synced_at: string;
-  dandelion_matched: number;
-  dandelion_missing: number;
   account_overviews: AccountOverview[];
   accounts: AccountDiagnosis[];
 };
 
 const EMPTY_RESULT: DiagnosisResult = {
-  report_date: "", spu: "辅酶", account_kpi: 70, plan_kpis: { 搜索: 30, 信息流: 70 },
-  dandelion_synced_at: "", dandelion_matched: 0, dandelion_missing: 0, account_overviews: [], accounts: []
+  report_date: "", spu: "辅酶", account_kpi: 70, account_overviews: [], accounts: []
 };
 const money = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const integer = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 function accountKey(account: AccountDiagnosis): string {
   return `${account.account}\u0000${account.placement}`;
 }
@@ -131,23 +88,10 @@ function shortDate(value: string): string {
   return `${Number(parts[1])}月${Number(parts[2])}日`;
 }
 
-function normalizeNoteURL(value: string): string {
-  const markdown = value.match(/^\[[^\]]*\]\((https?:\/\/[^)]+)\)$/);
-  if (markdown) return markdown[1];
-  return /^https?:\/\//.test(value) ? value : "";
-}
-
 function statusLabel(status: AccountDiagnosis["status"]): string {
   if (status === "good") return "达标";
   if (status === "over") return "超标";
-  return "归因未形成";
-}
-
-function actionLabel(action: PlanDiagnosis["action"]): string {
-  if (action === "enlarge") return "放大";
-  if (action === "stop") return "停止";
-  if (action === "observe") return "正常观察";
-  return "今日未投放";
+  return "暂无成本";
 }
 
 function Sparkline({ points }: { points: DiagnosisPoint[] }) {
@@ -165,11 +109,6 @@ function Sparkline({ points }: { points: DiagnosisPoint[] }) {
     <path d={path} />
     {coordinates.map((coordinate, index) => <circle key={validPoints[index].report_date} cx={coordinate.x} cy={coordinate.y} r="2"><title>{validPoints[index].report_date}：¥{money.format(validPoints[index].cost)}</title></circle>)}
   </svg>;
-}
-
-function planFilter(plans: PlanDiagnosis[], tab: PlanTab): PlanDiagnosis[] {
-  if (tab === "over") return plans.filter((plan) => plan.over_kpi);
-  return plans.filter((plan) => plan.action === tab);
 }
 
 type TrendUnit = "currency" | "percent";
@@ -373,65 +312,10 @@ function CostValue({ cost, metric }: { cost: number | null; metric: string }) {
   return <span title={metric}>{cost === null ? "-" : `¥${money.format(cost)}`}</span>;
 }
 
-function PlanDrawer({ account, onClose }: { account: AccountDiagnosis; onClose: () => void }) {
-  const [tab, setTab] = useState<PlanTab>("over");
-  const counts = {
-    over: planFilter(account.plans, "over").length,
-    enlarge: planFilter(account.plans, "enlarge").length,
-    stop: planFilter(account.plans, "stop").length
-  };
-  const plans = planFilter(account.plans, tab);
-  const labels: Record<PlanTab, string> = { over: "成本超标", enlarge: "建议放大", stop: "建议停止" };
-
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  return <>
-    <button className="diagnosis-drawer-backdrop" type="button" aria-label="关闭计划明细" onClick={onClose} />
-    <aside className="diagnosis-drawer" aria-label={`${account.account}计划诊断`}>
-      <header className="diagnosis-drawer-head">
-        <div><h2>{account.account}</h2><p>{account.placement} · {account.cost_metric} · 计划 KPI {money.format(account.placement === "信息流" ? 70 : 30)}</p></div>
-        <button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={onClose}><X size={19} /></button>
-      </header>
-      <div className="diagnosis-drawer-tabs" aria-label="计划诊断分类">
-        {(Object.keys(labels) as PlanTab[]).map((value) => <button type="button" className={tab === value ? "active" : ""} key={value} onClick={() => setTab(value)}>{labels[value]} <span>{counts[value]}</span></button>)}
-      </div>
-      <div className="diagnosis-drawer-body">
-        <div className="diagnosis-drawer-summary">以下 KPI 均按日报成本判断；连续 3 个有效报表日超标时建议停止。</div>
-        {plans.length === 0 ? <div className="diagnosis-drawer-empty">该分类暂无计划</div> : <div className="diagnosis-plan-table-wrap"><table className="diagnosis-plan-table">
-          <thead><tr><th>计划名</th><th>蒲公英数据</th><th>消耗</th><th>日报成本</th><th>KPI</th><th>超标</th><th>动作</th><th>连续天数</th></tr></thead>
-          <tbody>{plans.map((plan) => {
-            const noteURL = normalizeNoteURL(plan.note_url);
-            const excess = plan.cost === null ? null : (plan.cost / plan.kpi - 1) * 100;
-            return <tr key={`${plan.note_id}-${plan.campaign_name}`}>
-              <td><div className="diagnosis-plan-name">{noteURL ? <a href={noteURL} target="_blank" rel="noreferrer" title={plan.campaign_name}>{plan.campaign_name}<ExternalLink size={12} /></a> : <strong title={plan.campaign_name}>{plan.campaign_name}</strong>}<span>{plan.note_id}</span></div></td>
-              <td>{plan.dandelion ? <div className="diagnosis-dandelion-note" title={`发布 ${plan.dandelion.published_date || "-"} · 数据更新 ${plan.dandelion.data_updated_date || "-"} · 阅读单价 ¥${money.format(plan.dandelion.read_cost)} · 互动单价 ¥${money.format(plan.dandelion.interaction_cost)}`}>
-                <strong>{plan.dandelion.title || "未命名笔记"}</strong>
-                <span>{[plan.dandelion.author, plan.dandelion.note_type, plan.dandelion.content_tag].filter(Boolean).join(" · ") || "-"}</span>
-                <small>曝光 {integer.format(plan.dandelion.impressions)} · 阅读 {integer.format(plan.dandelion.reads)} · 互动 {integer.format(plan.dandelion.interactions)} · 合作 ¥{money.format(plan.dandelion.dandelion_amount)}</small>
-              </div> : <span className="diagnosis-dandelion-missing">未匹配</span>}</td>
-              <td className="num">¥{money.format(plan.spend)}</td>
-              <td className="num"><CostValue cost={plan.cost} metric={plan.cost_metric} /></td>
-              <td className="num">¥{money.format(plan.kpi)}</td>
-              <td className={`num ${excess !== null && excess >= 0 ? "diagnosis-over-value" : ""}`}>{excess === null ? "-" : `${excess >= 0 ? "+" : ""}${excess.toFixed(0)}%`}</td>
-              <td><span className={`diagnosis-action ${plan.action}`}>{actionLabel(plan.action)}</span></td>
-              <td className="num">{plan.consecutive_over_kpi}</td>
-            </tr>;
-          })}</tbody>
-        </table></div>}
-      </div>
-    </aside>
-  </>;
-}
-
 function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) {
   const [result, setResult] = useState<DiagnosisResult>(EMPTY_RESULT);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedKey, setSelectedKey] = useState("");
   const [overviewAccount, setOverviewAccount] = useState("");
   const [days, setDays] = useState<PeriodDays>(7);
 
@@ -456,18 +340,14 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
     return () => controller.abort();
   }, []);
 
-  const selected = useMemo(() => result.accounts.find((account) => accountKey(account) === selectedKey) ?? null, [result.accounts, selectedKey]);
   const overview = useMemo(() => result.account_overviews.find((account) => account.account === overviewAccount) ?? result.account_overviews[0] ?? null, [overviewAccount, result.account_overviews]);
   const overviewPoints = useMemo(() => overview?.points.slice(-days) ?? [], [days, overview]);
   const overviewCharts = useMemo(() => accountTrendCharts(overviewPoints), [overviewPoints]);
   const overviewDateRange = overviewPoints.length > 0 ? `${overviewPoints[0].report_date} - ${overviewPoints.at(-1)?.report_date}` : "";
-  const totalPlans = result.accounts.reduce((total, account) => total + account.plans.length, 0);
-  const dandelionTotal = result.dandelion_matched + result.dandelion_missing;
-  const dandelionDate = result.dandelion_synced_at ? shortDate(result.dandelion_synced_at.slice(0, 10)) : "-";
 
   return <>
     <section className="page-heading diagnosis-page-heading">
-      <div><h1>子账户与计划诊断</h1><p>辅酶Q10 · 子账户 KPI 70 · 计划 KPI：搜索 30、信息流 70 · KPI 均按日报成本判断</p></div>
+      <div><h1>子账户诊断</h1><p>辅酶Q10 · 分子账户独立汇总 · KPI {money.format(result.account_kpi)}</p></div>
       <div className="heading-status"><span className={`status-dot ${serviceState}`} />{result.report_date ? `数据截至 ${shortDate(result.report_date)}` : "等待日报数据"}</div>
     </section>
     {error ? <div className="analysis-error"><AlertCircle size={16} />{error}</div> : null}
@@ -488,27 +368,23 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
       </section>
         : <div className="analysis-loading">当前 SPU 暂无子账户趋势数据</div>}
     <section className="diagnosis-table-section">
-      <header><div><Stethoscope size={18} /><span><strong>子账户诊断</strong><small>{result.accounts.length} 个子账户场域 · {totalPlans} 条计划明细</small></span></div><p>蒲公英 {result.dandelion_matched}/{dandelionTotal} · 更新 {dandelionDate}</p></header>
+      <header><div><Stethoscope size={18} /><span><strong>子账户场域</strong><small>{result.accounts.length} 个独立汇总</small></span></div><p>{result.report_date ? `${shortDate(result.report_date)} 日报` : "等待日报数据"}</p></header>
       {loading ? <div className="diagnosis-loading"><LoaderCircle size={19} className="spin" />正在生成诊断</div>
         : result.accounts.length === 0 ? <div className="diagnosis-loading">当前 SPU 暂无可诊断数据</div>
           : <div className="diagnosis-table-wrap"><table className="diagnosis-account-table">
-            <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>日报成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>超标计划</th><th>放大</th><th>停止</th><th>7日成本</th></tr></thead>
+            <thead><tr><th>子账户</th><th>场域</th><th>消耗</th><th>日报成本</th><th>较昨日</th><th>KPI</th><th>状态</th><th>7日成本</th></tr></thead>
             <tbody>{result.accounts.map((account) => <tr key={accountKey(account)}>
-              <td><button type="button" className="diagnosis-account-button" title="查看计划诊断" onClick={() => setSelectedKey(accountKey(account))}>{account.account}</button></td>
+              <td><strong className="diagnosis-account-name" title={account.account}>{account.account}</strong></td>
               <td><span className={`placement-swatch placement-${account.placement}`}>{account.placement}</span></td>
               <td className="num">¥{money.format(account.spend)}</td>
               <td className="num"><CostValue cost={account.cost} metric={account.cost_metric} /></td>
               <td className={`num ${account.change_pct !== null && account.change_pct > 0 ? "diagnosis-over-value" : account.change_pct !== null ? "diagnosis-good-value" : ""}`}>{account.change_pct === null ? "-" : `${account.change_pct >= 0 ? "+" : ""}${(account.change_pct * 100).toFixed(1)}%`}</td>
               <td className="num">¥{money.format(account.kpi)}</td>
               <td><span className={`diagnosis-status ${account.status}`}>{statusLabel(account.status)}</span></td>
-              <td className="num"><span className="diagnosis-count">{account.over_plans}</span></td>
-              <td className="num"><span className="diagnosis-count">{account.enlarge_plans}</span></td>
-              <td className="num"><span className="diagnosis-count">{account.stop_plans}</span></td>
               <td><Sparkline points={account.points} /></td>
             </tr>)}</tbody>
           </table></div>}
     </section>
-    {selected ? <PlanDrawer account={selected} onClose={() => setSelectedKey("")} /> : null}
   </>;
 }
 

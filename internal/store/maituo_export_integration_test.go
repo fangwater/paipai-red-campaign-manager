@@ -30,7 +30,7 @@ func TestMaituoSubaccountDirectoryIntegration(t *testing.T) {
 	reportDate := time.Date(2098, 8, 5, 0, 0, 0, 0, time.UTC)
 	defer func() {
 		cleanup := context.Background()
-		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM maituo_customer_daily_notes WHERE subaccount=$1", prefix)
+		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM maituo_customer_daily_notes WHERE note_id=$1", prefix+"-note")
 		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM maituo_customer_daily_subaccounts WHERE subaccount=$1", prefix)
 		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM maituo_customer_daily_import_runs WHERE file_name=$1", fileName)
 	}()
@@ -38,7 +38,7 @@ func TestMaituoSubaccountDirectoryIntegration(t *testing.T) {
 	snapshot := maituo.Snapshot{
 		FileName: fileName, FileSHA256: prefix, ReportDate: reportDate,
 		PresentSheets: []string{maituo.SheetNotes, maituo.SheetSubaccount},
-		Notes:         []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "测评", Subaccount: prefix, CampaignName: "campaign", Placement: "搜索", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-note-hash"}}},
+		Notes:         []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "测评", Placement: "搜索", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-note-hash"}}},
 		Subaccounts:   []maituo.SubaccountOverview{{SPU: prefix, Subaccount: prefix, Placement: "搜索", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-sub-hash"}}},
 	}
 	if _, err := postgres.ImportMaituoCustomerDaily(ctx, snapshot); err != nil {
@@ -62,7 +62,7 @@ func TestMaituoSubaccountDirectoryIntegration(t *testing.T) {
 		t.Fatalf("reports=%+v err=%v", reports, err)
 	}
 	exported, err := postgres.MaituoSubaccountSnapshot(ctx, prefix, reportDate)
-	if err != nil || len(exported.Notes) != 1 || len(exported.Subaccounts) != 1 {
+	if err != nil || len(exported.Notes) != 0 || len(exported.Subaccounts) != 1 {
 		t.Fatalf("snapshot=%+v err=%v", exported, err)
 	}
 }

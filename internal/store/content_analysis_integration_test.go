@@ -40,6 +40,11 @@ func TestContentAnalysisQueryIntegration(t *testing.T) {
 			if note.PublishedDate < result.PublishedStartDate || note.PublishedDate > result.PublishedEndDate {
 				t.Fatalf("note %s published_date=%q outside selected range", note.NoteID, note.PublishedDate)
 			}
+			for _, campaign := range append(append([]model.ContentAnalysisCampaign{}, note.SearchCampaigns...), note.FeedCampaigns...) {
+				if campaign.AdvertiserID <= 0 || campaign.CampaignID <= 0 || campaign.Name == "" || campaign.SyncedAt == "" {
+					t.Fatalf("note %s returned incomplete XHS campaign: %+v", note.NoteID, campaign)
+				}
+			}
 		}
 	}
 	if result.Coverage.TotalNotes > 0 && (len(result.Types) == 0 || len(result.Dimensions) == 0 || len(result.Cells) == 0) {

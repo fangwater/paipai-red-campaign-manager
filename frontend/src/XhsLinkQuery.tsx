@@ -89,9 +89,7 @@ type Match = {
 
 type LinkItem = {
   note_id: string;
-  campaign_name: string;
   placement: string;
-  subaccounts: string[];
   spend: number;
   search_users: number;
   search_cost: number;
@@ -168,7 +166,7 @@ const optimizeObjectiveGroups = [
 ];
 
 function itemKey(item: LinkItem): string {
-  return `${item.note_id}\u0000${item.campaign_name}\u0000${item.placement}`;
+  return `${item.note_id}\u0000${item.placement}`;
 }
 
 function enumLabel(values: Record<number, string>, value: number): string {
@@ -377,7 +375,7 @@ function XhsLinkQuery() {
 
   return <>
     <section className="page-heading xhs-link-page-heading">
-      <div><h1>聚光关联查询</h1><p>笔记ID + 计划名称 + 场域</p></div>
+      <div><h1>聚光关联查询</h1><p>笔记ID + 场域 · 聚光实体关联</p></div>
       <div className="heading-status"><span className={`status-dot ${error ? "offline" : loading ? "checking" : ""}`} />
         {error ? "关联服务异常" : loading ? "正在读取数据" : "聚光数据已关联"}
       </div>
@@ -393,14 +391,14 @@ function XhsLinkQuery() {
     <section className="xhs-link-table-section">
       <header><div><h2>关联结果</h2><p>按最新日报消耗排序，点击一行查看全部聚光层级</p></div>{loading ? <LoaderCircle size={18} className="spin" /> : <CheckCircle2 size={18} />}</header>
       <div className="xhs-link-table-wrap"><table className="xhs-link-table"><thead><tr>
-        <th>笔记ID</th><th>计划名称</th><th>场域</th><th>广告主</th><th>计划ID</th><th>计划状态</th>
+        <th>笔记ID</th><th>关联计划</th><th>场域</th><th>广告主</th><th>首个计划ID</th><th>计划状态</th>
         <th>日预算</th><th>单元</th><th>创意</th><th>消耗</th><th>回搜人数</th><th>回搜成本</th>
       </tr></thead><tbody>
         {result.items.map((item) => {
           const primary = item.matches[0];
           return <tr key={itemKey(item)} className={selected && itemKey(item) === itemKey(selected) ? "selected" : ""} onClick={() => setSelectedKey(itemKey(item))}>
             <td title={item.note_id}><strong>{item.note_id}</strong></td>
-            <td title={item.campaign_name}>{item.campaign_name}</td>
+            <td><div className="xhs-linked-plan-summary"><strong>{item.matches.length} 个</strong><span title={primary?.campaign_name}>{primary?.campaign_name || "未关联"}</span></div></td>
             <td><span className={`placement-swatch placement-${item.placement}`}>{item.placement}</span></td>
             <td title={primary?.advertiser_name}>{primary?.advertiser_name || "-"}</td>
             <td>{primary?.campaign_id ?? "-"}</td>
@@ -419,11 +417,10 @@ function XhsLinkQuery() {
 
     {selected ? <section className="xhs-link-detail">
       <header className="link-detail-heading">
-        <div><span className={`placement-swatch placement-${selected.placement}`}>{selected.placement}</span><div><h2>{selected.campaign_name}</h2><p>{selected.note_id}</p></div></div>
+        <div><span className={`placement-swatch placement-${selected.placement}`}>{selected.placement}</span><div><h2>{selected.note_id}</h2><p>{selected.matches.length} 个聚光计划关联</p></div></div>
         <div className="link-detail-counts"><span><Building2 size={14} />{selectedStats.advertisers} 个广告主</span><span><Rows3 size={14} />{selectedStats.units} 个单元</span><span><Lightbulb size={14} />{selectedStats.creativities} 个创意</span></div>
       </header>
       <div className="daily-link-strip">
-        <div><span>子账户</span><strong>{selected.subaccounts.join("、") || "-"}</strong></div>
         <div><span>当天消耗</span><strong>¥{money.format(selected.spend)}</strong></div>
         <div><span>回搜人数</span><strong>{count.format(selected.search_users)}</strong></div>
         <div><span>回搜成本</span><strong>¥{money.format(selected.search_cost)}</strong></div>

@@ -46,7 +46,6 @@ func TestMaituoSubaccountDirectoryAndSingleDateDownload(t *testing.T) {
 		reports:     map[string][]maituo.SubaccountReport{"账户A": {{ReportDate: "2026-08-05", FileName: "daily.xlsx"}}},
 		snapshots: map[string]maituo.Snapshot{"账户A/2026-08-05": {
 			FileName: "2026-08-05-Maituo-客户日报.xlsx", ReportDate: date,
-			Notes:       []maituo.NoteDetail{{NoteID: "a", Subaccount: "账户A"}, {NoteID: "b", Subaccount: "账户B"}},
 			Subaccounts: []maituo.SubaccountOverview{{SPU: "辅酶", Subaccount: "账户A"}, {SPU: "辅酶", Subaccount: "账户B"}},
 		}},
 	}
@@ -74,9 +73,12 @@ func TestMaituoSubaccountDirectoryAndSingleDateDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer workbook.Close()
-	notes, _ := workbook.GetRows(maituo.SheetNotes)
-	if len(notes) != 2 || notes[1][3] != "账户A" {
-		t.Fatalf("download leaked rows: %v", notes)
+	if sheets := workbook.GetSheetList(); len(sheets) != 1 || sheets[0] != maituo.SheetSubaccount {
+		t.Fatalf("download sheets=%v", sheets)
+	}
+	subaccounts, _ := workbook.GetRows(maituo.SheetSubaccount)
+	if len(subaccounts) != 2 || subaccounts[1][1] != "账户A" {
+		t.Fatalf("download contained unexpected rows: subaccounts=%v", subaccounts)
 	}
 }
 

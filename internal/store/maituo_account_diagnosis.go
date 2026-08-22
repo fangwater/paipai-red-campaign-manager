@@ -15,28 +15,15 @@ import (
 
 const (
 	maituoAccountDiagnosisKPI = 70.0
-	maituoSearchPlanKPI       = 30.0
-	maituoFeedPlanKPI         = 70.0
 	maituoAccountOverviewDays = 30
 )
 
-type diagnosisHistoryRow struct {
-	ReportDate   string
-	NoteID       string
-	NoteURL      string
-	Account      string
-	CampaignName string
-	Placement    string
-	Spend        float64
-	SearchCost   *float64
-	PostbackCost *float64
-}
-
 func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (maituo.AccountPlanDiagnosis, error) {
+	// Account aggregates remain valid; plan diagnosis was retired with note-to-account attribution.
 	result := maituo.AccountPlanDiagnosis{
 		SPU:              spu,
 		AccountKPI:       maituoAccountDiagnosisKPI,
-		PlanKPIs:         map[string]float64{"搜索": maituoSearchPlanKPI, "信息流": maituoFeedPlanKPI},
+		PlanKPIs:         map[string]float64{},
 		AccountOverviews: []maituo.AccountOverview{},
 		Accounts:         []maituo.AccountDiagnosis{},
 	}
@@ -113,7 +100,6 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	accountRows.Close()
 
 	previousDate := latestDate.AddDate(0, 0, -1).Format(time.DateOnly)
-	accountIndexes := map[string]int{}
 	for key, snapshots := range history {
 		current, ok := snapshots[result.ReportDate]
 		if !ok {
@@ -162,7 +148,6 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 			}
 			item.Points = append(item.Points, point)
 		}
-		accountIndexes[key] = len(result.Accounts)
 		result.Accounts = append(result.Accounts, item)
 	}
 
@@ -221,124 +206,10 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		return result.AccountOverviews[left].CurrentTotalSpend > result.AccountOverviews[right].CurrentTotalSpend
 	})
 
-	historyRows, reportDates, err := p.maituoDiagnosisPlanHistory(ctx, result.ReportDate, accountIndexes)
-	if err != nil {
-		return result, err
-	}
-	planHistory := map[string]map[string]diagnosisHistoryRow{}
-	for _, row := range historyRows {
-		key := diagnosisPlanKey(row)
-		if planHistory[key] == nil {
-			planHistory[key] = map[string]diagnosisHistoryRow{}
-		}
-		planHistory[key][row.ReportDate] = row
-	}
-	noteIDs := make([]string, 0)
-	seenNoteIDs := make(map[string]struct{})
-	for _, row := range historyRows {
-		if row.ReportDate != result.ReportDate {
-			continue
-		}
-		if _, exists := seenNoteIDs[row.NoteID]; exists {
-			continue
-		}
-		seenNoteIDs[row.NoteID] = struct{}{}
-		noteIDs = append(noteIDs, row.NoteID)
-	}
-	dandelionNotes, dandelionSyncedAt, err := p.maituoDiagnosisDandelionNotes(ctx, noteIDs)
-	if err != nil {
-		return result, err
-	}
-	result.DandelionSyncedAt = dandelionSyncedAt
-	for _, row := range historyRows {
-		if row.ReportDate != result.ReportDate {
-			continue
-		}
-		accountIndex, ok := accountIndexes[diagnosisAccountKey(row.Account, row.Placement)]
-		if !ok {
-			continue
-		}
-		cost := diagnosisPlanCost(row)
-		kpi := diagnosisPlanKPI(row.Placement)
-		consecutive := diagnosisConsecutiveOverKPI(planHistory[diagnosisPlanKey(row)], reportDates, kpi)
-		action := diagnosisPlanAction(cost, consecutive, kpi)
-		plan := maituo.PlanDiagnosis{
-			NoteID: row.NoteID, NoteURL: row.NoteURL, CampaignName: row.CampaignName,
-			Spend: roundMaituoMoney(row.Spend), OriginalCost: cost, Cost: cost,
-			CostMetric: diagnosisCostMetric(row.Placement), KPI: kpi,
-			OverKPI: cost != nil && *cost >= kpi, Action: action, ConsecutiveOverKPI: consecutive,
-		}
-		if supplement, exists := dandelionNotes[row.NoteID]; exists {
-			copy := supplement
-			plan.Dandelion = &copy
-			result.DandelionMatched++
-		} else {
-			result.DandelionMissing++
-		}
-		account := &result.Accounts[accountIndex]
-		account.Plans = append(account.Plans, plan)
-		if plan.OverKPI {
-			account.OverPlans++
-		}
-		switch action {
-		case "enlarge":
-			account.EnlargePlans++
-		case "stop":
-			account.StopPlans++
-		}
-	}
-	for index := range result.Accounts {
-		sort.Slice(result.Accounts[index].Plans, func(left, right int) bool {
-			return result.Accounts[index].Plans[left].Spend > result.Accounts[index].Plans[right].Spend
-		})
-	}
 	sort.Slice(result.Accounts, func(left, right int) bool {
 		return result.Accounts[left].Spend > result.Accounts[right].Spend
 	})
 	return result, nil
-}
-
-func (p *Postgres) maituoDiagnosisPlanHistory(ctx context.Context, reportDate string, accountIndexes map[string]int) ([]diagnosisHistoryRow, []string, error) {
-	rows, err := p.pool.Query(ctx, `
-		SELECT notes.report_date::TEXT, notes.note_id, notes.note_url, notes.subaccount,
-			notes.campaign_name, notes.placement, notes.spend::DOUBLE PRECISION,
-			notes.search_cost::DOUBLE PRECISION, notes.estimated_postback_cost::DOUBLE PRECISION
-		FROM maituo_customer_daily_notes notes
-		WHERE notes.deleted_at IS NULL AND notes.report_date <= $1::DATE
-		ORDER BY notes.report_date DESC, notes.subaccount, notes.placement, notes.campaign_name, notes.note_id
-	`, reportDate)
-	if err != nil {
-		return nil, nil, fmt.Errorf("query Maituo plan diagnosis history: %w", err)
-	}
-	defer rows.Close()
-	history := []diagnosisHistoryRow{}
-	reportDateSet := map[string]struct{}{}
-	for rows.Next() {
-		var row diagnosisHistoryRow
-		var searchCost, postbackCost pgtype.Float8
-		if err := rows.Scan(
-			&row.ReportDate, &row.NoteID, &row.NoteURL, &row.Account, &row.CampaignName,
-			&row.Placement, &row.Spend, &searchCost, &postbackCost,
-		); err != nil {
-			return nil, nil, fmt.Errorf("scan Maituo plan diagnosis history: %w", err)
-		}
-		if _, ok := accountIndexes[diagnosisAccountKey(row.Account, row.Placement)]; !ok {
-			continue
-		}
-		row.SearchCost = diagnosisNullableCost(searchCost)
-		row.PostbackCost = diagnosisNullableCost(postbackCost)
-		history = append(history, row)
-		reportDateSet[row.ReportDate] = struct{}{}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("iterate Maituo plan diagnosis history: %w", err)
-	}
-	reportDates := make([]string, 0, len(reportDateSet))
-	for date := range reportDateSet {
-		reportDates = append(reportDates, date)
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(reportDates)))
-	return history, reportDates, nil
 }
 
 func (p *Postgres) maituoSearchUserOverlapPoints(ctx context.Context, spu, startDate, endDate string) ([]model.SearchUserOverlapPoint, error) {
@@ -346,10 +217,7 @@ func (p *Postgres) maituoSearchUserOverlapPoints(ctx context.Context, spu, start
 		SELECT dates.report_date::DATE::TEXT, overlap.spu_search_users,
 			overlap.subaccount_search_users, overlap.overlap_users,
 			overlap.overlap_coefficient::DOUBLE PRECISION,
-			overlap.deduplication_factor::DOUBLE PRECISION,
-			overlap.note_search_users, overlap.note_overlap_users,
-			overlap.note_overlap_coefficient::DOUBLE PRECISION,
-			overlap.note_deduplication_factor::DOUBLE PRECISION
+			overlap.deduplication_factor::DOUBLE PRECISION
 		FROM generate_series($2::DATE, $3::DATE, INTERVAL '1 day') dates(report_date)
 		LEFT JOIN maituo_customer_daily_search_user_overlap overlap
 		  ON overlap.report_date = dates.report_date::DATE
@@ -364,12 +232,11 @@ func (p *Postgres) maituoSearchUserOverlapPoints(ctx context.Context, spu, start
 	result := make([]model.SearchUserOverlapPoint, 0, maituoAccountOverviewDays)
 	for rows.Next() {
 		point := model.SearchUserOverlapPoint{PlacementCoefficients: []model.SearchUserPlacementCoefficient{}}
-		var spuUsers, subaccountUsers, overlapUsers, noteUsers, noteOverlapUsers pgtype.Int8
-		var coefficient, deduplicationFactor, noteCoefficient, noteDeduplicationFactor pgtype.Float8
+		var spuUsers, subaccountUsers, overlapUsers pgtype.Int8
+		var coefficient, deduplicationFactor pgtype.Float8
 		if err := rows.Scan(
 			&point.ReportDate, &spuUsers, &subaccountUsers, &overlapUsers,
-			&coefficient, &deduplicationFactor, &noteUsers, &noteOverlapUsers,
-			&noteCoefficient, &noteDeduplicationFactor,
+			&coefficient, &deduplicationFactor,
 		); err != nil {
 			return nil, fmt.Errorf("scan Maituo search-user overlap history: %w", err)
 		}
@@ -393,126 +260,12 @@ func (p *Postgres) maituoSearchUserOverlapPoints(ctx context.Context, spu, start
 			value := deduplicationFactor.Float64
 			point.DeduplicationFactor = &value
 		}
-		if noteUsers.Valid {
-			value := noteUsers.Int64
-			point.NoteSearchUsers = &value
-		}
-		if noteOverlapUsers.Valid {
-			value := noteOverlapUsers.Int64
-			point.NoteOverlapUsers = &value
-		}
-		if noteCoefficient.Valid {
-			value := noteCoefficient.Float64
-			point.NoteOverlapCoefficient = &value
-		}
-		if noteDeduplicationFactor.Valid {
-			value := noteDeduplicationFactor.Float64
-			point.NoteDeduplicationFactor = &value
-		}
 		result = append(result, point)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate Maituo search-user overlap history: %w", err)
 	}
-	rows.Close()
-	if err := p.maituoSearchUserPlacementCoefficients(ctx, spu, startDate, endDate, result); err != nil {
-		return nil, err
-	}
 	return result, nil
-}
-
-func (p *Postgres) maituoSearchUserPlacementCoefficients(ctx context.Context, spu, startDate, endDate string, points []model.SearchUserOverlapPoint) error {
-	pointIndexes := make(map[string]int, len(points))
-	for index := range points {
-		pointIndexes[points[index].ReportDate] = index
-	}
-	rows, err := p.pool.Query(ctx, `
-			WITH account_totals AS (
-				SELECT report_date, spu, placement,
-					SUM(search_users)::BIGINT AS subaccount_search_users
-				FROM maituo_customer_daily_subaccounts
-				WHERE deleted_at IS NULL
-				  AND spu = $1
-				  AND report_date BETWEEN $2::DATE AND $3::DATE
-				GROUP BY report_date, spu, placement
-			),
-			subaccount_mappings AS (
-				SELECT DISTINCT report_date, spu, BTRIM(subaccount) AS subaccount, placement
-				FROM maituo_customer_daily_subaccounts
-				WHERE deleted_at IS NULL
-				  AND spu = $1
-				  AND report_date BETWEEN $2::DATE AND $3::DATE
-			),
-			note_rows_by_spu AS (
-				SELECT DISTINCT notes.report_date, notes.note_id, notes.subaccount,
-					notes.campaign_name, notes.placement, notes.search_users, mappings.spu
-				FROM maituo_customer_daily_notes notes
-				CROSS JOIN LATERAL regexp_split_to_table(notes.subaccount, '[、,，]+') account_names(account_name)
-				JOIN subaccount_mappings mappings
-				  ON mappings.report_date = notes.report_date
-				 AND mappings.subaccount = BTRIM(account_names.account_name)
-				 AND mappings.placement = notes.placement
-				WHERE notes.deleted_at IS NULL
-				  AND notes.report_date BETWEEN $2::DATE AND $3::DATE
-			),
-			note_totals AS (
-				SELECT report_date, spu, placement,
-					SUM(search_users)::BIGINT AS note_search_users
-				FROM note_rows_by_spu
-				GROUP BY report_date, spu, placement
-			)
-			SELECT accounts.report_date::DATE::TEXT, accounts.placement,
-				COALESCE(notes.note_search_users, 0)::BIGINT,
-				accounts.subaccount_search_users,
-				CASE WHEN accounts.subaccount_search_users > 0
-					THEN COALESCE(notes.note_search_users, 0)::NUMERIC / accounts.subaccount_search_users
-				END::DOUBLE PRECISION
-			FROM account_totals accounts
-			LEFT JOIN note_totals notes
-			  ON notes.report_date = accounts.report_date
-			 AND notes.spu = accounts.spu
-			 AND notes.placement = accounts.placement
-			ORDER BY accounts.report_date,
-				CASE accounts.placement
-				WHEN '信息流' THEN 1
-				WHEN '搜索' THEN 2
-				WHEN '视频内流' THEN 3
-				ELSE 4
-			END,
-			accounts.placement
-	`, spu, startDate, endDate)
-	if err != nil {
-		return fmt.Errorf("query Maituo search-user placement coefficients: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var reportDate, placement string
-		var noteSearchUsers, subaccountSearchUsers int64
-		var coefficient pgtype.Float8
-		if err := rows.Scan(
-			&reportDate, &placement, &noteSearchUsers, &subaccountSearchUsers, &coefficient,
-		); err != nil {
-			return fmt.Errorf("scan Maituo search-user placement coefficient: %w", err)
-		}
-		pointIndex, ok := pointIndexes[reportDate]
-		if !ok {
-			continue
-		}
-		item := model.SearchUserPlacementCoefficient{
-			Placement: placement, SearchUsers: subaccountSearchUsers,
-			NoteSearchUsers: noteSearchUsers, SubaccountSearchUsers: subaccountSearchUsers,
-		}
-		if coefficient.Valid {
-			value := coefficient.Float64
-			item.Coefficient = &value
-		}
-		points[pointIndex].PlacementCoefficients = append(points[pointIndex].PlacementCoefficients, item)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate Maituo search-user placement coefficients: %w", err)
-	}
-	return nil
 }
 
 func (p *Postgres) maituoDiagnosisDandelionNotes(ctx context.Context, noteIDs []string) (map[string]maituo.DandelionNoteSupplement, string, error) {
@@ -615,58 +368,11 @@ func splitDiagnosisAccountKey(key string) (string, string) {
 	return parts[0], parts[1]
 }
 
-func diagnosisPlanKey(row diagnosisHistoryRow) string {
-	return row.NoteID + "\x00" + row.Account + "\x00" + row.CampaignName + "\x00" + row.Placement
-}
-
-func diagnosisPlanCost(row diagnosisHistoryRow) *float64 {
-	if row.Placement == "信息流" {
-		return row.PostbackCost
-	}
-	return row.SearchCost
-}
-
 func diagnosisCostMetric(placement string) string {
 	if placement == "信息流" {
 		return "预计回流后成本"
 	}
 	return "回搜成本"
-}
-
-func diagnosisPlanKPI(placement string) float64 {
-	if placement == "信息流" {
-		return maituoFeedPlanKPI
-	}
-	return maituoSearchPlanKPI
-}
-
-func diagnosisConsecutiveOverKPI(history map[string]diagnosisHistoryRow, reportDates []string, kpi float64) int {
-	consecutive := 0
-	for _, date := range reportDates {
-		row, ok := history[date]
-		if !ok {
-			break
-		}
-		cost := diagnosisPlanCost(row)
-		if cost == nil || *cost < kpi {
-			break
-		}
-		consecutive++
-	}
-	return consecutive
-}
-
-func diagnosisPlanAction(cost *float64, consecutive int, kpi float64) string {
-	if cost == nil {
-		return "inactive"
-	}
-	if *cost < kpi {
-		return "enlarge"
-	}
-	if consecutive >= 3 {
-		return "stop"
-	}
-	return "observe"
 }
 
 func diagnosisAccountStatus(cost *float64) string {

@@ -2,26 +2,19 @@ import { expect, test } from "@playwright/test";
 
 const accountID = "6LSm5oi3QQ";
 
-test("shows one independent file directory URL per subaccount", async ({ page }) => {
+test("does not expose subaccount directories from the daily report page", async ({ page }) => {
+  let directoryRequests = 0;
   await page.route("**/paipai/api/imports/maituo-customer-daily", (route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] })
   }));
-  await page.route("**/paipai/api/imports/maituo-subaccount-directories", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({ success: true, data: [
-      { subaccount: "账户A", account_id: accountID, report_count: 2, earliest_report_date: "2026-08-04", latest_report_date: "2026-08-05" },
-      { subaccount: "账户B", account_id: "6LSm5oi3Qg", report_count: 1, earliest_report_date: "2026-08-05", latest_report_date: "2026-08-05" }
-    ] })
-  }));
+  await page.route("**/paipai/api/imports/maituo-subaccount-directories", async (route) => {
+    directoryRequests += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] }) });
+  });
 
   await page.goto("/paipai/maituo-daily-report");
-  await expect(page.getByRole("heading", { name: "子账户文件目录" })).toBeVisible();
-  const accountAURL = page.getByRole("textbox", { name: "账户A 文件目录 URL" });
-  const accountBURL = page.getByRole("textbox", { name: "账户B 文件目录 URL" });
-  await expect(accountAURL).toHaveValue(`http://127.0.0.1:5173/paipai/subaccount-files/${accountID}`);
-  await expect(accountBURL).not.toHaveValue(await accountAURL.inputValue());
-  await expect(page.getByRole("link", { name: "打开 账户A 文件目录" })).toHaveAttribute("href", `http://127.0.0.1:5173/paipai/subaccount-files/${accountID}`);
+  await expect(page.getByRole("heading", { name: "子账户文件目录" })).toHaveCount(0);
+  expect(directoryRequests).toBe(0);
 });
 
 test("lists and downloads each historical date without exposing another account", async ({ page }) => {

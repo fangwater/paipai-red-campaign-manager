@@ -81,8 +81,8 @@ test("queries and expands all linked Spotlight levels", async ({ page }) => {
           page: Number(url.searchParams.get("page") || 1),
           page_size: 25,
           items: [
-            { note_id: "note-a", campaign_name: "磷虾油搜索计划", placement: "搜索", subaccounts: ["磷虾油"], spend: 1280.5, search_users: 80, search_cost: 16.01, matches: [match] },
-            { note_id: "note-b", campaign_name: "辅酶信息流计划", placement: "信息流", subaccounts: ["辅酶"], spend: 620, search_users: 32, search_cost: 19.38, matches: [secondMatch] }
+            { note_id: "note-a", placement: "搜索", spend: 1280.5, search_users: 80, search_cost: 16.01, matches: [match] },
+            { note_id: "note-b", placement: "信息流", spend: 620, search_users: 32, search_cost: 19.38, matches: [secondMatch] }
           ]
         }
       })
@@ -92,6 +92,9 @@ test("queries and expands all linked Spotlight levels", async ({ page }) => {
   await page.goto("/paipai/xhs-link-query");
   await expect(page.getByRole("heading", { name: "聚光关联查询" })).toBeVisible();
   await expect(page.locator(".xhs-link-table tbody tr")).toHaveCount(2);
+  await expect(page.locator(".xhs-link-table tbody tr").first().locator("td").nth(1)).toContainText("1 个");
+  await expect(page.locator(".xhs-link-table tbody tr").first().locator("td").nth(1)).toContainText("磷虾油搜索计划");
+  await expect(page.locator(".daily-link-strip")).not.toContainText("子账户");
   await expect(page.locator(".linked-campaign")).toContainText("品牌主账户");
   await expect(page.locator(".unit-table tbody tr")).toHaveCount(1);
   await expect(page.locator(".creativity-table tbody tr")).toHaveCount(1);
@@ -151,7 +154,8 @@ test("queries and expands all linked Spotlight levels", async ({ page }) => {
   await expect(page.getByText("http", { exact: false })).toHaveCount(0);
 
   await page.locator(".xhs-link-table tbody tr").nth(1).click();
-  await expect(page.locator(".link-detail-heading")).toContainText("辅酶信息流计划");
+  await expect(page.locator(".link-detail-heading")).toContainText("note-b");
+  await expect(page.locator(".linked-campaign")).toContainText("辅酶信息流计划");
 
   await page.getByPlaceholder("搜索笔记、计划、广告主、单元或创意").fill("核心人群");
   await expect.poll(() => requests.some((url) => url.searchParams.get("q") === "核心人群")).toBeTruthy();

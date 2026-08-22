@@ -109,8 +109,7 @@ sudo -u postgres createdb -O "$USER" paipai_red
 
 前端位于 `frontend/`，使用 React、TypeScript 和 Vite。Maituo 客户日报模块支持一次选择或拖放多个 `.xlsx` 文件，本地解析后按报表日期升序执行，并展示服务器中已保存的报表日期和文件状态。
 蒲公英数据更新页会按文件内最大的“数据更新日期”展示历史上传，并补齐首尾上传日期间的日历：周五、周六作为非工作日默认缺省，其他未上传日期标记为缺少文件。
-系统会为每个非“总体”子账户生成独立文件目录 URL。目录按日期倒序列出该子账户的历史日报，每个日期可单独下载一个只含“笔记明细”和“分子账户”的 Excel；不同子账户不会出现在同一文件中。
-目录 URL 使用可逆的子账户标识，不提供身份鉴权；如需限制访问者查看其他已知子账户，应在网关层增加登录认证。
+历史列表中的已保存日期可打开该 `report_date` 对应的合并后笔记明细。明细只保留笔记和场域维度，不展示或推断子账户、广告账户和计划归属。
 
 ```bash
 make frontend-dev
@@ -125,15 +124,17 @@ make frontend-deploy
 
 ## Maituo 客户日报导入 API
 
-`POST /v1/imports/maituo-customer-daily` 接收 `multipart/form-data`，唯一字段 `file` 为不超过 50 MB 的 `.xlsx`。前端多选后按日期逐个调用该接口。`GET /v1/imports/maituo-customer-daily` 返回按报表日期倒序排列的已保存文件。`GET /v1/imports/maituo-subaccount-directories` 返回子账户目录；`GET /v1/downloads/maituo-subaccount/{account_id}` 列出该账户的历史日期，追加 `/{YYYY-MM-DD}.xlsx` 下载单日拆分文件。
+`POST /v1/imports/maituo-customer-daily` 接收 `multipart/form-data`，唯一字段 `file` 为不超过 50 MB 的 `.xlsx`。前端多选后按日期逐个调用该接口。`GET /v1/imports/maituo-customer-daily` 返回按报表日期倒序排列的已保存文件；传入 `report_date=YYYY-MM-DD` 时返回该日期按正式业务键合并后的笔记明细。
 
 系统识别以下 5 张目标表。工作簿至少包含其中一张即可；缺少的目标表会跳过且不会修改该表已有数据，其他未知工作表会被忽略。实际存在的目标表，其表名和表头必须与样本一致：
 
 - `总览KPI`，业务键为 `报表日期 + 指标`
-- `笔记明细`，业务键为 `报表日期 + 笔记ID + 子账户 + 计划名 + 场域`
+- `笔记明细`，业务键为 `report_date + note_id + placement`（报表日期 + 笔记ID + 场域）
 - `分SPU总览`，业务键为 `报表日期 + SPU`
 - `分子账户`，业务键为 `报表日期 + SPU + 子账户 + 场域`
 - `淘搜趋势`，业务键为表内 `日期`
+
+“笔记明细”中的同日、同笔记、同场域行会合并保存，正式数据不保留子账户或计划名。“分子账户”是工作簿提供的另一套独立汇总，表内没有可验证的笔记归属，不能用它把笔记反推到子账户、计划或 SPU。
 
 报表日期优先从文件名中的 `YYYY-MM-DD` 提取；文件名没有日期时，使用 `淘搜趋势` 的最大日期。缺少 `淘搜趋势` 且文件名也没有日期时无法导入。成功导入过的文件 SHA-256 会返回 `already_saved=true`，避免重复写入。
 
@@ -143,16 +144,16 @@ make frontend-deploy
 
 `POST /v1/imports/dandelion-excel` 接收不超过 50 MB 的 `.xlsx`，以文件内最大的“数据更新日期”作为本次数据日期。`GET /v1/imports/dandelion-excel` 按数据日期倒序返回每个日期最新一次成功上传，供前端展示历史上传与日期缺口。
 
-## 笔记计划分析 API
+## 笔记场域分析 API
 
-`GET /v1/analytics/maituo/note-campaigns` 按 `笔记ID + 计划名 + 场域` 聚合笔记明细。公网入口为 `/paipai/api/analytics/maituo/note-campaigns`。查询参数：
+`GET /v1/analytics/maituo/note-campaigns` 按 `笔记ID + 场域` 聚合笔记明细。公网入口为 `/paipai/api/analytics/maituo/note-campaigns`；路径中的 `campaigns` 仅为兼容旧客户端保留，不表示日报存在计划维度。查询参数：
 
 - `window`：`3d`、`7d` 或 `all`，默认 `7d`；3D/7D 取最近实际存在的报表日，周五、周六自然跳过
-- `q`：按笔记ID、计划名或场域模糊搜索
+- `q`：按笔记ID或场域模糊搜索
 - `sort`：`daily_spend` 按最新报表日消耗排序，`cumulative_spend` 按所选范围累计消耗排序，`search_cost_change` 按“最新报表日回搜成本 - 上一实际报表日回搜成本”排序，默认 `cumulative_spend`
-- `page`、`page_size`：分页参数，每页最多 100 个组合
+- `page`、`page_size`：分页参数，每页最多 100 个笔记场域组合
 
-每个组合返回所选报表日内的累计消耗、累计回搜人数、最新回搜成本及其较上一实际报表日的差值，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加，差值计算同样将未投放日视为 0。仅有一个报表日时差值为 0。分析结果不返回笔记 URL、分类或子账户。
+每个笔记场域组合返回所选报表日内的累计消耗、累计回搜人数、最新回搜成本及其较上一实际报表日的差值，以及逐日报表中的当天回搜成本。某日报日未投放时补零日增量，使累计曲线保持水平；回搜成本不累加，差值计算同样将未投放日视为 0。仅有一个报表日时差值为 0。分析结果不返回子账户或日报计划归因。
 
 ## 内容分析 API
 
@@ -171,7 +172,7 @@ make frontend-deploy
 
 热力图以内容类型为行，以选定的人群标签或用户场景为列。爆文率分母只计入蒲公英“站外活跃成本（15天设备归因）”大于 0 的笔记，成本不高于 20 判定为爆文。投流按笔记和场域汇总所有已保存日报：单场域累计消耗不少于 200，且搜索回搜成本不高于 30 或信息流预计回流后成本不高于 70，即判定投流达标。薯量最新笔记快照 `total_roi` 不低于 1.2 判定 ROI 达标。
 
-接口同时返回标签覆盖率、各指标可评估样本数、单元格聚合数据和笔记明细。无标签笔记保留为“未标注”，前端默认隐藏并可手动显示；设置发布时间范围后，无有效发布时间的笔记不参与汇总。
+接口同时返回标签覆盖率、各指标可评估样本数、单元格聚合数据和笔记明细。每篇笔记的 `search_campaigns` / `feed_campaigns` 直接通过聚光创意 `note_id` 和计划 `placement` 关联当前未删除的聚光计划，返回广告主、计划 ID、名称、状态、开关和同步时间；数组不包含也不推断计划级日报消耗。信息流和搜索页据此展示并启停真实聚光计划，消耗、成本及停投筛选仍保持 Maituo 日报的“笔记 + 场域”口径。无标签笔记保留为“未标注”，前端默认隐藏并可手动显示；设置发布时间范围后，无有效发布时间的笔记不参与汇总。
 
 ## 自建投流后端 API
 
@@ -189,34 +190,27 @@ make frontend-deploy
 
 当前生产 OAuth 已包含 `ad_manage`、`ad_query`、`report_service` 和 `account_manage`，并授权 59 个广告主。`DELIVERY_MEDIA_WRITES_ENABLED=true`，信息流/搜索页的一键暂停和双击改状态会真实调用聚光启停接口。
 
-## 子账户与计划诊断 API
+## 子账户汇总诊断 API
 
-`GET /v1/analytics/maituo/account-plan-diagnosis` 复刻日报看板的“子账户与计划诊断”，公网入口为 `/paipai/api/analytics/maituo/account-plan-diagnosis`，前端页面为 `/paipai/account-plan-diagnosis`。可选参数 `spu` 默认取 `辅酶`。
+`GET /v1/analytics/maituo/account-plan-diagnosis` 返回日报的子账户汇总诊断，公网入口为 `/paipai/api/analytics/maituo/account-plan-diagnosis`，前端页面为 `/paipai/account-plan-diagnosis`。接口和页面路径为兼容旧客户端保留；可选参数 `spu` 默认取 `辅酶`。
 
-子账户层读取最新完整日报的“分子账户”表，统一使用 KPI 70；搜索使用回搜成本，信息流使用预计回流后成本。接口保留按“子账户 + 场域”的诊断表和计划明细，同时按子账户汇总最近 30 个自然日的搜索与信息流趋势。前端可选择子账户及 7/14/30 日周期，直接展示总消耗、搜索消耗与回搜成本、信息流消耗与预计回流后成本、搜索 CPC 与 CTR、信息流 CPC 与 CTR、搜索与信息流回搜率六张图；7 日模式显示点位数值。计划层读取同日报的“笔记明细”表，搜索 KPI 为 30，信息流 KPI 为 70：
+诊断只读取“分子账户”独立汇总表，统一使用 KPI 70；搜索使用回搜成本，信息流使用预计回流后成本。接口按“子账户 + 场域”返回诊断数据，并按子账户汇总最近 30 个自然日的搜索与信息流趋势。前端可选择子账户及 7/14/30 日周期，展示总消耗、搜索消耗与回搜成本、信息流消耗与预计回流后成本、搜索 CPC 与 CTR、信息流 CPC 与 CTR、搜索与信息流回搜率六张图；7 日模式显示点位数值。
 
-数据库视图 `maituo_customer_daily_search_user_overlap` 按“报表日期 + SPU”保留“子账户合计 / SPU”和“笔记合计 / SPU”及其倒数。数据总览接口的 `overlap_points[].placement_coefficients` 按“报表日期 + SPU + 场域”计算“笔记回搜人数合计 / 同场域子账户回搜人数合计”：笔记通过日期、拆分后的子账户和场域映射到 SPU，同一笔记行映射到同一 SPU 时只计一次；场域动态取自日报，当前包括信息流、搜索和视频内流。每日“笔记 / SPU”只使用 `overlap_points[].note_overlap_coefficient`，即当日全部笔记回搜人数加总除以 SPU 去重回搜人数；前端将它与各场域“笔记 / 子账户”合并在一张系数图中。子账户与计划诊断不使用任何上述系数：接口中的 `cost` 和兼容字段 `original_cost` 均为日报原始成本，`correction_coefficient` 返回 `null`，所有 KPI 状态、连续超标和动作建议也均按日报原始成本判断。
+“分子账户”行没有笔记 ID，正式“笔记明细”行也没有子账户或计划名，因此两表之间不存在可验证的归因键，不能通过日期、场域、SPU 或金额把笔记反推到子账户或计划。数据库视图 `maituo_customer_daily_search_user_overlap` 只保留分子账户与 SPU 汇总之间可直接计算的指标；为兼容旧读取方而保留的笔记重叠字段不再计算并返回 `NULL`。诊断接口中的 `cost` 和兼容字段 `original_cost` 均为分子账户日报的原始成本，`correction_coefficient` 返回 `null`，KPI 状态也只按该原始成本判断。
 
 数据总览接口的 `cid` 区块独立读取 `coenzyme_q10_daily`，以 CID 最新数据日为终点返回所选 7/14/30 个自然日的 `spend` 和 `coenzyme_roi`，缺失日期保留为空值。前端“cid数据 · 辅酶”使用左右双轴折线图按日期展示消耗和辅酶成交ROI，不随总览的 SPU 选择变化。
 
-- 成本为空：今日未投放
-- 成本低于 KPI：建议放大
-- 成本达到或超过 KPI 且连续不足 3 个有效报表日：正常观察
-- 成本达到或超过 KPI 且连续满 3 个有效报表日：建议停止
-
-计划明细按笔记 ID 精确关联“蒲公英数据”，同一笔记存在多条快照时取“数据更新日期”最新的一条，补充标题、达人、类型、内容标签、发布时间、合作金额、曝光、阅读、互动及单价。响应同时返回蒲公英最近同步时间和匹配/缺失数量；未匹配笔记保留日报诊断结果，不以相似内容替代。
-
 ## 投流情况对比 API
 
-`GET /v1/analytics/maituo/traffic-comparisons` 按 `笔记ID + 场域` 聚合最新报表日仍在投放的计划。公网入口为 `/paipai/api/analytics/maituo/traffic-comparisons`，前端页面为 `/paipai/traffic-comparison`。查询参数：
+`GET /v1/analytics/maituo/traffic-comparisons` 是为旧客户端保留的兼容入口。公网入口为 `/paipai/api/analytics/maituo/traffic-comparisons`，前端页面为 `/paipai/traffic-comparison`。查询参数：
 
-- `window`：`3d`、`7d` 或 `all`，默认 `7d`；用于计划趋势和区间指标
-- `q`：按笔记ID、计划名或场域模糊搜索；命中计划名时仍返回同笔记、同场域下的全部计划
+- `window`：`3d`、`7d` 或 `all`，默认 `7d`；用于笔记场域趋势和区间指标
+- `q`：按笔记ID或场域模糊搜索
 - `page`、`page_size`：分页参数，每页最多 100 个笔记场域组合
 
-列表固定按“当天有效回搜成本差异降序、最高当天回搜成本降序”排列。单计划组合继续返回，但差异为 0；当天回搜人数为 0 的计划标记为无有效成本，不以 0 元参与差异计算。详情返回同一笔记、同一场域下各计划的当天指标、所选区间汇总和逐日报表点；周末不补日期，回搜成本不累加。
+接口只返回可用报表日期，不再返回计划对比项。日报只能提供同一笔记、同一场域的合并指标，不提供账户或计划拆分，也不能将合并消耗、回搜人数或成本分摊给某个计划。
 
-`GET /v1/analytics/maituo/traffic-comparison-delivery?note_id=...&placement=信息流|搜索` 返回选中笔记场域下各计划关联到的聚光计划、单元及投放配置，公网入口为 `/paipai/api/analytics/maituo/traffic-comparison-delivery`。前端据此横向比较出价与优化目标、单元定向、人群、地域、设备和搜索关键词，不展示日报子账户、广告账户和计划日预算。默认只展示不同配置，列表型配置还会移除各计划共有值；地域归并到省级后比较。该接口按需加载，不增加列表响应体积。
+`GET /v1/analytics/maituo/traffic-comparison-delivery?note_id=...&placement=信息流|搜索` 返回选中笔记场域可从聚光/XHS 实体关系中查到的计划、单元及投放配置，公网入口为 `/paipai/api/analytics/maituo/traffic-comparison-delivery`。这些计划关系和配置来自 XHS 实体表，不是 Maituo 日报的计划归因；接口不得把日报合并指标拆到计划上。
 
 
 ## 飞书手动同步 API

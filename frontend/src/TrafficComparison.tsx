@@ -79,7 +79,7 @@ type DeliveryMatch = {
   advertiser_name: string; campaign_day_budget: number; bidding_strategy: number;
   marketing_target: number; optimize_objective: number; units: DeliveryUnit[];
 };
-type DeliveryCampaign = { campaign_name: string; subaccounts: string[]; matches: DeliveryMatch[]; };
+type DeliveryCampaign = { campaign_name: string; matches: DeliveryMatch[]; };
 type DeliveryResult = { report_date: string; note_id: string; placement: string; campaigns: DeliveryCampaign[]; };
 type DeliveryDiffRow = { key: string; label: string; values: string[][]; different: boolean; };
 

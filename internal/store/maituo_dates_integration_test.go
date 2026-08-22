@@ -35,8 +35,8 @@ func TestMaituoNoteHistoryAndOlderReportProtectionIntegration(t *testing.T) {
 
 	note := maituo.NoteDetail{
 		NoteID: prefix + "-note", NoteURL: "https://example.com/note", Category: "信息流",
-		Subaccount: "account", CampaignName: "campaign", Placement: "搜索",
-		Spend: 1, SearchUsers: 1, CPC: 1, CTRPct: 1,
+		Placement: "搜索",
+		Spend:     1, SearchUsers: 1, CPC: 1, CTRPct: 1,
 		RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "same-note"},
 	}
 	newerDate := time.Date(2099, 2, 2, 0, 0, 0, 0, time.UTC)
@@ -99,5 +99,15 @@ func TestMaituoNoteHistoryAndOlderReportProtectionIntegration(t *testing.T) {
 	}
 	if len(saved) < 2 || saved[0].ReportDate != "2099-02-02" || saved[1].ReportDate != "2099-02-01" {
 		t.Fatalf("saved reports: %+v", saved)
+	}
+	if saved[0].MergedRows != 1 || saved[1].MergedRows != 0 {
+		t.Fatalf("saved merged rows: %+v", saved[:2])
+	}
+	detail, err := postgres.MaituoDailyNotes(ctx, newerDate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.ReportDate != "2099-02-02" || detail.Total != saved[0].MergedRows || len(detail.Items) != detail.Total || detail.Items[0].NoteID != note.NoteID {
+		t.Fatalf("daily detail: %+v", detail)
 	}
 }

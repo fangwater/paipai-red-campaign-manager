@@ -116,3 +116,13 @@ var ManualMaterialsSQL string
 //
 //go:embed 025_manual_material_notes.sql
 var ManualMaterialNotesSQL string
+
+// MaituoNotePlacementSQL archives account/plan rows and installs canonical note-placement history.
+//
+//go:embed 026_maituo_note_placement.sql
+var MaituoNotePlacementSQL string
+
+// MaituoEstimatedPostbackCostSQL derives every estimated postback cost from search cost.
+//
+//go:embed 027_maituo_estimated_postback_cost.sql
+var MaituoEstimatedPostbackCostSQL string

@@ -186,7 +186,7 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   await expect(sortedNotes.getByRole("columnheader")).toHaveText(["笔记", "机构与标签", "站外成本 15 天", "搜索累计消耗 · 成本", "信息流累计消耗 · 成本", "回搜成本变化", "薯量 ROI"]);
   await expect(sortedNotes.locator("tbody tr")).toHaveCount(20);
   await expect(sortedNotes.locator("tbody tr").first()).toContainText("通勤精力管理实测");
-  await expect(sortedNotes.getByRole("link", { name: "查看笔记计划分析 note-1" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-1");
+  await expect(sortedNotes.getByRole("link", { name: "查看笔记场域分析 note-1" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-1");
   await expect(sortedNotes.locator("tbody tr").first().locator(".content-note-stopped")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "搜索累计消耗" })).toHaveClass(/active/);
   await page.getByRole("button", { name: "信息流累计消耗" }).click();
@@ -263,7 +263,7 @@ test("renders content heatmap, filters and note drawer", async ({ page }) => {
   const drawerNotes = page.getByRole("table", { name: "热力图笔记明细" });
   await expect(drawerNotes.locator("tbody tr")).toHaveCount(2);
   await expect(drawerNotes.getByRole("link", { name: /通勤精力管理实测/ })).toHaveAttribute("href", "https://www.xiaohongshu.com/explore/note-1");
-  await expect(drawerNotes.getByRole("link", { name: "查看笔记计划分析 note-1" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-1");
+  await expect(drawerNotes.getByRole("link", { name: "查看笔记场域分析 note-1" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-1");
   await page.getByRole("button", { name: "三项达标 1" }).click();
   await expect(drawerNotes.locator("tbody tr")).toHaveCount(1);
   await page.getByRole("button", { name: "关闭", exact: true }).click();

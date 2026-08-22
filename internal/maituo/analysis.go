@@ -217,7 +217,6 @@ type NoteCampaignPoint struct {
 
 type NoteCampaignAnalysisItem struct {
 	NoteID           string              `json:"note_id"`
-	CampaignName     string              `json:"campaign_name"`
 	Placement        string              `json:"placement"`
 	FirstReportDate  string              `json:"first_report_date"`
 	LastReportDate   string              `json:"last_report_date"`
@@ -299,7 +298,6 @@ type TrafficDeliveryComparisonQuery struct {
 
 type TrafficDeliveryCampaign struct {
 	CampaignName string         `json:"campaign_name"`
-	Subaccounts  []string       `json:"subaccounts"`
 	Matches      []XHSLinkMatch `json:"matches"`
 }
 

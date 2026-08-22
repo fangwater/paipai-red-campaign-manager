@@ -22,25 +22,54 @@ ALTER TABLE maituo_customer_daily_notes
     ALTER COLUMN report_date SET NOT NULL;
 
 DO $$
+DECLARE
+    has_subaccount BOOLEAN;
+    has_campaign_name BOOLEAN;
+    expected_primary_key TEXT;
+    current_primary_key_name TEXT;
+    current_primary_key TEXT;
 BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'maituo_customer_daily_notes'::regclass
-          AND contype = 'p'
-          AND pg_get_constraintdef(oid) NOT LIKE 'PRIMARY KEY (report_date,%'
-    ) THEN
-        ALTER TABLE maituo_customer_daily_notes DROP CONSTRAINT maituo_customer_daily_notes_pkey;
+    SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'maituo_customer_daily_notes'::regclass
+          AND attname = 'subaccount' AND NOT attisdropped
+    ) INTO has_subaccount;
+    SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'maituo_customer_daily_notes'::regclass
+          AND attname = 'campaign_name' AND NOT attisdropped
+    ) INTO has_campaign_name;
+
+    IF has_subaccount IS DISTINCT FROM has_campaign_name THEN
+        RAISE EXCEPTION 'Maituo notes schema has only one legacy account/plan column';
     END IF;
 
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'maituo_customer_daily_notes'::regclass
-          AND contype = 'p'
-    ) THEN
-        ALTER TABLE maituo_customer_daily_notes
-            ADD PRIMARY KEY (report_date, note_id, subaccount, campaign_name, placement);
+    expected_primary_key := CASE WHEN has_subaccount
+        THEN 'PRIMARY KEY (report_date, note_id, subaccount, campaign_name, placement)'
+        ELSE 'PRIMARY KEY (report_date, note_id, placement)'
+    END;
+
+    SELECT conname, pg_get_constraintdef(oid)
+    INTO current_primary_key_name, current_primary_key
+    FROM pg_constraint
+    WHERE conrelid = 'maituo_customer_daily_notes'::regclass
+      AND contype = 'p';
+
+    IF current_primary_key IS NOT NULL AND current_primary_key <> expected_primary_key THEN
+        EXECUTE format(
+            'ALTER TABLE maituo_customer_daily_notes DROP CONSTRAINT %I',
+            current_primary_key_name
+        );
+    END IF;
+
+    IF current_primary_key IS NULL OR current_primary_key <> expected_primary_key THEN
+        IF has_subaccount THEN
+            ALTER TABLE maituo_customer_daily_notes
+                ADD PRIMARY KEY (report_date, note_id, subaccount, campaign_name, placement);
+        ELSE
+            ALTER TABLE maituo_customer_daily_notes
+                ADD PRIMARY KEY (report_date, note_id, placement);
+        END IF;
     END IF;
 END
 $$;

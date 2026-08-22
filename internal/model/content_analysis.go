@@ -30,14 +30,13 @@ type ContentAnalysisCoverage struct {
 }
 
 type ContentAnalysisCampaign struct {
-	Name         string   `json:"name"`
-	Spend        float64  `json:"spend"`
-	Cost         *float64 `json:"cost"`
-	LatestSpend  float64  `json:"latest_spend"`
-	AdvertiserID *int64   `json:"advertiser_id"`
-	CampaignID   *int64   `json:"campaign_id"`
-	FilterState  *int     `json:"filter_state"`
-	Enable       *int     `json:"enable"`
+	Name           string `json:"name"`
+	AdvertiserID   int64  `json:"advertiser_id"`
+	AdvertiserName string `json:"advertiser_name"`
+	CampaignID     int64  `json:"campaign_id"`
+	FilterState    int    `json:"filter_state"`
+	Enable         int    `json:"enable"`
+	SyncedAt       string `json:"synced_at"`
 }
 
 type ContentAnalysisNote struct {

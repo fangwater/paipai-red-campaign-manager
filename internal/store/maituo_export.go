@@ -15,13 +15,11 @@ var ErrMaituoSubaccountReportNotFound = errors.New("未找到该子账户的指�
 
 func (p *Postgres) MaituoSubaccountDirectories(ctx context.Context) ([]maituo.SubaccountDirectory, error) {
 	rows, err := p.pool.Query(ctx, `
-		WITH account_dates AS (
-			SELECT subaccount,report_date FROM maituo_customer_daily_notes WHERE deleted_at IS NULL AND BTRIM(subaccount) NOT IN ('','总体')
-			UNION
-			SELECT subaccount,report_date FROM maituo_customer_daily_subaccounts WHERE deleted_at IS NULL AND BTRIM(subaccount) NOT IN ('','总体')
-		)
-		SELECT subaccount,COUNT(*),MIN(report_date)::TEXT,MAX(report_date)::TEXT
-		FROM account_dates GROUP BY subaccount ORDER BY subaccount
+		SELECT subaccount,COUNT(DISTINCT report_date),MIN(report_date)::TEXT,MAX(report_date)::TEXT
+		FROM maituo_customer_daily_subaccounts
+		WHERE deleted_at IS NULL AND BTRIM(subaccount) NOT IN ('','总体')
+		GROUP BY subaccount
+		ORDER BY subaccount
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("query Maituo subaccount directories: %w", err)
@@ -44,9 +42,9 @@ func (p *Postgres) MaituoSubaccountDirectories(ctx context.Context) ([]maituo.Su
 func (p *Postgres) MaituoSubaccountReports(ctx context.Context, subaccount string) ([]maituo.SubaccountReport, error) {
 	rows, err := p.pool.Query(ctx, `
 		WITH account_dates AS (
-			SELECT report_date FROM maituo_customer_daily_notes WHERE deleted_at IS NULL AND subaccount=$1
-			UNION
-			SELECT report_date FROM maituo_customer_daily_subaccounts WHERE deleted_at IS NULL AND subaccount=$1
+			SELECT DISTINCT report_date
+			FROM maituo_customer_daily_subaccounts
+			WHERE deleted_at IS NULL AND subaccount=$1
 		)
 		SELECT dates.report_date::TEXT,COALESCE(run.file_name,dates.report_date::TEXT || '-Maituo-客户日报.xlsx')
 		FROM account_dates dates
@@ -76,7 +74,7 @@ func (p *Postgres) MaituoSubaccountReports(ctx context.Context, subaccount strin
 }
 
 func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount string, reportDate time.Time) (maituo.Snapshot, error) {
-	snapshot := maituo.Snapshot{ReportDate: reportDate, PresentSheets: []string{maituo.SheetNotes, maituo.SheetSubaccount}}
+	snapshot := maituo.Snapshot{ReportDate: reportDate, PresentSheets: []string{maituo.SheetSubaccount}}
 	if err := p.pool.QueryRow(ctx, `
 		SELECT file_name FROM maituo_customer_daily_import_runs
 		WHERE status='succeeded' AND report_date=$1
@@ -86,30 +84,6 @@ func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount stri
 	} else if err != nil {
 		return maituo.Snapshot{}, fmt.Errorf("find Maituo report for subaccount export: %w", err)
 	}
-
-	noteRows, err := p.pool.Query(ctx, `
-		SELECT note_id,note_url,category,subaccount,campaign_name,placement,keyword_category_note,
-		       spend,search_users,search_cost,estimated_postback_cost,search_rate_pct,cpc,ctr_pct,source_row_number,content_hash
-		FROM maituo_customer_daily_notes
-		WHERE report_date=$1 AND subaccount=$2 AND deleted_at IS NULL
-		ORDER BY source_row_number,note_id,campaign_name,placement
-	`, reportDate, subaccount)
-	if err != nil {
-		return maituo.Snapshot{}, fmt.Errorf("query Maituo subaccount notes: %w", err)
-	}
-	for noteRows.Next() {
-		var row maituo.NoteDetail
-		if err := noteRows.Scan(&row.NoteID, &row.NoteURL, &row.Category, &row.Subaccount, &row.CampaignName, &row.Placement, &row.KeywordCategoryNote, &row.Spend, &row.SearchUsers, &row.SearchCost, &row.EstimatedPostbackCost, &row.SearchRatePct, &row.CPC, &row.CTRPct, &row.SourceRow, &row.ContentHash); err != nil {
-			noteRows.Close()
-			return maituo.Snapshot{}, fmt.Errorf("scan Maituo subaccount note: %w", err)
-		}
-		snapshot.Notes = append(snapshot.Notes, row)
-	}
-	if err := noteRows.Err(); err != nil {
-		noteRows.Close()
-		return maituo.Snapshot{}, fmt.Errorf("iterate Maituo subaccount notes: %w", err)
-	}
-	noteRows.Close()
 
 	subRows, err := p.pool.Query(ctx, `
 		SELECT spu,subaccount,placement,search_cost,estimated_postback_cost,spend,search_users,
@@ -132,7 +106,7 @@ func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount stri
 	if err := subRows.Err(); err != nil {
 		return maituo.Snapshot{}, fmt.Errorf("iterate Maituo subaccount summary: %w", err)
 	}
-	if len(snapshot.Notes) == 0 && len(snapshot.Subaccounts) == 0 {
+	if len(snapshot.Subaccounts) == 0 {
 		return maituo.Snapshot{}, ErrMaituoSubaccountReportNotFound
 	}
 	return snapshot, nil

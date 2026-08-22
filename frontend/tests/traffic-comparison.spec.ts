@@ -74,9 +74,9 @@ test("prioritizes cost gaps and expands campaigns for the same note placement", 
       body: JSON.stringify({ success: true, data: {
         report_date: "2026-07-23", note_id: noteID, placement,
         campaigns: noteID === "note-multi" ? [
-          { campaign_name: "计划高成本", subaccounts: ["账户A"], matches: [match("高成本", 20000, "都市白领", "北京#上海#北屯")] },
-          { campaign_name: "计划低成本", subaccounts: ["账户A"], matches: [match("低成本", 10000, "精致妈妈", "北京#广东")] }
-        ] : [{ campaign_name: "单计划", subaccounts: ["账户A"], matches: [match("单计划", 10000, "都市白领", "北京")] }]
+          { campaign_name: "计划高成本", matches: [match("高成本", 20000, "都市白领", "北京#上海#北屯")] },
+          { campaign_name: "计划低成本", matches: [match("低成本", 10000, "精致妈妈", "北京#广东")] }
+        ] : [{ campaign_name: "单计划", matches: [match("单计划", 10000, "都市白领", "北京")] }]
       }} )
     });
   });
@@ -92,6 +92,7 @@ test("prioritizes cost gaps and expands campaigns for the same note placement", 
   await expect(page.locator(".comparison-campaign-table tbody tr").first()).toContainText("+¥15.00");
   await expect(page.locator(".delivery-difference-section")).toContainText("投流配置差异");
   await expect(page.locator(".delivery-difference-section")).not.toContainText("日报子账户");
+  await expect(page.locator(".delivery-difference-section")).not.toContainText("账户A");
   await expect(page.locator(".delivery-difference-section")).not.toContainText("聚光广告账户");
   await expect(page.locator(".delivery-difference-section")).not.toContainText("计划日预算");
   await expect(page.locator(".delivery-difference-section")).toContainText("都市白领");

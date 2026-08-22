@@ -164,7 +164,7 @@ test("opens the first-level red materials directory from the homepage", async ({
   });
 
   await page.goto("/paipai/");
-  await expect(page.getByText("15 个可用功能", { exact: true })).toBeVisible();
+  await expect(page.getByText("14 个可用功能", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /进入检索素材/ }).click();
   await expect(page).toHaveURL(/\/paipai\/red-materials$/);
   await expect(page.getByRole("heading", { name: "检索素材" })).toBeVisible();

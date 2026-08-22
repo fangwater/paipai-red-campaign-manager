@@ -48,32 +48,6 @@ func TestContentAnalysisStoppedWhenLatestSpendIsZero(t *testing.T) {
 	}
 }
 
-func TestDecodeContentAnalysisCampaigns(t *testing.T) {
-	got, err := decodeContentAnalysisCampaigns(nil)
-	if err != nil || got == nil || len(got) != 0 {
-		t.Fatalf("nil campaigns=%v err=%v", got, err)
-	}
-	got, err = decodeContentAnalysisCampaigns([]byte("[]"))
-	if err != nil || got == nil || len(got) != 0 {
-		t.Fatalf("empty campaigns=%v err=%v", got, err)
-	}
-	cost := 24.5
-	raw := []byte(`[{"name":"辅酶搜索计划","spend":480,"cost":24.5,"latest_spend":12,"advertiser_id":9001,"campaign_id":101,"filter_state":2,"enable":0},{"name":"回搜计划","spend":120,"cost":null,"latest_spend":0,"advertiser_id":null,"campaign_id":null,"filter_state":null,"enable":null}]`)
-	got, err = decodeContentAnalysisCampaigns(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 || got[0].Name != "辅酶搜索计划" || got[0].Spend != 480 || got[0].Cost == nil || *got[0].Cost != cost || got[0].LatestSpend != 12 {
-		t.Fatalf("campaigns=%+v", got)
-	}
-	if got[0].AdvertiserID == nil || *got[0].AdvertiserID != 9001 || got[0].CampaignID == nil || *got[0].CampaignID != 101 || got[0].FilterState == nil || *got[0].FilterState != 2 || got[0].Enable == nil || *got[0].Enable != 0 {
-		t.Fatalf("first campaign status=%+v", got[0])
-	}
-	if got[1].Name != "回搜计划" || got[1].Cost != nil || got[1].LatestSpend != 0 || got[1].AdvertiserID != nil || got[1].CampaignID != nil || got[1].FilterState != nil {
-		t.Fatalf("second campaign=%+v", got[1])
-	}
-}
-
 func TestCampaignSnapshotFromAction(t *testing.T) {
 	filterState, enable, deleted, err := campaignSnapshotFromAction(1)
 	if err != nil || filterState != 1 || enable != 1 || deleted {

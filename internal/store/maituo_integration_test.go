@@ -40,14 +40,15 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	searchRate := 2.0
 	cpc := 3.0
 	ctr := 4.0
-	feedCost := 8.0
+	feedSearchCost := 8.0
+	feedCost := 5.04
 	feedRate := 9.0
 	feedCPC := 10.0
 	feedCTR := 11.0
 	firstSnapshot := maituo.Snapshot{
 		FileName: fileName, FileSHA256: prefix + "-first", ReportDate: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), PresentSheets: append([]string(nil), maituo.WorkbookSheets...),
 		KPIs:  []maituo.KPI{{Metric: prefix + "-metric", Value: 1, DataBasis: "test", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "k1"}}},
-		Notes: []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "信息流", Subaccount: prefix + "-account-a", CampaignName: "campaign", Placement: "搜索", Spend: 1, SearchUsers: 12, SearchCost: &one, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "n1"}}},
+		Notes: []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "信息流", Placement: "搜索", Spend: 1, SearchUsers: 12, SearchCost: &one, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "n1"}}},
 		SPUs:  []maituo.SPUOverview{{SPU: prefix + "-spu", AuctionSpend: 1, SearchUsers: 1, SearchCost: 1, SearchRatePct: 1, CPC: 1, CTRPct: 1, NoteCount: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: "s1"}}},
 		Subaccounts: []maituo.SubaccountOverview{
 			{
@@ -58,7 +59,7 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 			},
 			{
 				SPU: prefix + "-spu", Subaccount: prefix + "-account-a", Placement: "信息流",
-				EstimatedPostbackCost: &feedCost, Spend: 7, SearchUsers: 8, SearchRatePct: &feedRate,
+				SearchCost: &feedSearchCost, EstimatedPostbackCost: &feedCost, Spend: 7, SearchUsers: 8, SearchRatePct: &feedRate,
 				CPC: &feedCPC, CTRPct: &feedCTR, NoteCount: 9,
 				RowMetadata: maituo.RowMetadata{SourceRow: 3, ContentHash: "a2"},
 			},
@@ -109,11 +110,9 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	if len(diagnosis.AccountOverviews) != 1 || len(diagnosis.AccountOverviews[0].Points) != maituoAccountOverviewDays {
 		t.Fatalf("account overviews: %+v", diagnosis.AccountOverviews)
 	}
-	if len(searchAccount.Plans) != 1 ||
-		searchAccount.Plans[0].OriginalCost == nil || *searchAccount.Plans[0].OriginalCost != 1 ||
-		searchAccount.Plans[0].CorrectionCoefficient != nil ||
-		searchAccount.Plans[0].Cost == nil || *searchAccount.Plans[0].Cost != 1 {
-		t.Fatalf("search plans: %+v", searchAccount.Plans)
+	if len(diagnosis.PlanKPIs) != 0 || len(searchAccount.Plans) != 0 ||
+		searchAccount.OverPlans != 0 || searchAccount.EnlargePlans != 0 || searchAccount.StopPlans != 0 {
+		t.Fatalf("retired plan diagnosis is not empty: %+v", diagnosis)
 	}
 	businessOverview, err := postgres.BusinessOverview(ctx, 7, prefix+"-spu")
 	if err != nil {
@@ -126,34 +125,13 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 	if overlapPoint.SPUSearchUsers == nil || *overlapPoint.SPUSearchUsers != 1 ||
 		overlapPoint.SubaccountSearchUsers == nil || *overlapPoint.SubaccountSearchUsers != 14 ||
 		overlapPoint.OverlapUsers == nil || *overlapPoint.OverlapUsers != 13 ||
-		overlapPoint.OverlapCoefficient == nil || *overlapPoint.OverlapCoefficient != 14 ||
-		overlapPoint.NoteSearchUsers == nil || *overlapPoint.NoteSearchUsers != 12 ||
-		overlapPoint.NoteOverlapUsers == nil || *overlapPoint.NoteOverlapUsers != 11 ||
-		overlapPoint.NoteOverlapCoefficient == nil || *overlapPoint.NoteOverlapCoefficient != 12 {
+		overlapPoint.OverlapCoefficient == nil || *overlapPoint.OverlapCoefficient != 14 {
 		t.Fatalf("overlap latest point: %+v", overlapPoint)
 	}
-	if len(overlapPoint.PlacementCoefficients) != 2 {
-		t.Fatalf("placement coefficients: %+v", overlapPoint.PlacementCoefficients)
-	}
-	expectedPlacements := map[string]struct {
-		noteUsers       int64
-		subaccountUsers int64
-		coefficient     float64
-	}{
-		"搜索":  {noteUsers: 12, subaccountUsers: 6, coefficient: 2},
-		"信息流": {noteUsers: 0, subaccountUsers: 8, coefficient: 0},
-	}
-	for _, item := range overlapPoint.PlacementCoefficients {
-		expected, ok := expectedPlacements[item.Placement]
-		if !ok || item.SearchUsers != expected.subaccountUsers ||
-			item.NoteSearchUsers != expected.noteUsers || item.SubaccountSearchUsers != expected.subaccountUsers ||
-			item.Coefficient == nil || *item.Coefficient != expected.coefficient {
-			t.Fatalf("placement coefficient: %+v", item)
-		}
-		delete(expectedPlacements, item.Placement)
-	}
-	if len(expectedPlacements) != 0 {
-		t.Fatalf("missing placement coefficients: %+v", expectedPlacements)
+	if overlapPoint.NoteSearchUsers != nil || overlapPoint.NoteOverlapUsers != nil ||
+		overlapPoint.NoteOverlapCoefficient != nil || overlapPoint.NoteDeduplicationFactor != nil ||
+		len(overlapPoint.PlacementCoefficients) != 0 {
+		t.Fatalf("retired note attribution is not empty: %+v", overlapPoint)
 	}
 	overview := diagnosis.AccountOverviews[0]
 	overviewPoint := overview.Points[len(overview.Points)-1]
@@ -164,7 +142,7 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		overviewPoint.SearchCTRPct == nil || *overviewPoint.SearchCTRPct != 4 ||
 		overviewPoint.SearchRatePct == nil || *overviewPoint.SearchRatePct != 2 ||
 		overviewPoint.FeedSpend == nil || *overviewPoint.FeedSpend != 7 ||
-		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 8 ||
+		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 5.04 ||
 		overviewPoint.FeedCPC == nil || *overviewPoint.FeedCPC != 10 ||
 		overviewPoint.FeedCTRPct == nil || *overviewPoint.FeedCTRPct != 11 ||
 		overviewPoint.FeedSearchRatePct == nil || *overviewPoint.FeedSearchRatePct != 9 {

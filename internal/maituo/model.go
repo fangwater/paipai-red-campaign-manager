@@ -76,8 +76,6 @@ type NoteDetail struct {
 	NoteID                string   `json:"note_id"`
 	NoteURL               string   `json:"note_url"`
 	Category              string   `json:"category"`
-	Subaccount            string   `json:"subaccount"`
-	CampaignName          string   `json:"campaign_name"`
 	Placement             string   `json:"placement"`
 	KeywordCategoryNote   *string  `json:"keyword_category_note"`
 	Spend                 float64  `json:"spend"`
@@ -88,6 +86,12 @@ type NoteDetail struct {
 	CPC                   float64  `json:"cpc"`
 	CTRPct                float64  `json:"ctr_pct"`
 	RowMetadata
+}
+
+type DailyNoteReport struct {
+	ReportDate string       `json:"report_date"`
+	Total      int          `json:"total"`
+	Items      []NoteDetail `json:"items"`
 }
 
 type SPUOverview struct {
@@ -269,6 +273,7 @@ type SavedImport struct {
 	FileSHA256    string    `json:"file_sha256"`
 	ReportDate    string    `json:"report_date"`
 	Fetched       int       `json:"fetched"`
+	MergedRows    int       `json:"merged_rows"`
 	PresentSheets []string  `json:"present_sheets"`
 	MissingSheets []string  `json:"missing_sheets"`
 	CompletedAt   time.Time `json:"completed_at"`

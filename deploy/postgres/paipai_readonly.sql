@@ -1,5 +1,32 @@
 BEGIN;
 
+DO $$
+DECLARE
+    primary_key_definition TEXT;
+BEGIN
+    IF to_regclass('public.maituo_customer_daily_notes') IS NULL THEN
+        RAISE EXCEPTION 'Canonical Maituo notes table does not exist';
+    END IF;
+    IF EXISTS (
+        SELECT 1
+        FROM pg_attribute
+        WHERE attrelid = 'public.maituo_customer_daily_notes'::regclass
+          AND attname IN ('subaccount', 'campaign_name')
+          AND NOT attisdropped
+    ) THEN
+        RAISE EXCEPTION 'Maituo notes table still contains retired account/plan columns';
+    END IF;
+    SELECT pg_get_constraintdef(oid)
+    INTO primary_key_definition
+    FROM pg_constraint
+    WHERE conrelid = 'public.maituo_customer_daily_notes'::regclass
+      AND contype = 'p';
+    IF primary_key_definition IS DISTINCT FROM 'PRIMARY KEY (report_date, note_id, placement)' THEN
+        RAISE EXCEPTION 'Unexpected Maituo notes primary key: %', primary_key_definition;
+    END IF;
+END
+$$;
+
 CREATE SCHEMA IF NOT EXISTS paipai_readonly;
 REVOKE ALL ON SCHEMA paipai_readonly FROM PUBLIC;
 
@@ -23,12 +50,30 @@ SELECT report_date, metric, metric_value, data_basis, first_seen_at, updated_at
 FROM public.maituo_customer_daily_kpis
 WHERE deleted_at IS NULL;
 
-CREATE OR REPLACE VIEW paipai_readonly.maituo_customer_daily_notes AS
-SELECT report_date, note_id, note_url, category, subaccount, campaign_name, placement,
+DROP VIEW IF EXISTS paipai_readonly.maituo_customer_daily_notes;
+CREATE VIEW paipai_readonly.maituo_customer_daily_notes AS
+SELECT report_date, note_id, note_url, category, placement,
        keyword_category_note, spend, search_users, search_cost, estimated_postback_cost,
        search_rate_pct, cpc, ctr_pct, first_seen_at, updated_at
 FROM public.maituo_customer_daily_notes
 WHERE deleted_at IS NULL;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'paipai_readonly'
+          AND table_name = 'maituo_customer_daily_notes'
+          AND column_name IN ('subaccount', 'campaign_name')
+    ) OR POSITION(
+        'account_plan_archive' IN
+        pg_get_viewdef('paipai_readonly.maituo_customer_daily_notes'::regclass, TRUE)
+    ) > 0 THEN
+        RAISE EXCEPTION 'Maituo readonly view is not bound to the canonical table';
+    END IF;
+END
+$$;
 
 CREATE OR REPLACE VIEW paipai_readonly.maituo_customer_daily_spus AS
 SELECT report_date, spu, auction_spend, search_users, search_cost, search_rate_pct,

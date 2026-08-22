@@ -18,7 +18,6 @@ type SubaccountWorkbook struct {
 }
 
 type subaccountRows struct {
-	notes       []NoteDetail
 	subaccounts []SubaccountOverview
 }
 
@@ -30,17 +29,12 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 		return SubaccountWorkbook{}, ErrNoSubaccountData
 	}
 	rows := &subaccountRows{}
-	for _, row := range snapshot.Notes {
-		if strings.TrimSpace(row.Subaccount) == subaccount {
-			rows.notes = append(rows.notes, row)
-		}
-	}
 	for _, row := range snapshot.Subaccounts {
 		if strings.TrimSpace(row.Subaccount) == subaccount {
 			rows.subaccounts = append(rows.subaccounts, row)
 		}
 	}
-	if len(rows.notes) == 0 && len(rows.subaccounts) == 0 {
+	if len(rows.subaccounts) == 0 {
 		return SubaccountWorkbook{}, ErrNoSubaccountData
 	}
 	data, err := buildSubaccountWorkbook(rows)
@@ -56,22 +50,12 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 func buildSubaccountWorkbook(rows *subaccountRows) ([]byte, error) {
 	workbook := excelize.NewFile()
 	defer func() { _ = workbook.Close() }()
-	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
+	if err := workbook.SetSheetName("Sheet1", SheetSubaccount); err != nil {
 		return nil, err
-	}
-	if _, err := workbook.NewSheet(SheetSubaccount); err != nil {
-		return nil, err
-	}
-	noteRows := make([][]interface{}, len(rows.notes))
-	for index, row := range rows.notes {
-		noteRows[index] = []interface{}{row.NoteID, row.NoteURL, row.Category, row.Subaccount, row.CampaignName, row.Placement, optionalExportValue(row.KeywordCategoryNote), row.Spend, row.SearchUsers, optionalExportValue(row.SearchCost), optionalExportValue(row.EstimatedPostbackCost), optionalExportValue(row.SearchRatePct), row.CPC, row.CTRPct}
 	}
 	subaccountRows := make([][]interface{}, len(rows.subaccounts))
 	for index, row := range rows.subaccounts {
 		subaccountRows[index] = []interface{}{row.SPU, row.Subaccount, row.Placement, optionalExportValue(row.SearchCost), optionalExportValue(row.EstimatedPostbackCost), row.Spend, row.SearchUsers, optionalExportValue(row.SearchRatePct), optionalExportValue(row.CPC), optionalExportValue(row.CTRPct), row.NoteCount}
-	}
-	if err := writeExportSheet(workbook, SheetNotes, expectedHeaders[SheetNotes], noteRows, []float64{22, 34, 14, 18, 24, 12, 16, 14, 12, 14, 18, 14, 10, 10}); err != nil {
-		return nil, err
 	}
 	if err := writeExportSheet(workbook, SheetSubaccount, expectedHeaders[SheetSubaccount], subaccountRows, []float64{14, 18, 12, 14, 18, 14, 12, 14, 10, 10, 10}); err != nil {
 		return nil, err

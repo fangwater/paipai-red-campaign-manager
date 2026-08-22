@@ -193,7 +193,7 @@ function ContentNoteTable({ notes, showStatus = true, label }: {
       return <tr key={note.note_id}>
         <td><div className="content-note-identity">
           {noteURL ? <a className="content-note-title" href={noteURL} target="_blank" rel="noreferrer" title={note.title}>{note.title}<ExternalLink size={12} /></a> : <strong className="content-note-title" title={note.title}>{note.title}</strong>}
-          <Link className="content-note-id" to={noteCampaignAnalysisPath(note.note_id)} title="查看笔记计划分析" aria-label={"查看笔记计划分析 " + note.note_id}>{note.note_id}</Link>
+          <Link className="content-note-id" to={noteCampaignAnalysisPath(note.note_id)} title="查看笔记场域分析" aria-label={"查看笔记场域分析 " + note.note_id}>{note.note_id}</Link>
           <small>{note.author || "未知达人"} · {note.published_date || "发布时间未知"}</small>
         </div></td>
         <td><div className="content-note-labels"><strong>{note.agency}</strong><span>{note.content_type} · {note.audience} · {note.scenario}</span></div></td>

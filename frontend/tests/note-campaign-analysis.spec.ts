@@ -9,7 +9,7 @@ const points = [
 const manuscriptAssetID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const transparentPNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
-test("renders cumulative ECharts and switches the note campaign key", async ({ page }) => {
+test("renders cumulative ECharts and switches the note placement key", async ({ page }) => {
   const requestedWindows: string[] = [];
   const requestedSorts: string[] = [];
   const requestedPlanIDs: string[] = [];
@@ -32,8 +32,8 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
           page: 1,
           page_size: 25,
           items: [
-            { note_id: "note-a", campaign_name: "磷虾油搜索计划", placement: "搜索", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 2, latest_spend: 20, total_spend: 30, total_search_users: 6, latest_search_cost: 5, search_cost_change: 5, points },
-            { note_id: "note-b", campaign_name: "辅酶信息流计划", placement: "信息流", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 3, latest_spend: 8, total_spend: 18, total_search_users: 3, latest_search_cost: 4, search_cost_change: -2, points: points.map((point) => ({ ...point, cumulative_spend: point.cumulative_spend * 0.6, cumulative_search_users: Math.round(point.cumulative_search_users * 0.5) })) }
+            { note_id: "note-a", placement: "搜索", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 2, latest_spend: 20, total_spend: 30, total_search_users: 6, latest_search_cost: 5, search_cost_change: 5, points },
+            { note_id: "note-b", placement: "信息流", first_report_date: "2026-07-21", last_report_date: "2026-07-23", active_days: 3, latest_spend: 8, total_spend: 18, total_search_users: 3, latest_search_cost: 4, search_cost_change: -2, points: points.map((point) => ({ ...point, cumulative_spend: point.cumulative_spend * 0.6, cumulative_search_users: Math.round(point.cumulative_search_users * 0.5) })) }
           ]
         }
       })
@@ -78,14 +78,15 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   });
 
   await page.goto("/paipai/note-campaign-analysis?plan_id=211253819&plan_name=%E5%85%B3%E8%81%94%E8%AE%A1%E5%88%92&window=all");
-  await expect(page.getByRole("heading", { name: "笔记计划分析" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "笔记场域分析" })).toBeVisible();
   await expect.poll(() => requestedPlanIDs).toContain("211253819");
-  await expect(page.getByText("关联计划", { exact: true })).toBeVisible();
+  await expect(page.getByText("薯量计划关联：关联计划", { exact: true })).toBeVisible();
   await expect(page.locator(".metric-chart")).toHaveCount(3);
   await expect(page.getByText("累计回搜成本", { exact: true })).toHaveCount(0);
   await expect(page.getByText("回搜成本", { exact: true })).toBeVisible();
-  await expect(page.locator(".focus-identity")).toContainText("磷虾油搜索计划");
+  await expect(page.locator(".focus-identity")).toContainText("note-a");
   await expect(page.locator(".analysis-table tbody tr")).toHaveCount(2);
+  await expect(page.locator(".analysis-table thead")).not.toContainText("计划");
   await expect(page.locator(".analysis-table tbody tr").nth(0)).toContainText("+¥5.00");
   await expect(page.locator(".analysis-table tbody tr").nth(1)).toContainText("-¥2.00");
   await expect(page.getByText("http", { exact: false })).toHaveCount(0);
@@ -122,7 +123,7 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   }))).toEqual([true, true, true]);
 
   await page.locator(".analysis-table tbody tr").nth(1).click();
-  await expect(page.locator(".focus-identity")).toContainText("辅酶信息流计划");
+  await expect(page.locator(".focus-identity")).toContainText("note-b");
   await page.getByRole("button", { name: "查询内容" }).click();
   const incompleteDialog = page.getByRole("dialog", { name: "笔记内容" });
   const incompleteTags = incompleteDialog.getByRole("region", { name: "稿件标签" });
@@ -138,7 +139,7 @@ test("renders cumulative ECharts and switches the note campaign key", async ({ p
   await expect.poll(() => requestedSorts).toContain("search_cost_change");
 });
 
-test("opens note campaign analysis from a note id query", async ({ page }) => {
+test("opens note placement analysis from a note id query", async ({ page }) => {
   const requestedQueries: string[] = [];
   await page.route("**/paipai/api/analytics/maituo/note-campaigns?*", async (route) => {
     requestedQueries.push(new URL(route.request().url()).searchParams.get("q") ?? "");
@@ -156,7 +157,6 @@ test("opens note campaign analysis from a note id query", async ({ page }) => {
           page_size: 25,
           items: [{
             note_id: "note-1",
-            campaign_name: "辅酶搜索计划",
             placement: "搜索",
             first_report_date: "2026-07-21",
             last_report_date: "2026-07-23",
@@ -174,8 +174,8 @@ test("opens note campaign analysis from a note id query", async ({ page }) => {
   });
 
   await page.goto("/paipai/note-campaign-analysis?q=note-1");
-  await expect(page.getByRole("heading", { name: "笔记计划分析" })).toBeVisible();
-  await expect(page.getByPlaceholder("搜索笔记ID、计划或场域")).toHaveValue("note-1");
+  await expect(page.getByRole("heading", { name: "笔记场域分析" })).toBeVisible();
+  await expect(page.getByPlaceholder("搜索笔记ID或场域")).toHaveValue("note-1");
   await expect.poll(() => requestedQueries).toContain("note-1");
   await expect(page.locator(".focus-identity")).toContainText("note-1");
 });

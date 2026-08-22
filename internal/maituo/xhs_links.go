@@ -302,14 +302,12 @@ type XHSLinkMatch struct {
 }
 
 type XHSLinkItem struct {
-	NoteID       string         `json:"note_id"`
-	CampaignName string         `json:"campaign_name"`
-	Placement    string         `json:"placement"`
-	Subaccounts  []string       `json:"subaccounts"`
-	Spend        float64        `json:"spend"`
-	SearchUsers  int64          `json:"search_users"`
-	SearchCost   float64        `json:"search_cost"`
-	Matches      []XHSLinkMatch `json:"matches"`
+	NoteID      string         `json:"note_id"`
+	Placement   string         `json:"placement"`
+	Spend       float64        `json:"spend"`
+	SearchUsers int64          `json:"search_users"`
+	SearchCost  float64        `json:"search_cost"`
+	Matches     []XHSLinkMatch `json:"matches"`
 }
 
 type XHSLinkResult struct {

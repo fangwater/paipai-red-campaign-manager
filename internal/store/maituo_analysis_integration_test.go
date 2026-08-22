@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -28,11 +27,10 @@ func TestMaituoNoteCampaignAnalysisIntegration(t *testing.T) {
 
 	prefix := "analysis-" + time.Now().Format("20060102150405.000000000")
 	noteID := prefix + "-note"
-	campaign := prefix + "-campaign"
 	dates := []time.Time{
-		time.Date(2098, 1, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(2098, 1, 2, 0, 0, 0, 0, time.UTC),
-		time.Date(2098, 1, 3, 0, 0, 0, 0, time.UTC),
+		time.Date(9999, 12, 29, 0, 0, 0, 0, time.UTC),
+		time.Date(9999, 12, 30, 0, 0, 0, 0, time.UTC),
+		time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC),
 	}
 	defer func() {
 		cleanup := context.Background()
@@ -42,9 +40,9 @@ func TestMaituoNoteCampaignAnalysisIntegration(t *testing.T) {
 
 	searchCost := 5.0
 	notes := [][]maituo.NoteDetail{
-		{{NoteID: noteID, NoteURL: "https://example.com", Category: "test", Subaccount: "a", CampaignName: campaign, Placement: "搜索", Spend: 10, SearchUsers: 2, SearchCost: &searchCost, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-1"}}},
-		{{NoteID: noteID, NoteURL: "https://example.com", Category: "test", Subaccount: "a", CampaignName: campaign, Placement: "信息流", Spend: 100, SearchUsers: 10, SearchCost: &searchCost, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-2"}}},
-		{{NoteID: noteID, NoteURL: "https://example.com", Category: "test", Subaccount: "a", CampaignName: campaign, Placement: "搜索", Spend: 20, SearchUsers: 4, SearchCost: &searchCost, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-3"}}},
+		{{NoteID: noteID, NoteURL: "https://example.com", Category: "test", Placement: "搜索", Spend: 10, SearchUsers: 2, SearchCost: &searchCost, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-1"}}},
+		{{NoteID: noteID, NoteURL: "https://example.com", Category: "test", Placement: "信息流", Spend: 100, SearchUsers: 10, SearchCost: &searchCost, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-2"}}},
+		{{NoteID: noteID, NoteURL: "https://example.com", Category: "test", Placement: "搜索", Spend: 20, SearchUsers: 4, SearchCost: &searchCost, CPC: 1, CTRPct: 1, RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-3"}}},
 	}
 	for index, date := range dates {
 		_, err := postgres.ImportMaituoCustomerDaily(ctx, maituo.Snapshot{
@@ -94,7 +92,7 @@ func TestMaituoNoteCampaignAnalysisIntegration(t *testing.T) {
 	}
 }
 
-func TestMaituoTrafficComparisonSortsGapBeforeCost(t *testing.T) {
+func TestMaituoTrafficComparisonReturnsNoCampaignAttribution(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
@@ -112,16 +110,16 @@ func TestMaituoTrafficComparisonSortsGapBeforeCost(t *testing.T) {
 
 	prefix := "traffic-comparison-" + time.Now().Format("20060102150405.000000000")
 	dates := []time.Time{
-		time.Date(2099, 2, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(2099, 2, 2, 0, 0, 0, 0, time.UTC),
+		time.Date(9999, 12, 30, 0, 0, 0, 0, time.UTC),
+		time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC),
 	}
 	cost := func(value float64) *float64 { return &value }
-	note := func(noteID, campaign string, searchCost float64, sourceRow int) maituo.NoteDetail {
+	note := func(noteID string, searchCost float64, sourceRow int) maituo.NoteDetail {
 		return maituo.NoteDetail{
-			NoteID: noteID, NoteURL: "https://example.com", Category: "test", Subaccount: campaign,
-			CampaignName: campaign, Placement: "搜索", Spend: searchCost * 2, SearchUsers: 2,
+			NoteID: noteID, NoteURL: "https://example.com", Category: "test",
+			Placement: "搜索", Spend: searchCost * 2, SearchUsers: 2,
 			SearchCost: cost(searchCost), CPC: 1, CTRPct: 1,
-			RowMetadata: maituo.RowMetadata{SourceRow: sourceRow, ContentHash: prefix + noteID + campaign + fmt.Sprint(sourceRow)},
+			RowMetadata: maituo.RowMetadata{SourceRow: sourceRow, ContentHash: prefix + noteID},
 		}
 	}
 	defer func() {
@@ -132,11 +130,7 @@ func TestMaituoTrafficComparisonSortsGapBeforeCost(t *testing.T) {
 
 	for index, date := range dates {
 		notes := []maituo.NoteDetail{
-			note(prefix+"-large-gap", "campaign-a", 10, index*10+2),
-			note(prefix+"-large-gap", "campaign-b", 30, index*10+3),
-			note(prefix+"-small-gap", "campaign-a", 20, index*10+4),
-			note(prefix+"-small-gap", "campaign-b", 25, index*10+5),
-			note(prefix+"-single", "campaign-only", 100, index*10+6),
+			note(prefix+"-retired", 10+float64(index), index+2),
 		}
 		if _, err := postgres.ImportMaituoCustomerDaily(ctx, maituo.Snapshot{
 			FileName: prefix + "-" + date.Format("2006-01-02") + ".xlsx", FileSHA256: prefix + "-hash-" + date.Format("2006-01-02"),
@@ -152,22 +146,10 @@ func TestMaituoTrafficComparisonSortsGapBeforeCost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Total != 3 || len(result.Items) != 3 {
+	if len(result.ReportDates) == 0 || result.LatestDate == "" {
 		t.Fatalf("result = %+v", result)
 	}
-	if result.Items[0].NoteID != prefix+"-large-gap" || result.Items[0].SearchCostGap != 20 {
-		t.Fatalf("first item = %+v", result.Items[0])
-	}
-	if result.Items[0].ComparableCampaignCount != 2 {
-		t.Fatalf("comparable campaigns = %+v", result.Items[0])
-	}
-	if result.Items[1].NoteID != prefix+"-small-gap" || result.Items[1].SearchCostGap != 5 {
-		t.Fatalf("second item = %+v", result.Items[1])
-	}
-	if result.Items[2].NoteID != prefix+"-single" || result.Items[2].CampaignCount != 1 || result.Items[2].SearchCostGap != 0 {
-		t.Fatalf("single item = %+v", result.Items[2])
-	}
-	if len(result.Items[0].Campaigns) != 2 || len(result.Items[0].Campaigns[0].Points) != 2 {
-		t.Fatalf("campaign details = %+v", result.Items[0].Campaigns)
+	if result.Total != 0 || len(result.Items) != 0 {
+		t.Fatalf("retired comparison returned attributed campaigns: %+v", result)
 	}
 }

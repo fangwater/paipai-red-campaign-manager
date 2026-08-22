@@ -1,4 +1,4 @@
-.PHONY: run test build frontend-dev frontend-build frontend-deploy xhs-token xhs-refresh xhs-authd-build xhs-authd-start \
+.PHONY: run test build frontend-dev frontend-build frontend-deploy postgres-readonly-deploy xhs-token xhs-refresh xhs-authd-build xhs-authd-start \
 	lark-sync-build lark-sync-start lark-sync-manuscripts lark-sync-dandelion lark-sync-cid lark-sync-coenzyme-q10 lark-sync-status lark-sync-logs lark-sync-stop \
 	lark-sync-cid-daily-install lark-sync-cid-daily-now lark-sync-cid-daily-status lark-sync-cid-daily-logs lark-sync-coenzyme-q10-daily-install lark-sync-coenzyme-q10-daily-now lark-sync-coenzyme-q10-daily-status lark-sync-coenzyme-q10-daily-logs \
 	xhs-authd-authorize xhs-authd-status xhs-authd-logs xhs-authd-stop xhs-campaign-sync xhs-sync-status xhs-sync-campaigns xhs-sync-units xhs-sync-creativities \
@@ -12,7 +12,22 @@ lark-sync-build:
 	go build -o bin/paipai-red-sync ./cmd/sync
 
 lark-sync-start: lark-sync-build
-	@set -a; . ./.env; set +a; pm2 startOrReload ecosystem.config.cjs --only paipai-lark-sync --update-env
+	@set -e; set -a; . ./.env; set +a; \
+	pm2 startOrReload ecosystem.config.cjs --only paipai-lark-sync --update-env; \
+	ready=; \
+	for attempt in $$(seq 1 60); do \
+		schema_ready=$$(sudo -u postgres psql "$$DATABASE_URL" -X -Atqc "SELECT NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='public.maituo_customer_daily_notes'::regclass AND attname IN ('subaccount','campaign_name') AND NOT attisdropped) AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.maituo_customer_daily_notes'::regclass AND contype='p' AND pg_get_constraintdef(oid)='PRIMARY KEY (report_date, note_id, placement)')" 2>/dev/null || true); \
+		if curl -fsS http://127.0.0.1:18081/healthz >/dev/null && [ "$$schema_ready" = "t" ]; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ -z "$$ready" ]; then echo "paipai-lark-sync or canonical Maituo schema did not become ready" >&2; exit 1; fi
+	@$(MAKE) postgres-readonly-deploy
+
+postgres-readonly-deploy:
+	@set -e; set -a; . ./.env; set +a; \
+	sudo -u postgres psql "$$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f deploy/postgres/paipai_readonly.sql; \
+	view_ready=$$(sudo -u postgres psql "$$DATABASE_URL" -X -Atqc "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='paipai_readonly' AND table_name='maituo_customer_daily_notes' AND column_name IN ('subaccount','campaign_name')) AND POSITION('account_plan_archive' IN pg_get_viewdef('paipai_readonly.maituo_customer_daily_notes'::regclass, true))=0"); \
+	if [ "$$view_ready" != "t" ]; then echo "Maituo readonly view did not bind to the canonical table" >&2; exit 1; fi
 
 lark-sync-manuscripts:
 	@curl -sS -X POST http://127.0.0.1:18081/v1/sync/manuscripts
