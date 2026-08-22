@@ -64,6 +64,7 @@ type apiServer struct {
 	maituoSubaccounts    maituoSubaccountStore
 	maituoAnalytics      maituoAnalyticsStore
 	maituoXHSLinksStore  maituoXHSLinkStore
+	spotlightStore       spotlightCampaignStore
 	guoraiAnalytics      guoraiAnalyticsStore
 	businessOverview     businessOverviewStore
 	contentAnalysis      contentAnalysisStore
@@ -199,6 +200,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		maituoSubaccounts:    destination,
 		maituoAnalytics:      destination,
 		maituoXHSLinksStore:  destination,
+		spotlightStore:       destination,
 		guoraiAnalytics:      destination,
 		businessOverview:     destination,
 		contentAnalysis:      destination,
@@ -274,6 +276,8 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparisons", server.maituoTrafficComparison)
 	mux.HandleFunc("/v1/analytics/maituo/traffic-comparison-delivery", server.maituoTrafficDeliveryComparison)
 	mux.HandleFunc("/v1/analytics/maituo/xhs-links", server.maituoXHSLinks)
+	mux.HandleFunc("/v1/analytics/spotlight/campaigns", server.spotlightCampaigns)
+	mux.HandleFunc("/v1/analytics/spotlight/campaign-detail", server.spotlightCampaignDetail)
 	mux.HandleFunc("/v1/analytics/guorai/latest", server.guoraiLatest)
 	mux.HandleFunc("/v1/analytics/overview", server.businessOverviewHandler)
 	mux.HandleFunc("/v1/analytics/content-analysis", server.contentAnalysisHandler)

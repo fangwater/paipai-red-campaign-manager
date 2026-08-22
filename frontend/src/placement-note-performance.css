@@ -203,6 +203,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  text-decoration: none;
 }
 
 .placement-campaign-body strong {
@@ -213,6 +214,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.placement-campaign-body:hover strong { color: #1f6f56; text-decoration: underline; }
 
 .placement-campaign-body small {
   overflow: hidden;

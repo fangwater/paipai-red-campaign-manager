@@ -22,6 +22,7 @@ const RedMaterialComposer = lazy(() => import("./RedMaterialComposer"));
 const RedMaterialPending = lazy(() => import("./RedMaterialPending"));
 const ContentAnalysis = lazy(() => import("./ContentAnalysis"));
 const PlacementNotePerformance = lazy(() => import("./PlacementNotePerformance"));
+const SpotlightCampaigns = lazy(() => import("./SpotlightCampaigns"));
 const SelfServeDeliveryConsole = lazy(() => import("./SelfServeDeliveryConsole"));
 const DandelionUpdate = lazy(() => import("./DandelionUpdate"));
 
@@ -106,6 +107,7 @@ const navGroups = [
     items: [
       { label: "信息流", icon: Rows3, path: "/delivery/feed" },
       { label: "搜索", icon: Search, path: "/delivery/search" },
+      { label: "计划详情", icon: Megaphone, path: "/delivery/campaigns" },
       { label: "自建投流", icon: Route, path: "/self-serve-delivery" },
       { label: "推广计划", icon: Megaphone, path: "/xhs-jg-sync/campaigns" },
       { label: "广告单元", icon: Rows3, path: "/xhs-jg-sync/units" },
@@ -168,6 +170,7 @@ function MaituoConsole() {
   const contentAnalysis = location.pathname === "/content-analysis";
   const feedDelivery = location.pathname === "/delivery/feed";
   const searchDelivery = location.pathname === "/delivery/search";
+  const spotlightCampaigns = location.pathname === "/delivery/campaigns";
   const selfServeDelivery = location.pathname === "/self-serve-delivery";
   const redMaterialsSearch = location.pathname === "/red-materials";
   const redMaterialsCompose = location.pathname === "/red-materials/new";
@@ -186,8 +189,8 @@ function MaituoConsole() {
   const dataSyncTarget = location.pathname.endsWith("/cid") || location.pathname.endsWith("/coenzyme-q10") ? "cid" : location.pathname.endsWith("/manuscripts") ? "manuscripts" : "dandelion";
   const dataSyncTargetLabel = dataSyncTarget === "cid" ? "cid数据" : dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
-  const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : feedDelivery || searchDelivery || selfServeDelivery || sync ? "投放管理" : settings ? "系统" : "数据中心";
-  const breadcrumbPage = redMaterialsCompose ? "添加素材" : redMaterialsPending ? "待标注素材" : redMaterialsSearch ? "检索素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : feedDelivery ? "信息流" : searchDelivery ? "搜索" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记场域分析" : accountDiagnosis ? "子账户诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
+  const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : feedDelivery || searchDelivery || spotlightCampaigns || selfServeDelivery || sync ? "投放管理" : settings ? "系统" : "数据中心";
+  const breadcrumbPage = redMaterialsCompose ? "添加素材" : redMaterialsPending ? "待标注素材" : redMaterialsSearch ? "检索素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : feedDelivery ? "信息流" : searchDelivery ? "搜索" : spotlightCampaigns ? "计划详情" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记场域分析" : accountDiagnosis ? "子账户诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
   const inputRef = useRef<HTMLInputElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -360,7 +363,7 @@ function MaituoConsole() {
         </header>
 
         <main className="main-content">
-          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : feedDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载信息流</div>}><PlacementNotePerformance placement="feed" serviceState={serviceState} /></Suspense> : searchDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载搜索</div>}><PlacementNotePerformance placement="search" serviceState={serviceState} /></Suspense> : selfServeDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载自建投流工作台</div>}><SelfServeDeliveryConsole /></Suspense> : dashboard ? <>
+          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : feedDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载信息流</div>}><PlacementNotePerformance placement="feed" serviceState={serviceState} /></Suspense> : searchDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载搜索</div>}><PlacementNotePerformance placement="search" serviceState={serviceState} /></Suspense> : spotlightCampaigns ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载计划详情</div>}><SpotlightCampaigns /></Suspense> : selfServeDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载自建投流工作台</div>}><SelfServeDeliveryConsole /></Suspense> : dashboard ? <>
             <section className="page-heading">
               <div><h1>数据中台</h1><p>PaiPai RED · 业务数据工作台</p></div>
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>

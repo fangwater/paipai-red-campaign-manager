@@ -188,7 +188,7 @@ make frontend-deploy
 
 算法职责固定分离：LLM 只抽取语义、候选词和证据；LightGBM/LambdaMART 只对已批准的数值特征排序；贝叶斯接口只估计稀疏分群后验与不确定性；约束优化只在人工上限内返回 `executable=false` 的预算建议；Bandit 只返回 `shadow_only=true` 的影子选择。平台枚举、权限、预算、审批、发布和启停始终由确定性规则、编排器和人工角色决定。
 
-当前生产 OAuth 已包含 `ad_manage`、`ad_query`、`report_service` 和 `account_manage`，并授权 59 个广告主。`DELIVERY_MEDIA_WRITES_ENABLED=true`，信息流/搜索页的一键暂停和双击改状态会真实调用聚光启停接口。
+当前生产 OAuth 已包含 `ad_manage`、`ad_query`、`report_service` 和 `account_manage`，并授权 59 个广告主。`DELIVERY_MEDIA_WRITES_ENABLED=true`，信息流/搜索页的一键暂停和双击改状态会真实调用聚光启停接口；计划名称与 ID 可跳转到 `/paipai/delivery/campaigns` 查看计划、单元、创意以及各层聚光原始字段。该页面也支持按计划名称或计划 ID 搜索。
 
 ## 子账户汇总诊断 API
 

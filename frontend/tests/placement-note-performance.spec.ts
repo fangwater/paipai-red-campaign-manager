@@ -157,6 +157,7 @@ test("search placement page lists note-level search aggregates with narrowed col
   await expect(firstSearchRow).toContainText("通勤搜索放量计划");
   await expect(firstSearchRow).toContainText("辅酶聚光账户 · 81001");
   await expect(firstSearchRow).toContainText("有效");
+  await expect(firstSearchRow.getByRole("link", { name: "查看计划 通勤搜索放量计划 详情" })).toHaveAttribute("href", "/paipai/delivery/campaigns?advertiser_id=9001&campaign_id=81001");
   await expect(firstSearchRow).toContainText("¥480.00 · ¥24.00");
   await expect.poll(async () => firstSearchRow.evaluate((row) => {
     const identity = row.querySelector(".content-note-identity");
@@ -243,6 +244,7 @@ test("feed placement page lists note-level feed aggregates without ROI or search
   await expect(table).toContainText("一周辅酶信息流计划");
   await expect(table).toContainText("辅酶聚光账户 · 82001");
   await expect(table).toContainText("暂停");
+  await expect(table.getByRole("link", { name: "查看计划 一周辅酶信息流计划 详情" })).toHaveAttribute("href", "/paipai/delivery/campaigns?advertiser_id=9001&campaign_id=82001");
   await expect(table.getByRole("checkbox", { name: "选择计划 一周辅酶信息流计划" })).toBeVisible();
   await expect(table.locator("tbody tr")).toHaveCount(2);
   await expect(table.locator("tbody tr").first()).toContainText("一周辅酶记录");

@@ -157,6 +157,12 @@ function campaignIdentity(campaign: ContentCampaign): string {
   return `${campaign.advertiser_id}:${campaign.campaign_id}`;
 }
 
+function campaignPath(campaign: ContentCampaign): string {
+  return "/delivery/campaigns?" + new URLSearchParams({
+    advertiser_id: String(campaign.advertiser_id), campaign_id: String(campaign.campaign_id)
+  }).toString();
+}
+
 function uniqueSelectedCampaigns(notes: ContentNote[], placement: Placement, keys: Set<string>): ContentCampaign[] {
   const seen = new Set<string>();
   const selected: ContentCampaign[] = [];
@@ -234,14 +240,14 @@ function PlacementCampaigns({ noteID, campaigns, selectedKeys, onToggle, onEdit 
         className={checked ? "selected" : ""}
         key={`${campaign.advertiser_id}:${campaign.campaign_id}`}
         title={`${title} · 双击修改状态`}
-        onDoubleClick={() => onEdit(campaign)}
+        onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest("a")) onEdit(campaign); }}
       >
         <input type="checkbox" checked={checked} aria-label={`选择计划 ${campaign.name}`} onChange={(event) => onToggle(noteID, campaign, event.target.checked)} />
         <span className={`placement-campaign-state ${campaignStateTone(campaign.filter_state)}`}>{state}</span>
-        <span className="placement-campaign-body">
+        <Link className="placement-campaign-body" to={campaignPath(campaign)} aria-label={`查看计划 ${campaign.name || campaign.campaign_id} 详情`}>
           <strong>{campaign.name || `计划 ${campaign.campaign_id}`}</strong>
           <small>{campaign.advertiser_name || "未知广告主"} · {campaign.campaign_id}</small>
-        </span>
+        </Link>
       </li>;
     })}
   </ul>;
