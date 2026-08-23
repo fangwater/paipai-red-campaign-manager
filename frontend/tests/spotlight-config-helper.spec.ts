@@ -22,6 +22,12 @@ test("configuration helper explains fields, codes and decision impact", async ({
   await expect(page.getByRole("table", { name: "出价策略码值说明" })).toContainText("稳定成本");
   await expect(bidding.getByRole("link", { name: "查看原文" })).toHaveAttribute("href", /articleId=2722/);
 
+  await page.getByLabel("搜索聚光字段或码值").fill("constraint_type");
+  const constraint = page.locator("#spotlight-doc-constraint_type");
+  await expect(constraint).toContainText("不设目标成本");
+  await expect(constraint).toContainText("101");
+  await expect(page.getByRole("table", { name: "成本约束类型码值说明" })).toContainText("不适用（手动出价）");
+
   await page.getByLabel("搜索聚光字段或码值").fill("creation_type");
   const creation = page.locator("#spotlight-doc-creation_type");
   await expect(creation).toContainText("来源属性");

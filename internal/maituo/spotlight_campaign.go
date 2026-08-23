@@ -44,6 +44,8 @@ type SpotlightCampaignEntity struct {
 	CreatedAt   string          `json:"created_at,omitempty"`
 	UpdatedAt   string          `json:"updated_at,omitempty"`
 	SyncedAt    string          `json:"synced_at"`
+	NoteTitle   string          `json:"note_title,omitempty"`
+	NoteURL     string          `json:"note_url,omitempty"`
 	RawPayload  json.RawMessage `json:"raw_payload"`
 }
 

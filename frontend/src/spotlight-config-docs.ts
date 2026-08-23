@@ -94,6 +94,26 @@ export const SPOTLIGHT_FIELD_DOCS: SpotlightFieldDoc[] = [
     ], related: ["constraint_type", "constraint_value", "event_bid", "optimize_objective", "campaign_day_budget"], source: "campaign-create", keywords: ["手动出价", "最大转化", "稳定成本", "成本控制"]
   },
   {
+    field: "constraint_type", label: "成本约束类型", levels: ["campaign"], configurable: true, evidence: "observed",
+    summary: "标识计划成本要约束的转化口径；它不是一套脱离优化目标的固定业务枚举。",
+    interpretation: "当前同步快照中，常规码值与该计划的优化事件码相同，含义应按营销目标对应的优化目标读取。101 始终与最大转化和约束值 0 同时出现，表示不设目标成本；-1 出现在手动出价场景，表示计划层不适用成本约束。",
+    decision: "先看出价策略，再看约束类型和约束值：最大转化不应被误读成成本目标为 0；稳定成本或其他目标成本策略才需要评估约束口径与数值是否合理。",
+    applies: "可选转化口径随营销目标、优化目标和账户能力变化。计划详情会展开当前营销目标可用的全部口径；101 与 -1 为策略相关的特殊值。",
+    options: [
+      { code: -1, label: "不适用（手动出价）", meaning: "计划层不使用目标成本，通常由单元事件出价直接控制。" },
+      { code: 101, label: "不设目标成本（最大转化）", meaning: "系统优先争取更多优化结果，约束值为 0 不代表目标成本为 0。" },
+      { code: "优化目标码", label: "按优化事件控制成本", meaning: "其他常规码值复用当前营销目标下的优化目标代码，例如点击量、互动量或成交。" }
+    ], related: ["constraint_value", "bidding_strategy", "optimize_objective", "marketing_target"], source: "campaign-list", keywords: ["成本约束", "101", "目标成本", "最大转化", "优化事件"]
+  },
+  {
+    field: "constraint_value", label: "成本约束值", levels: ["campaign"], configurable: true, evidence: "observed",
+    summary: "目标成本的数值，聚光原始单位为分；只有启用对应成本约束时才有实际决策意义。",
+    interpretation: "当 constraint_type 为 101 或 -1 时，返回 0 表示未启用计划级目标成本，不能按 ¥0.00 解读。其他目标成本场景需要结合约束类型对应的转化口径阅读。",
+    decision: "评估成本时，同时看优化口径、实际成本和消耗。约束过低会限制跑量；最大转化场景应改用实际成本和预算利用率监控。",
+    applies: "原始单位为分，页面会换算为人民币。具体是否可设置、可设置范围以当前出价策略和账户能力为准。",
+    related: ["constraint_type", "bidding_strategy", "optimize_objective"], source: "campaign-create", keywords: ["成本约束值", "目标成本", "分", "最大转化"]
+  },
+  {
     field: "creation_type", label: "创建类型", levels: ["campaign", "unit", "creativity"], configurable: false, evidence: "verified",
     summary: "记录对象从哪种聚光搭建链路产生，是来源属性，不是普通启停配置。",
     interpretation: "相同码值在计划、单元和创意层表达同一类搭建来源。创意查询已收录 0、1、2、4；单元查询还可能返回 3。",

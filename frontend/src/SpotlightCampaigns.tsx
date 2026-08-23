@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
-  AlertCircle, ArrowLeft, BookOpenCheck, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, CircleHelp,
-  FileJson2, Layers3, Lightbulb, LoaderCircle, Megaphone, Rows3, Search, X
+  AlertCircle, ArrowLeft, BookOpenCheck, ChevronLeft, ChevronRight, CircleHelp,
+  FileJson2, Lightbulb, LoaderCircle, Megaphone, Rows3, Search, X
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SPOTLIGHT_FIELD_DOCS } from "./spotlight-config-docs";
+import { splitRegions } from "./target-regions";
 import "./spotlight-campaigns.css";
 
 type CampaignSummary = {
@@ -16,7 +17,8 @@ type CampaignSummary = {
 
 type CampaignEntity = {
   id: number; name: string; campaign_id: number; unit_id?: number; enable: number; filter_state: number;
-  created_at?: string; updated_at?: string; synced_at: string; raw_payload: Record<string, unknown>;
+  created_at?: string; updated_at?: string; synced_at: string; note_title?: string; note_url?: string;
+  raw_payload: Record<string, unknown>;
 };
 
 type CampaignList = { total: number; page: number; page_size: number; items: CampaignSummary[] };
@@ -26,9 +28,11 @@ type FieldGuide = {
   description: string;
   options?: Record<number, string>;
   configurable?: boolean;
-  format?: "fen" | "ratio";
+  format?: "fen" | "ratio" | "age" | "regions" | "schedule";
   numericKind?: "identifier";
 };
+type NoteDetails = { title?: string; url?: string };
+type NoteDetailsByID = Record<string, NoteDetails>;
 
 const EMPTY_LIST: CampaignList = { total: 0, page: 1, page_size: 25, items: [] };
 const PAGE_SIZE = 25;
@@ -72,15 +76,15 @@ const fieldLabels: Record<string, string> = {
   marketing_target: "营销目标", placement: "投放场域", optimize_target: "优化目标", optimize_objective: "优化目标", deep_optimize_objective: "深度优化目标", promotion_target: "投放标的",
   bidding_strategy: "出价策略", constraint_type: "成本约束类型", constraint_value: "成本约束值", limit_day_budget: "日预算限制", campaign_day_budget: "计划日预算", budget_state: "预算状态",
   smart_switch: "智能开关", platform: "平台", pacing_mode: "投放速度", start_time: "开始日期", expire_time: "结束日期", time_period: "投放时段", time_period_type: "投放时段类型",
-  feed_flag: "信息流标记", search_flag: "搜索标记", search_bid_ratio: "搜索出价比例", build_type: "搭建类型", creativity_state: "创意状态", event_asset_id: "事件资产 ID", asset_event: "资产事件",
+  feed_flag: "信息流标记", search_flag: "搜索标记", search_bid_ratio: "搜索出价比例", build_type: "搭建类型", creativity_state: "计划创意状态限制", event_asset_id: "事件资产 ID", asset_event: "资产事件",
   asset_event_id: "资产事件 ID", page_category: "页面类别", deeplink_id: "Deep Link ID", universal_link_id: "Universal Link ID", detect_url_link: "监测链接", not_available_status: "不可用状态",
   creation_type: "创建类型", marketing_industry: "营销行业", id: "单元 ID", name: "单元名称", unit_filter_state: "单元状态", enable: "单元开关", event_bid: "单元出价", target_type: "定向类型",
   target_config: "定向配置", target_template_id: "定向模板 ID", targetTemplateId: "定向模板 ID", keyword_gen_type: "关键词生成方式", keyword_with_bids: "搜索竞价关键词", keyword_target_period: "关键词行为周期",
   keyword_target_action: "关键词行为类型", note_ids: "笔记 ID", note_rec_type: "笔记推荐类型", item_note_info: "笔记配置", creativity_id: "创意 ID", creativity_name: "创意名称",
   creativity_enable: "创意开关", creativity_filter_state: "创意状态", creativity_create_time: "创意创建时间", creativity_update_time: "创意更新时间", material_type: "素材类型", conversion_type: "转化类型",
   note_id: "笔记 ID", item_id: "Item ID", audit_status: "审核状态", creativity_audit_state: "创意审核状态", primary_title: "主标题", title: "标题", custom_title: "自定义标题", comment: "评论文案",
-  image: "图片", jump_url: "跳转地址", action_button_content: "行动按钮文案", keywords: "关键词", interest_keywords: "兴趣关键词", target_age: "年龄范围", target_city: "投放城市",
-  target_device: "设备类型", target_gender: "性别", targetAreaCode: "地域编码", target_city_type: "地域选择方式", target_device_price: "设备价格", intelligent_expansion: "智能扩量",
+  image: "图片", jump_url: "跳转地址", action_button_content: "行动按钮文案", keywords: "关键词", interest_keywords: "兴趣关键词", target_age: "年龄范围", target_city: "投放地域",
+  target_device: "设备类型", target_gender: "性别", targetAreaCode: "地域内部编码", target_area_code: "地域内部编码", target_city_type: "地域选择方式", target_device_price: "设备价格", intelligent_expansion: "智能扩量",
   premium_target_type: "高级定向类型", searchTargetCityIntent: "搜索地域意图", target_generalization_switch: "定向泛化", reverseConversionType: "排除转化类型", reverseConversionDuration: "排除转化周期",
   haveBrandAIGroup: "品牌智能人群", haveCategoryAIGroup: "品类智能人群", haveBrandInterestGroup: "品牌兴趣人群", haveGoodsInterestGroup: "商品兴趣人群", haveBrandRecognitionGroup: "品牌认知人群",
   haveCategoryInterestGroup: "品类兴趣人群", haveReverseBloggerFanTarget: "排除博主粉丝", haveReverseBloggerPurchasedTarget: "排除博主购买人群"
@@ -136,13 +140,54 @@ const commonFieldGuides: Record<string, FieldGuide> = {
   target_generalization_switch: { description: "是否开启定向泛化扩量。", options: switchOptions },
   target_city_type: { description: "地域是不限还是按已选城市投放。", options: { 0: "不限地域", 1: "指定地域" } },
   phrase_match_type_upgrade: { description: "搜索关键词是否使用升级后的短语匹配。", options: switchOptions },
-  time_period: { description: "一周投放时段编码；由投放日历生成，不建议直接修改码串。", configurable: false },
+  time_period: { description: "聚光按周和小时返回的投放日历，已转换为星期与时间段。", configurable: false, format: "schedule" },
+  target_age: { description: "允许参与投放的年龄区间，已转换为人群年龄段。", format: "age" },
+  target_city: { description: "投放覆盖的地域；不限地域时显示为全国投放。", format: "regions" },
   target_config: { description: "单元的人群、地域、设备、兴趣和智能扩量配置集合。" },
   keyword_with_bids: { description: "搜索关键词及每个关键词对应的出价配置。" },
   keyword_target_period: { description: "关键词人群行为回溯周期，按天计算。", options: { 0: "未设置回溯周期", 3: "近 3 天", 7: "近 7 天", 15: "近 15 天", 30: "近 30 天" } },
   keyword_gen_type: { description: "搜索关键词的生成方式；未收录的码值保留原样。" },
-  constraint_type: { description: "成本控制所约束的转化口径；当前聚光码值保留用于核对。" }
+  constraint_type: { description: "成本控制所约束的转化口径；需结合出价策略和优化目标读取。" }
 };
+
+type CampaignFieldGroup = {
+  id: string;
+  label: string;
+  description: string;
+  fields: string[];
+};
+
+const campaignFieldGroups: CampaignFieldGroup[] = [
+  {
+    id: "creative", label: "创意搭建类型与状态", description: "计划来自哪种搭建链路，以及平台对创意施加的状态限制。",
+    fields: ["creation_type", "build_type", "creativity_state"]
+  },
+  {
+    id: "delivery", label: "投放目标与场域", description: "业务目标、推广对象、流量场域和搭建方式。",
+    fields: ["promotion_target", "feed_flag", "search_flag", "search_bid_ratio"]
+  },
+  {
+    id: "cost", label: "预算、出价与成本控制", description: "计划日预算、消耗节奏、竞价策略与目标成本。",
+    fields: ["limit_day_budget", "budget_state", "pacing_mode", "bidding_strategy", "smart_switch"]
+  },
+  {
+    id: "optimization", label: "优化目标与归因资产", description: "算法优化口径、深度目标和事件资产绑定。",
+    fields: ["optimize_target", "optimize_objective", "deep_optimize_objective", "event_asset_id", "asset_event", "asset_event_id", "marketing_industry"]
+  },
+  {
+    id: "schedule", label: "排期与投放时段", description: "生效日期、结束日期和分时投放设置。",
+    fields: ["time_period_type", "time_period"]
+  },
+  {
+    id: "landing", label: "承接与监测", description: "落地资产、深链和监测链接。",
+    fields: ["page_category", "deeplink_id", "universal_link_id", "detect_url_link"]
+  }
+];
+
+const mergedCampaignFields = new Set([
+  "campaign_id", "campaign_name", "campaign_create_time", "campaign_update_time", "campaign_filter_state", "campaign_enable", "not_available_status",
+  "platform", "marketing_target", "placement", "campaign_day_budget", "start_time", "expire_time", "constraint_type", "constraint_value"
+]);
 
 function fieldGuide(level: EntityLevel, key: string, payload: Record<string, unknown>, marketingTarget: number): FieldGuide | undefined {
   if (["optimize_target", "optimize_objective", "deep_optimize_objective"].includes(key)) {
@@ -158,21 +203,99 @@ function fieldGuide(level: EntityLevel, key: string, payload: Record<string, unk
 
 function enumLabel(values: Record<number, string>, value: number): string { return values[value] ?? `官方码值 ${value}`; }
 function formatDate(value?: string): string { if (!value) return "-"; const parsed = new Date(value); return Number.isNaN(parsed.getTime()) ? value.slice(0, 19) : dateTime.format(parsed); }
+function numericPayloadValue(payload: Record<string, unknown>, field: string): number | undefined {
+  const value = payload[field];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  return undefined;
+}
 function campaignStateTone(value: number): string { if (value === 1) return "healthy"; return [2, 8, 10].includes(value) ? "paused" : "warning"; }
 function unitStateTone(value: number): string { if (value === 10) return "healthy"; return [2, 3, 4, 5, 6, 13].includes(value) ? "paused" : "warning"; }
 function creativityStateTone(value: number): string { if (value === 8) return "healthy"; return [3, 4, 5, 10, 11, 12].includes(value) ? "paused" : "warning"; }
 function campaignPath(campaign: CampaignSummary): string { return "/delivery/campaigns?" + new URLSearchParams({ advertiser_id: String(campaign.advertiser_id), campaign_id: String(campaign.campaign_id) }).toString(); }
 function helperPath(field: string, level: EntityLevel): string { return "/delivery/helper?" + new URLSearchParams({ field, level }).toString(); }
 function valueSummary(value: unknown): string { if (Array.isArray(value)) return `${value.length} 项`; if (value && typeof value === "object") return `${Object.keys(value as Record<string, unknown>).length} 个字段`; return ""; }
+function noteKey(value: unknown): string { return String(value ?? "").trim().toLowerCase(); }
+function noteIDs(value: unknown): string[] { return (Array.isArray(value) ? value : [value]).filter((item): item is string | number => typeof item === "string" || typeof item === "number").map((item) => String(item).trim()).filter(Boolean); }
+function textPayloadValue(payload: Record<string, unknown>, field: string): string | undefined { const value = payload[field]; return typeof value === "string" && value.trim() ? value.trim() : undefined; }
+function noteDetailsFor(noteID: string, payload: Record<string, unknown>, details: NoteDetailsByID): NoteDetails {
+  return {
+    title: details[noteKey(noteID)]?.title || textPayloadValue(payload, "note_title") || textPayloadValue(payload, "primary_title") || textPayloadValue(payload, "title"),
+    url: details[noteKey(noteID)]?.url || textPayloadValue(payload, "note_url") || textPayloadValue(payload, "jump_url")
+  };
+}
+function noteURL(noteID: string, details: NoteDetails): string { return details.url || `https://www.xiaohongshu.com/explore/${encodeURIComponent(noteID)}`; }
+function NoteReference({ noteID, payload, noteDetails }: { noteID: string; payload: Record<string, unknown>; noteDetails: NoteDetailsByID }) {
+  const details = noteDetailsFor(noteID, payload, noteDetails);
+  return <div className="spotlight-note-reference"><a href={noteURL(noteID, details)} target="_blank" rel="noreferrer">{details.title || "查看笔记"}</a><code>笔记 ID {noteID}</code></div>;
+}
+function NoteReferences({ value, payload, noteDetails }: { value: unknown; payload: Record<string, unknown>; noteDetails: NoteDetailsByID }) {
+  const ids = noteIDs(value);
+  if (ids.length === 0) return <span className="spotlight-empty-value">未配置笔记</span>;
+  return <div className="spotlight-note-references">{ids.map((noteID) => <NoteReference key={noteID} noteID={noteID} payload={payload} noteDetails={noteDetails} />)}</div>;
+}
+function formatAge(value: unknown): string {
+  const ranges = String(value).split("#").map((item) => item.trim()).filter(Boolean);
+  if (ranges.length === 0 || ranges.includes("all") || ranges.includes("-1")) return "不限年龄";
+  return ranges.map((range) => {
+    const matched = range.match(/^(\d+)-(\d+)$/);
+    if (!matched) return range;
+    const [, start, end] = matched;
+    return end === "100" ? `${start} 岁以上` : `${start}-${end} 岁`;
+  }).join("、");
+}
+function formatRegions(value: unknown, payload: Record<string, unknown>): string {
+  if (numericPayloadValue(payload, "target_city_type") === 0) return "全国投放";
+  const city = String(value).trim();
+  if (!city || city === "all" || city === "-1") return "全国投放";
+  const regions = splitRegions(city);
+  return regions.length > 0 ? `指定地域：${regions.join("、")}` : "未返回可读地域";
+}
+function formatHour(hour: number): string { return `${String(hour).padStart(2, "0")}:00`; }
+function formatDailySchedule(bits: string): string {
+  const periods: string[] = [];
+  for (let index = 0; index < 24;) {
+    if (bits[index] !== "1") { index += 1; continue; }
+    const start = index;
+    while (index < 24 && bits[index] === "1") index += 1;
+    periods.push(`${formatHour(start)}-${formatHour(index)}`);
+  }
+  return periods.join("、") || "不投放";
+}
+function formatSchedule(value: unknown, payload: Record<string, unknown>): string {
+  if (numericPayloadValue(payload, "time_period_type") === 0) return "每天全天";
+  const encoded = String(value).trim();
+  if (!/^[01]{168}$/.test(encoded)) return "自定义投放时段";
+  const dayLabels = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+  const schedules = dayLabels.map((_, index) => formatDailySchedule(encoded.slice(index * 24, (index + 1) * 24)));
+  if (schedules.every((schedule) => schedule === schedules[0])) return schedules[0] === "00:00-24:00" ? "每天全天" : `每天 ${schedules[0]}`;
+  const groups: string[] = [];
+  for (let start = 0; start < schedules.length;) {
+    let end = start + 1;
+    while (end < schedules.length && schedules[end] === schedules[start]) end += 1;
+    const days = end - start === 1 ? dayLabels[start] : `${dayLabels[start]}至${dayLabels[end - 1]}`;
+    groups.push(`${days} ${schedules[start]}`);
+    start = end;
+  }
+  return groups.join("；");
+}
+function shouldHideNestedField(field: string, payload: Record<string, unknown>): boolean {
+  if (field !== "targetAreaCode" && field !== "target_area_code") return false;
+  return payload.target_city !== undefined || payload.target_city_type !== undefined;
+}
 
-function PrimitiveValue({ field, value, payload, level, marketingTarget }: { field: string; value: unknown; payload: Record<string, unknown>; level: EntityLevel; marketingTarget: number }) {
+function PrimitiveValue({ field, value, payload, level, marketingTarget, noteDetails = {} }: { field: string; value: unknown; payload: Record<string, unknown>; level: EntityLevel; marketingTarget: number; noteDetails?: NoteDetailsByID }) {
   if (value === null || value === undefined || value === "") return <span className="spotlight-empty-value">未配置</span>;
+  if (field === "note_id") return <NoteReferences value={value} payload={payload} noteDetails={noteDetails} />;
   if (typeof value === "boolean") return <>{value ? "是" : "否"}</>;
   if (typeof value === "string" && /^https?:\/\//.test(value)) return <a href={value} target="_blank" rel="noreferrer">{value}</a>;
   const guide = fieldGuide(level, field, payload, marketingTarget);
   const numericValue = typeof value === "number" ? value : typeof value === "string" && value.length <= 15 && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : null;
   if (guide?.format === "fen" && numericValue !== null) return <div className="spotlight-interpreted-value"><strong>¥{money.format(numericValue / 100)}</strong><code>原始值 {numericValue} 分</code></div>;
   if (guide?.format === "ratio" && numericValue !== null) return <div className="spotlight-interpreted-value"><strong>{numericValue} 倍</strong><code>原始值 {numericValue}</code></div>;
+  if (guide?.format === "age") return <strong>{formatAge(value)}</strong>;
+  if (guide?.format === "regions") return <strong>{formatRegions(value, payload)}</strong>;
+  if (guide?.format === "schedule") return <strong>{formatSchedule(value, payload)}</strong>;
   if (guide?.options && numericValue !== null) {
     const current = guide.options[numericValue] ?? "未收录码值";
     const options = Object.entries(guide.options);
@@ -183,30 +306,138 @@ function PrimitiveValue({ field, value, payload, level, marketingTarget }: { fie
   return <>{String(value)}</>;
 }
 
-function ComplexValue({ value, level, marketingTarget }: { value: unknown; level: EntityLevel; marketingTarget: number }) {
+function ComplexValue({ value, level, marketingTarget, noteDetails = {} }: { value: unknown; level: EntityLevel; marketingTarget: number; noteDetails?: NoteDetailsByID }) {
   if (Array.isArray(value)) return <div className="spotlight-json-value"><span>{valueSummary(value)}</span><pre>{JSON.stringify(value, null, 2)}</pre></div>;
   const nestedPayload = value as Record<string, unknown>;
-  const entries = Object.entries(nestedPayload).sort(([left], [right]) => (fieldLabels[left] ?? left).localeCompare(fieldLabels[right] ?? right, "zh-CN"));
-  return <div className="spotlight-object-value"><span>{valueSummary(value)}</span><dl>{entries.map(([key, nestedValue]) => {
+  const entries = Object.entries(nestedPayload).filter(([key]) => !shouldHideNestedField(key, nestedPayload)).sort(([left], [right]) => (fieldLabels[left] ?? left).localeCompare(fieldLabels[right] ?? right, "zh-CN"));
+  return <div className="spotlight-object-value"><span>{entries.length} 个字段</span><dl>{entries.map(([key, nestedValue]) => {
     const nestedComplex = Array.isArray(nestedValue) || (nestedValue !== null && typeof nestedValue === "object");
     const guide = fieldGuide(level, key, nestedPayload, marketingTarget);
-    return <div key={key}><dt><div className="spotlight-field-title"><span>{fieldLabels[key] ?? key}</span>{documentedFields.has(key) ? <Link to={helperPath(key, level)} title="在配置助手中查看" aria-label={`查看${fieldLabels[key] ?? key}说明`}><CircleHelp size={12} /></Link> : null}</div><code>{key}</code>{guide?.description ? <small>{guide.description}</small> : null}</dt><dd>{nestedComplex ? <pre>{JSON.stringify(nestedValue, null, 2)}</pre> : <PrimitiveValue field={key} value={nestedValue} payload={nestedPayload} level={level} marketingTarget={marketingTarget} />}</dd></div>;
+    return <div key={key}><dt><div className="spotlight-field-title"><span>{fieldLabels[key] ?? key}</span>{documentedFields.has(key) ? <Link to={helperPath(key, level)} title="在配置助手中查看" aria-label={`查看${fieldLabels[key] ?? key}说明`}><CircleHelp size={12} /></Link> : null}</div><code>{key}</code>{guide?.description ? <small>{guide.description}</small> : null}</dt><dd>{key === "note_ids" ? <NoteReferences value={nestedValue} payload={nestedPayload} noteDetails={noteDetails} /> : nestedComplex ? <pre>{JSON.stringify(nestedValue, null, 2)}</pre> : <PrimitiveValue field={key} value={nestedValue} payload={nestedPayload} level={level} marketingTarget={marketingTarget} noteDetails={noteDetails} />}</dd></div>;
   })}</dl></div>;
 }
 
-function PayloadField({ field, value, payload, level, marketingTarget }: { field: string; value: unknown; payload: Record<string, unknown>; level: EntityLevel; marketingTarget: number }) {
+function PayloadField({ field, value, payload, level, marketingTarget, noteDetails = {} }: { field: string; value: unknown; payload: Record<string, unknown>; level: EntityLevel; marketingTarget: number; noteDetails?: NoteDetailsByID }) {
   const complex = Array.isArray(value) || (value !== null && typeof value === "object");
   const guide = fieldGuide(level, field, payload, marketingTarget);
-  return <div className={complex ? "complex" : ""}><dt><div className="spotlight-field-title"><span>{fieldLabels[field] ?? field}</span>{documentedFields.has(field) ? <Link to={helperPath(field, level)} title="在配置助手中查看" aria-label={`查看${fieldLabels[field] ?? field}说明`}><CircleHelp size={12} /></Link> : null}</div><code>{field}</code>{guide?.description ? <small>{guide.description}</small> : null}</dt><dd>{complex ? <ComplexValue value={value} level={level} marketingTarget={marketingTarget} /> : <PrimitiveValue field={field} value={value} payload={payload} level={level} marketingTarget={marketingTarget} />}</dd></div>;
+  return <div className={complex ? "complex" : ""}><dt><div className="spotlight-field-title"><span>{fieldLabels[field] ?? field}</span>{documentedFields.has(field) ? <Link to={helperPath(field, level)} title="在配置助手中查看" aria-label={`查看${fieldLabels[field] ?? field}说明`}><CircleHelp size={12} /></Link> : null}</div><code>{field}</code>{guide?.description ? <small>{guide.description}</small> : null}</dt><dd>{field === "note_ids" ? <NoteReferences value={value} payload={payload} noteDetails={noteDetails} /> : complex ? <ComplexValue value={value} level={level} marketingTarget={marketingTarget} noteDetails={noteDetails} /> : <PrimitiveValue field={field} value={value} payload={payload} level={level} marketingTarget={marketingTarget} noteDetails={noteDetails} />}</dd></div>;
 }
 
-function RawPayload({ payload, title, level, marketingTarget }: { payload: Record<string, unknown>; title: string; level: EntityLevel; marketingTarget: number }) {
+function OptionGuide({ label, options, current }: { label: string; options: Record<number, string>; current?: number }) {
+  return <div className="spotlight-option-guide"><span>{label} {Object.keys(options).length} 项</span><div className="spotlight-option-items">{Object.entries(options).map(([code, optionLabel]) => <span className={Number(code) === current ? "current" : ""} key={code}><code>{code}</code>{optionLabel}</span>)}</div></div>;
+}
+
+function DecisionField({ label, description, helperField, className = "", children }: { label: string; description: string; helperField?: string; className?: string; children: ReactNode }) {
+  return <div className={`spotlight-decision-field ${className}`}><dt><div className="spotlight-field-title"><span>{label}</span>{helperField && documentedFields.has(helperField) ? <Link to={helperPath(helperField, "campaign")} title="在配置助手中查看" aria-label={`查看${label}说明`}><CircleHelp size={12} /></Link> : null}</div><small>{description}</small></dt><dd>{children}</dd></div>;
+}
+
+function CampaignExecutionStatus({ payload, className }: { payload: Record<string, unknown>; className?: string }) {
+  const filterState = numericPayloadValue(payload, "campaign_filter_state");
+  const enabled = numericPayloadValue(payload, "campaign_enable");
+  const notAvailable = numericPayloadValue(payload, "not_available_status");
+  const status = filterState === undefined ? "计划状态未返回" : enumLabel(campaignStates, filterState);
+  const switchLabel = enabled === undefined ? "开关未返回" : enabled === 1 ? "计划开关开启" : "计划开关关闭";
+  const availability = notAvailable === undefined ? "可用性未返回" : notAvailable === 0 ? "当前无不可用原因" : "平台标记当前存在不可用原因";
+  return <DecisionField label="执行状态" description="计划状态、人工开关与平台可用性已合并为一个判断，避免把不可用状态作为独立技术字段阅读。" helperField="campaign_filter_state" className={className}>
+    <div className="spotlight-execution-status"><strong>{status}</strong><span>{switchLabel} · {availability}</span></div>
+    <OptionGuide label="计划状态说明" options={campaignStates} current={filterState} />
+  </DecisionField>;
+}
+
+function OverviewField({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
+  return <div className={`spotlight-overview-field ${className}`}><dt>{label}</dt><dd>{children}</dd></div>;
+}
+
+function EntityJump({ label, entities, targetID }: { label: string; entities: CampaignEntity[]; targetID: string }) {
+  if (entities.length === 0) return <OverviewField label={label}><span className="spotlight-empty-value">暂无</span></OverviewField>;
+  const first = entities[0];
+  const name = first.name || `${label} ${first.id}`;
+  return <OverviewField label={label}><a className="spotlight-entity-jump" href={`#${targetID}`}>{name}{entities.length > 1 ? " 等" : ""}</a></OverviewField>;
+}
+
+function PlanOverview({ campaign, payload, units, creativities }: { campaign: CampaignSummary; payload: Record<string, unknown>; units: CampaignEntity[]; creativities: CampaignEntity[] }) {
+  const overviewPayload: Record<string, unknown> = {
+    ...payload,
+    campaign_id: payload.campaign_id ?? campaign.campaign_id,
+    campaign_filter_state: payload.campaign_filter_state ?? campaign.campaign_filter_state,
+    campaign_enable: payload.campaign_enable ?? campaign.campaign_enable
+  };
+  const campaignID = numericPayloadValue(overviewPayload, "campaign_id") ?? campaign.campaign_id;
+  const marketingTarget = numericPayloadValue(overviewPayload, "marketing_target") ?? campaign.marketing_target;
+  const placement = numericPayloadValue(overviewPayload, "placement") ?? campaign.placement;
+  const budget = numericPayloadValue(overviewPayload, "campaign_day_budget") ?? campaign.campaign_day_budget;
+  const startTime = String(overviewPayload.start_time ?? campaign.start_date ?? "-");
+  const expireTime = String(overviewPayload.expire_time ?? campaign.expire_date ?? "-");
+  const createdAt = String(overviewPayload.campaign_create_time ?? "-");
+  const updatedAt = String(overviewPayload.campaign_update_time ?? campaign.updated_at ?? "-");
+  return <section className="spotlight-plan-overview" aria-label="计划概要"><dl>
+    <CampaignExecutionStatus payload={overviewPayload} className="spotlight-overview-status" />
+    <OverviewField label="计划 ID"><strong>{campaignID}</strong></OverviewField>
+    <OverviewField label="平台"><strong>聚光投放平台</strong></OverviewField>
+    <OverviewField label="营销目标"><strong>{enumLabel(marketingTargets, marketingTarget)}</strong></OverviewField>
+    <OverviewField label="投放场域"><strong>{enumLabel(placements, placement)}</strong></OverviewField>
+    <OverviewField label="计划日预算"><strong>¥{money.format(budget / 100)}</strong></OverviewField>
+    <OverviewField label="投放排期"><strong>{startTime} 至 {expireTime}</strong></OverviewField>
+    <OverviewField label="创建 / 更新"><strong>{formatDate(createdAt)} · {formatDate(updatedAt)}</strong></OverviewField>
+    <EntityJump label="广告单元" entities={units} targetID="spotlight-units" />
+    <EntityJump label="投放创意" entities={creativities} targetID="spotlight-creativities" />
+  </dl></section>;
+}
+
+function CampaignCostControl({ payload, marketingTarget }: { payload: Record<string, unknown>; marketingTarget: number }) {
+  const type = numericPayloadValue(payload, "constraint_type");
+  const value = numericPayloadValue(payload, "constraint_value");
+  const objectiveOptions = optimizeObjectives[numericPayloadValue(payload, "marketing_target") ?? marketingTarget] ?? {};
+  const constraintOptions: Record<number, string> = { [-1]: "不适用（手动出价）", 101: "不设目标成本（最大转化）", ...objectiveOptions };
+  let summary = "成本约束未返回";
+  let detail = "聚光未返回成本约束类型，无法判断是否设置目标成本。";
+  if (type === 101) {
+    summary = "最大转化：不设目标成本";
+    detail = "系统以争取更多优化结果为优先，不使用目标成本限制。";
+  } else if (type === -1) {
+    summary = "手动出价：不使用计划级成本约束";
+    detail = "成本由单元对优化事件的出价控制，计划层没有目标成本。";
+  } else if (type !== undefined) {
+    const objective = objectiveOptions[type] ?? `优化事件码 ${type}`;
+    summary = `按「${objective}」控制成本`;
+    detail = value && value > 0 ? `当前目标成本为 ¥${money.format(value / 100)}。` : "当前未设置有效目标成本。";
+  }
+  const raw = type === undefined ? "成本约束类型未返回" : `平台返回：成本约束类型 ${type}${value === undefined ? "；成本约束值未返回" : `；成本约束值 ${value} 分`}`;
+  return <DecisionField label="成本控制" description="约束类型与约束值合并解读；可用约束口径随营销目标和优化目标变化。" helperField="constraint_type">
+    <div className="spotlight-cost-control"><strong>{summary}</strong><span>{detail}</span><code>{raw}</code></div>
+    <OptionGuide label="当前营销目标可用的成本约束口径" options={constraintOptions} current={type} />
+  </DecisionField>;
+}
+
+function CampaignConfiguration({ payload, marketingTarget }: { payload: Record<string, unknown>; marketingTarget: number }) {
+  const entries = Object.entries(payload ?? {});
+  const fields = new Map(entries);
+  const configuredKeys = new Set(campaignFieldGroups.flatMap((group) => group.fields));
+  const groups = campaignFieldGroups.map((group) => ({ ...group, entries: group.fields.flatMap((field) => fields.has(field) ? [[field, fields.get(field)] as [string, unknown]] : []) })).filter((group) => group.entries.length > 0 || group.id === "cost");
+  const remaining = entries.filter(([key]) => !configuredKeys.has(key) && !mergedCampaignFields.has(key)).sort(([left], [right]) => (fieldLabels[left] ?? left).localeCompare(fieldLabels[right] ?? right, "zh-CN"));
+  return <div className="spotlight-config-groups">
+    {groups.map((group) => <section className="spotlight-config-group" key={group.id} aria-labelledby={`campaign-group-${group.id}`}>
+      <header><div><h3 id={`campaign-group-${group.id}`}>{group.label}</h3><p>{group.description}</p></div></header>
+      <dl className="spotlight-field-grid">
+        {group.id === "cost" ? <CampaignCostControl payload={payload} marketingTarget={marketingTarget} /> : null}
+        {group.entries.map(([key, value]) => <PayloadField field={key} value={value} payload={payload} level="campaign" marketingTarget={marketingTarget} key={key} />)}
+      </dl>
+    </section>)}
+    {remaining.length > 0 ? <section className="spotlight-config-group" aria-labelledby="campaign-group-other"><header><div><h3 id="campaign-group-other">其他平台返回字段</h3><p>聚光返回但暂未归入稳定业务分类的字段，仍完整保留以便核对。</p></div></header><dl className="spotlight-field-grid">{remaining.map(([key, value]) => <PayloadField field={key} value={value} payload={payload} level="campaign" marketingTarget={marketingTarget} key={key} />)}</dl></section> : null}
+  </div>;
+}
+
+function RawPayload({ payload, title, level, marketingTarget, noteDetails = {} }: { payload: Record<string, unknown>; title: string; level: EntityLevel; marketingTarget: number; noteDetails?: NoteDetailsByID }) {
   const entries = Object.entries(payload ?? {}).sort(([left], [right]) => (fieldLabels[left] ?? left).localeCompare(fieldLabels[right] ?? right, "zh-CN"));
+  if (level === "campaign") return <section className="spotlight-raw-payload" aria-label={title}>
+    <header><FileJson2 size={15} /><div><strong>{title}</strong><span>{entries.length} 个聚光字段，已按执行配置归类；候选项已全部展开</span></div><Link className="spotlight-helper-link" to="/delivery/helper"><BookOpenCheck size={13} />配置助手</Link></header>
+    {entries.length === 0 ? <div className="spotlight-empty">聚光未返回字段</div> : <CampaignConfiguration payload={payload} marketingTarget={marketingTarget} />}
+  </section>;
   const basics = entries.filter(([key]) => compactFields[level].has(key));
   const configurations = entries.filter(([key]) => !compactFields[level].has(key));
   return <section className="spotlight-raw-payload" aria-label={title}>
     <header><FileJson2 size={15} /><div><strong>{title}</strong><span>{configurations.length} 个决策配置 · {basics.length} 个基础字段 · 候选项已全部展开</span></div><Link className="spotlight-helper-link" to="/delivery/helper"><BookOpenCheck size={13} />配置助手</Link></header>
-    {entries.length === 0 ? <div className="spotlight-empty">聚光未返回字段</div> : <><dl className="spotlight-compact-fields" aria-label={`${title}基础信息`}>{basics.map(([key, value]) => <div key={key}><dt>{fieldLabels[key] ?? key}<code>{key}</code></dt><dd><PrimitiveValue field={key} value={value} payload={payload} level={level} marketingTarget={marketingTarget} /></dd></div>)}</dl><dl className="spotlight-field-grid">{configurations.map(([key, value]) => <PayloadField field={key} value={value} payload={payload} level={level} marketingTarget={marketingTarget} key={key} />)}</dl></>}
+    {entries.length === 0 ? <div className="spotlight-empty">聚光未返回字段</div> : <><dl className="spotlight-compact-fields" aria-label={`${title}基础信息`}>{basics.map(([key, value]) => <div key={key}><dt>{fieldLabels[key] ?? key}<code>{key}</code></dt><dd><PrimitiveValue field={key} value={value} payload={payload} level={level} marketingTarget={marketingTarget} noteDetails={noteDetails} /></dd></div>)}</dl><dl className="spotlight-field-grid">{configurations.map(([key, value]) => <PayloadField field={key} value={value} payload={payload} level={level} marketingTarget={marketingTarget} noteDetails={noteDetails} key={key} />)}</dl></>}
   </section>;
 }
 
@@ -264,17 +495,28 @@ function CampaignDetailView({ advertiserID, campaignID }: { advertiserID: number
   }, [advertiserID, campaignID]);
 
   const creativitiesByUnit = useMemo(() => { const grouped = new Map<number, CampaignEntity[]>(); for (const creativity of detail?.creativities ?? []) grouped.set(creativity.unit_id ?? 0, [...(grouped.get(creativity.unit_id ?? 0) ?? []), creativity]); return grouped; }, [detail]);
+  const noteDetails = useMemo(() => {
+    const indexed: NoteDetailsByID = {};
+    for (const creativity of detail?.creativities ?? []) {
+      const noteID = textPayloadValue(creativity.raw_payload, "note_id");
+      if (!noteID) continue;
+      indexed[noteKey(noteID)] = {
+        title: creativity.note_title || textPayloadValue(creativity.raw_payload, "primary_title") || textPayloadValue(creativity.raw_payload, "title"),
+        url: creativity.note_url || textPayloadValue(creativity.raw_payload, "note_url") || textPayloadValue(creativity.raw_payload, "jump_url")
+      };
+    }
+    return indexed;
+  }, [detail]);
   if (loading) return <div className="spotlight-detail-loading"><LoaderCircle size={20} className="spin" />正在读取聚光计划全部维度</div>;
   if (error || !detail) return <><Link className="spotlight-back" to="/delivery/campaigns"><ArrowLeft size={15} />返回计划列表</Link><div className="spotlight-error"><AlertCircle size={16} />{error || "计划不存在"}</div></>;
   const campaign = detail.campaign;
   return <>
     <Link className="spotlight-back" to="/delivery/campaigns"><ArrowLeft size={15} />返回计划列表</Link>
-    <section className="spotlight-detail-heading"><div className="spotlight-detail-icon"><Megaphone size={21} /></div><div><h1>{campaign.campaign_name || "未命名计划"}</h1><p>{campaign.advertiser_name} · 广告主 {campaign.advertiser_id} · 计划 {campaign.campaign_id}</p></div><span className={`spotlight-state ${campaignStateTone(campaign.campaign_filter_state)}`}>{enumLabel(campaignStates, campaign.campaign_filter_state)}</span></section>
-    <section className="spotlight-summary-strip" aria-label="计划执行摘要"><div><CircleDollarSign size={15} /><span>计划日预算</span><strong>¥{money.format(campaign.campaign_day_budget / 100)}</strong></div><div><Layers3 size={15} /><span>投放场域</span><strong>{enumLabel(placements, campaign.placement)}</strong></div><div><Rows3 size={15} /><span>广告单元</span><strong>{integer.format(campaign.unit_count)}</strong></div><div><Lightbulb size={15} /><span>投放创意</span><strong>{integer.format(campaign.creativity_count)}</strong></div><div><CalendarDays size={15} /><span>执行周期</span><strong>{campaign.start_date || "-"} 至 {campaign.expire_date || "-"}</strong></div></section>
-    <section className="spotlight-readable-section"><header><h2>计划执行配置</h2><span>聚光快照同步于 {formatDate(campaign.synced_at)}</span></header><dl><div><dt>营销目标</dt><dd>{enumLabel(marketingTargets, campaign.marketing_target)}</dd></div><div><dt>出价策略</dt><dd>{enumLabel(biddingStrategies, campaign.bidding_strategy)}</dd></div><div><dt>计划开关</dt><dd>{campaign.campaign_enable === 1 ? "开启" : "关闭"}</dd></div><div><dt>计划更新时间</dt><dd>{formatDate(campaign.updated_at)}</dd></div></dl></section>
-    <RawPayload payload={detail.raw_payload} title="计划全部字段" level="campaign" marketingTarget={campaign.marketing_target} />
-    <section className="spotlight-hierarchy-section"><header><div><Rows3 size={17} /><div><h2>广告单元</h2><p>出价、定向、人群、地域、关键词与笔记配置</p></div></div><span>{detail.units.length} 个</span></header>{detail.units.length === 0 ? <div className="spotlight-empty">该计划没有有效广告单元</div> : <div className="spotlight-entity-list">{detail.units.map((unit) => <details className="spotlight-entity" open key={unit.id}><summary><div><strong>{unit.name || "未命名单元"}</strong><code>单元 {unit.id}</code></div><span className={`spotlight-state ${unitStateTone(unit.filter_state)}`}>{enumLabel(unitStates, unit.filter_state)}</span><small>{(creativitiesByUnit.get(unit.id) ?? []).length} 个创意</small></summary><div className="spotlight-entity-meta"><span>开关：{unit.enable === 1 ? "开启" : "关闭"}</span><span>创建：{formatDate(unit.created_at)}</span><span>更新：{formatDate(unit.updated_at)}</span><span>同步：{formatDate(unit.synced_at)}</span></div><RawPayload payload={unit.raw_payload} title={`单元 ${unit.id} 全部字段`} level="unit" marketingTarget={campaign.marketing_target} /></details>)}</div>}</section>
-    <section className="spotlight-hierarchy-section"><header><div><Lightbulb size={17} /><div><h2>投放创意</h2><p>素材、笔记、标题、审核、跳转与转化配置</p></div></div><span>{detail.creativities.length} 个</span></header>{detail.creativities.length === 0 ? <div className="spotlight-empty">该计划没有有效投放创意</div> : <div className="spotlight-entity-list creativity">{detail.creativities.map((creativity) => <details className="spotlight-entity" key={creativity.id}><summary><div><strong>{creativity.name || "未命名创意"}</strong><code>创意 {creativity.id} · 单元 {creativity.unit_id || "-"}</code></div><span className={`spotlight-state ${creativityStateTone(creativity.filter_state)}`}>{enumLabel(creativityStates, creativity.filter_state)}</span><small>{String(creativity.raw_payload?.note_id || "无笔记 ID")}</small></summary><div className="spotlight-entity-meta"><span>开关：{creativity.enable === 1 ? "开启" : "关闭"}</span><span>创建：{formatDate(creativity.created_at)}</span><span>更新：{formatDate(creativity.updated_at)}</span><span>同步：{formatDate(creativity.synced_at)}</span></div><RawPayload payload={creativity.raw_payload} title={`创意 ${creativity.id} 全部字段`} level="creativity" marketingTarget={campaign.marketing_target} /></details>)}</div>}</section>
+    <section className="spotlight-detail-heading"><div className="spotlight-detail-icon"><Megaphone size={21} /></div><div><h1>{campaign.campaign_name || "未命名计划"}</h1><p>{campaign.advertiser_name} · 广告主 {campaign.advertiser_id}</p></div></section>
+    <PlanOverview campaign={campaign} payload={detail.raw_payload} units={detail.units} creativities={detail.creativities} />
+    <RawPayload payload={detail.raw_payload} title="计划执行配置（全部字段）" level="campaign" marketingTarget={campaign.marketing_target} />
+    <section className="spotlight-hierarchy-section" id="spotlight-units"><header><div><Rows3 size={17} /><div><h2>广告单元</h2><p>出价、定向、人群、地域、关键词与笔记配置</p></div></div></header>{detail.units.length === 0 ? <div className="spotlight-empty">该计划没有有效广告单元</div> : <div className="spotlight-entity-list">{detail.units.map((unit) => { const unitCreativities = creativitiesByUnit.get(unit.id) ?? []; return <details className="spotlight-entity" open key={unit.id}><summary><div><strong>{unit.name || "未命名单元"}</strong><code>单元 {unit.id}</code></div><span className={`spotlight-state ${unitStateTone(unit.filter_state)}`}>{enumLabel(unitStates, unit.filter_state)}</span><small>{unitCreativities.length === 0 ? "暂无投放创意" : unitCreativities.map((creativity) => creativity.name || `创意 ${creativity.id}`).join(" · ")}</small></summary><div className="spotlight-entity-meta"><span>开关：{unit.enable === 1 ? "开启" : "关闭"}</span><span>创建：{formatDate(unit.created_at)}</span><span>更新：{formatDate(unit.updated_at)}</span><span>同步：{formatDate(unit.synced_at)}</span></div><RawPayload payload={unit.raw_payload} title={`单元 ${unit.id} 全部字段`} level="unit" marketingTarget={campaign.marketing_target} noteDetails={noteDetails} /></details>; })}</div>}</section>
+    <section className="spotlight-hierarchy-section" id="spotlight-creativities"><header><div><Lightbulb size={17} /><div><h2>投放创意</h2><p>素材类型、审核状态、投放状态、笔记与转化配置</p></div></div></header>{detail.creativities.length === 0 ? <div className="spotlight-empty">该计划没有有效投放创意</div> : <div className="spotlight-entity-list creativity">{detail.creativities.map((creativity) => { const noteID = textPayloadValue(creativity.raw_payload, "note_id"); const title = noteID ? noteDetails[noteKey(noteID)]?.title : undefined; return <details className="spotlight-entity" open key={creativity.id}><summary><div><strong>{creativity.name || "未命名创意"}</strong><code>创意 {creativity.id} · 单元 {creativity.unit_id || "-"}</code></div><span className={`spotlight-state ${creativityStateTone(creativity.filter_state)}`}>{enumLabel(creativityStates, creativity.filter_state)}</span><small>{title || (noteID ? "笔记标题未同步" : "无笔记")}</small></summary><div className="spotlight-entity-meta"><span>开关：{creativity.enable === 1 ? "开启" : "关闭"}</span><span>创建：{formatDate(creativity.created_at)}</span><span>更新：{formatDate(creativity.updated_at)}</span><span>同步：{formatDate(creativity.synced_at)}</span></div><RawPayload payload={creativity.raw_payload} title={`创意 ${creativity.id} 全部字段`} level="creativity" marketingTarget={campaign.marketing_target} noteDetails={noteDetails} /></details>; })}</div>}</section>
   </>;
 }
 

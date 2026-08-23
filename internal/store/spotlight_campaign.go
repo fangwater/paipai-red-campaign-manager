@@ -123,8 +123,19 @@ func (p *Postgres) SpotlightCampaignDetail(ctx context.Context, advertiserID, ca
 			creativity.unit_id, creativity.creativity_enable, creativity.creativity_filter_state,
 			COALESCE(creativity.creativity_created_at::TEXT, ''),
 			COALESCE(creativity.creativity_updated_at::TEXT, ''), creativity.synced_at::TEXT,
+			COALESCE(note.note_title, ''), COALESCE(note.note_url, ''),
 			creativity.raw_payload
 		FROM xhs_jg_creativities creativity
+		LEFT JOIN LATERAL (
+			SELECT
+				record.fields #>> '{笔记标题,0,text}' AS note_title,
+				record.fields #>> '{笔记链接,0,link}' AS note_url
+			FROM lark_bitable_records record
+			WHERE record.deleted_at IS NULL
+			  AND record.fields #>> '{笔记ID,0,text}' = creativity.note_id
+			ORDER BY record.lark_updated_at DESC NULLS LAST, record.synced_at DESC
+			LIMIT 1
+		) note ON TRUE
 		WHERE creativity.advertiser_id=$1 AND creativity.campaign_id=$2 AND creativity.deleted_at IS NULL
 		ORDER BY creativity.unit_id, creativity.creativity_id
 	`, advertiserID, campaignID)
@@ -136,7 +147,7 @@ func (p *Postgres) SpotlightCampaignDetail(ctx context.Context, advertiserID, ca
 		var item maituo.SpotlightCampaignEntity
 		if err := creativityRows.Scan(&item.ID, &item.Name, &item.CampaignID, &item.UnitID,
 			&item.Enable, &item.FilterState, &item.CreatedAt, &item.UpdatedAt,
-			&item.SyncedAt, &item.RawPayload); err != nil {
+			&item.SyncedAt, &item.NoteTitle, &item.NoteURL, &item.RawPayload); err != nil {
 			return result, false, fmt.Errorf("scan Spotlight campaign creativity: %w", err)
 		}
 		result.Creativities = append(result.Creativities, item)
