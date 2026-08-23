@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { makeMaituoWorkbook } from "./maituo-workbook";
 
-test("accepts a workbook with only known sheets that are present", async ({ page }) => {
+test("accepts the current note-only Maituo workbook", async ({ page }) => {
   await page.route("**/paipai/api/imports/maituo-customer-daily", async (route) => {
     await route.fulfill({
       status: 200,
@@ -10,7 +10,7 @@ test("accepts a workbook with only known sheets that are present", async ({ page
     });
   });
 
-  const buffer = await makeMaituoWorkbook("partial", ["总览KPI", "笔记明细"]);
+  const buffer = await makeMaituoWorkbook("partial", ["笔记明细"]);
   await page.goto("/paipai/maituo-daily-report");
   await page.locator('input[type="file"]').setInputFiles({
     name: "2026-07-13-MaiTuo.xlsx",
@@ -19,7 +19,7 @@ test("accepts a workbook with only known sheets that are present", async ({ page
   });
 
   const row = page.locator(".queue-row");
-  await expect(row).toContainText("已识别 2/5 张表");
-  await expect(row).toContainText("缺少：分SPU总览、分子账户、淘搜趋势");
+  await expect(row).toContainText("已识别笔记明细");
+  await expect(row).not.toContainText("缺少：");
   await expect(page.getByRole("button", { name: "保存 1 个文件" })).toBeEnabled();
 });

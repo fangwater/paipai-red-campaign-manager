@@ -49,8 +49,8 @@ func Parse(reader io.Reader, fileName string) (Snapshot, error) {
 	}
 	defer func() { _ = workbook.Close() }()
 	actualSheets := workbook.GetSheetList()
-	presentSheets := make([]string, 0, len(WorkbookSheets))
-	for _, name := range WorkbookSheets {
+	presentSheets := make([]string, 0, len(RecognizedWorkbookSheets))
+	for _, name := range RecognizedWorkbookSheets {
 		if contains(actualSheets, name) {
 			presentSheets = append(presentSheets, name)
 		}

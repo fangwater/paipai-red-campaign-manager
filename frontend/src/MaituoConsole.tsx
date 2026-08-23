@@ -1,12 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { CellValue, Worksheet } from "exceljs";
 import {
-  AlertCircle, ArrowRight, Bell, CalendarDays, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, Clock3, Database,
+  AlertCircle, ArrowRight, Bell, BookOpenCheck, CalendarDays, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, Clock3, Database,
   FilePlus2, FileSpreadsheet, FileText, GitCompareArrows, Image as ImageIcon, LayoutDashboard, Lightbulb, Link2, LoaderCircle, Menu, Megaphone, Tags,
   PanelLeftClose, RefreshCw, Route, Rows3, Search, Settings, Trash2, UploadCloud
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SavedReportHistory, { type SavedImport } from "./SavedReportHistory";
+import ProviderDirectoryLinks from "./ProviderDirectoryLinks";
 
 const NoteCampaignAnalysis = lazy(() => import("./NoteCampaignAnalysis"));
 const AccountPlanDiagnosis = lazy(() => import("./AccountPlanDiagnosis"));
@@ -23,6 +24,7 @@ const RedMaterialPending = lazy(() => import("./RedMaterialPending"));
 const ContentAnalysis = lazy(() => import("./ContentAnalysis"));
 const PlacementNotePerformance = lazy(() => import("./PlacementNotePerformance"));
 const SpotlightCampaigns = lazy(() => import("./SpotlightCampaigns"));
+const SpotlightConfigHelper = lazy(() => import("./SpotlightConfigHelper"));
 const SelfServeDeliveryConsole = lazy(() => import("./SelfServeDeliveryConsole"));
 const DandelionUpdate = lazy(() => import("./DandelionUpdate"));
 
@@ -70,7 +72,7 @@ type UploadItem = {
 };
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
-const EXPECTED_SHEETS = ["总览KPI", "笔记明细", "分SPU总览", "分子账户", "淘搜趋势"];
+const EXPECTED_SHEETS = ["笔记明细"];
 
 const navGroups = [
   { label: "总览", items: [{ label: "工作台", icon: LayoutDashboard, path: "/" }] },
@@ -108,6 +110,7 @@ const navGroups = [
       { label: "信息流", icon: Rows3, path: "/delivery/feed" },
       { label: "搜索", icon: Search, path: "/delivery/search" },
       { label: "计划详情", icon: Megaphone, path: "/delivery/campaigns" },
+      { label: "配置助手", icon: BookOpenCheck, path: "/delivery/helper" },
       { label: "自建投流", icon: Route, path: "/self-serve-delivery" },
       { label: "推广计划", icon: Megaphone, path: "/xhs-jg-sync/campaigns" },
       { label: "广告单元", icon: Rows3, path: "/xhs-jg-sync/units" },
@@ -171,6 +174,7 @@ function MaituoConsole() {
   const feedDelivery = location.pathname === "/delivery/feed";
   const searchDelivery = location.pathname === "/delivery/search";
   const spotlightCampaigns = location.pathname === "/delivery/campaigns";
+  const spotlightHelper = location.pathname === "/delivery/helper";
   const selfServeDelivery = location.pathname === "/self-serve-delivery";
   const redMaterialsSearch = location.pathname === "/red-materials";
   const redMaterialsCompose = location.pathname === "/red-materials/new";
@@ -189,8 +193,8 @@ function MaituoConsole() {
   const dataSyncTarget = location.pathname.endsWith("/cid") || location.pathname.endsWith("/coenzyme-q10") ? "cid" : location.pathname.endsWith("/manuscripts") ? "manuscripts" : "dandelion";
   const dataSyncTargetLabel = dataSyncTarget === "cid" ? "cid数据" : dataSyncTarget === "manuscripts" ? "稿件数据" : "蒲公英数据";
   const settings = location.pathname === "/settings";
-  const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : feedDelivery || searchDelivery || spotlightCampaigns || selfServeDelivery || sync ? "投放管理" : settings ? "系统" : "数据中心";
-  const breadcrumbPage = redMaterialsCompose ? "添加素材" : redMaterialsPending ? "待标注素材" : redMaterialsSearch ? "检索素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : feedDelivery ? "信息流" : searchDelivery ? "搜索" : spotlightCampaigns ? "计划详情" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记场域分析" : accountDiagnosis ? "子账户诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
+  const breadcrumbSection = redMaterials ? "素材中心" : businessOverview || contentAnalysis || analysis || accountDiagnosis || trafficComparison || xhsLinkQuery ? "分析中心" : feedDelivery || searchDelivery || spotlightCampaigns || spotlightHelper || selfServeDelivery || sync ? "投放管理" : settings ? "系统" : "数据中心";
+  const breadcrumbPage = redMaterialsCompose ? "添加素材" : redMaterialsPending ? "待标注素材" : redMaterialsSearch ? "检索素材" : businessOverview ? "数据总览" : contentAnalysis ? "内容分析" : feedDelivery ? "信息流" : searchDelivery ? "搜索" : spotlightCampaigns ? "计划详情" : spotlightHelper ? "配置助手" : selfServeDelivery ? "自建投流" : guoraiData ? "薯量数据" : dandelionUpload ? "蒲公英数据更新" : analysis ? "笔记场域分析" : accountDiagnosis ? "子账户诊断" : trafficComparison ? "投流情况对比" : xhsLinkQuery ? "聚光关联查询" : sync ? syncTargetLabel : dataSync ? dataSyncTargetLabel : settings ? "系统设置" : "Maituo 客户日报";
   const inputRef = useRef<HTMLInputElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -363,7 +367,7 @@ function MaituoConsole() {
         </header>
 
         <main className="main-content">
-          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : feedDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载信息流</div>}><PlacementNotePerformance placement="feed" serviceState={serviceState} /></Suspense> : searchDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载搜索</div>}><PlacementNotePerformance placement="search" serviceState={serviceState} /></Suspense> : spotlightCampaigns ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载计划详情</div>}><SpotlightCampaigns /></Suspense> : selfServeDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载自建投流工作台</div>}><SelfServeDeliveryConsole /></Suspense> : dashboard ? <>
+          {dandelionUpload ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载更新页面</div>}><DandelionUpdate /></Suspense> : contentAnalysis ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载内容分析</div>}><ContentAnalysis serviceState={serviceState} /></Suspense> : feedDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载信息流</div>}><PlacementNotePerformance placement="feed" serviceState={serviceState} /></Suspense> : searchDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载搜索</div>}><PlacementNotePerformance placement="search" serviceState={serviceState} /></Suspense> : spotlightCampaigns ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载计划详情</div>}><SpotlightCampaigns /></Suspense> : spotlightHelper ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载配置助手</div>}><SpotlightConfigHelper /></Suspense> : selfServeDelivery ? <Suspense fallback={<div className="analysis-loading"><LoaderCircle size={20} className="spin" />正在加载自建投流工作台</div>}><SelfServeDeliveryConsole /></Suspense> : dashboard ? <>
             <section className="page-heading">
               <div><h1>数据中台</h1><p>PaiPai RED · 业务数据工作台</p></div>
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>
@@ -464,7 +468,7 @@ function MaituoConsole() {
                   <div className="queue-columns"><span>报表日期</span><span>文件</span><span>状态</span><span /></div>
                   {queue.map((item) => <div className={`queue-row queue-${item.status}`} key={item.id}>
                     <div className="queue-date"><strong>{item.reportDate || "日期未知"}</strong>{item.reportDate && savedDates.has(item.reportDate) && item.status === "ready" ? <span>同日期已有版本</span> : null}</div>
-                    <div className="queue-file"><FileSpreadsheet size={18} /><div><strong title={item.file.name}>{item.file.name}</strong><span>{fileSize(item.file.size)}{item.sheetCount ? ` · 已识别 ${item.sheetCount}/5 张表 · ${item.rowCount} 行` : ""}</span>{item.missingSheets.length > 0 && item.status !== "error" ? <small className="sheet-warning" title={item.missingSheets.join("、")}>缺少：{item.missingSheets.join("、")}</small> : null}{item.result && <small>新增 {item.result.inserted} · 更新 {item.result.updated} · 未变化 {item.result.unchanged}</small>}{item.error && <small className="queue-error">{item.error}</small>}</div></div>
+                    <div className="queue-file"><FileSpreadsheet size={18} /><div><strong title={item.file.name}>{item.file.name}</strong><span>{fileSize(item.file.size)}{item.sheetCount ? ` · 已识别笔记明细 · ${item.rowCount} 行` : ""}</span>{item.missingSheets.length > 0 && item.status !== "error" ? <small className="sheet-warning" title={item.missingSheets.join("、")}>缺少：{item.missingSheets.join("、")}</small> : null}{item.result && <small>新增 {item.result.inserted} · 更新 {item.result.updated} · 未变化 {item.result.unchanged}</small>}{item.error && <small className="queue-error">{item.error}</small>}</div></div>
                     <div className={`queue-status status-${item.status}`}>
                       {item.status === "uploading" ? <LoaderCircle size={15} className="spin" /> : item.status === "error" ? <AlertCircle size={15} /> : item.status === "ready" ? <Clock3 size={15} /> : <CheckCircle2 size={15} />}
                       {statusLabel(item)}
@@ -480,13 +484,14 @@ function MaituoConsole() {
                 <div className="task-metrics"><div><span>待保存</span><strong>{readyCount}</strong></div><div><span>已识别</span><strong>{queue.length}</strong></div><div><span>已保存</span><strong>{savedCount}</strong></div></div>
                 <div className="task-rule"><Check size={15} /><span>按报表日期从早到晚</span></div>
                 <div className="task-rule"><Check size={15} /><span>相同文件自动跳过</span></div>
-                <div className="task-rule"><Check size={15} /><span>前四张业务表按日期保留</span></div>
+                <div className="task-rule"><Check size={15} /><span>笔记明细按日期保留</span></div>
                 <div className="task-rule"><Check size={15} /><span>缺少的表跳过且不改动</span></div>
                 <button className="secondary-button task-submit" disabled={readyCount === 0 || importing || preparing} onClick={() => void importFiles()}>{importing ? "正在依次保存" : `保存 ${readyCount} 个文件`}</button>
               </aside>
             </section>
 
             <SavedReportHistory reports={savedImports} loading={savedLoading} expectedSheets={EXPECTED_SHEETS} />
+            <ProviderDirectoryLinks refreshKey={savedImports.map((item) => item.file_sha256).join(",")} />
           </>}
         </main>
       </div>

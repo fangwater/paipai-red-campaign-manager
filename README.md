@@ -109,7 +109,7 @@ sudo -u postgres createdb -O "$USER" paipai_red
 
 前端位于 `frontend/`，使用 React、TypeScript 和 Vite。Maituo 客户日报模块支持一次选择或拖放多个 `.xlsx` 文件，本地解析后按报表日期升序执行，并展示服务器中已保存的报表日期和文件状态。
 蒲公英数据更新页会按文件内最大的“数据更新日期”展示历史上传，并补齐首尾上传日期间的日历：周五、周六作为非工作日默认缺省，其他未上传日期标记为缺少文件。
-历史列表中的已保存日期可打开该 `report_date` 对应的合并后笔记明细。明细只保留笔记和场域维度，不展示或推断子账户、广告账户和计划归属。
+历史列表中的已保存日期可打开该 `report_date` 对应的合并后笔记明细。明细只保留笔记和场域维度，不展示或推断子账户、广告账户和计划归属。页面同时按服务商稿件表中的笔记 ID 生成曼杰、有一有二、智元三个独立日报目录；每份下载文件只包含该服务商匹配到的 `笔记明细`。
 
 ```bash
 make frontend-dev
@@ -126,7 +126,7 @@ make frontend-deploy
 
 `POST /v1/imports/maituo-customer-daily` 接收 `multipart/form-data`，唯一字段 `file` 为不超过 50 MB 的 `.xlsx`。前端多选后按日期逐个调用该接口。`GET /v1/imports/maituo-customer-daily` 返回按报表日期倒序排列的已保存文件；传入 `report_date=YYYY-MM-DD` 时返回该日期按正式业务键合并后的笔记明细。
 
-系统识别以下 5 张目标表。工作簿至少包含其中一张即可；缺少的目标表会跳过且不会修改该表已有数据，其他未知工作表会被忽略。实际存在的目标表，其表名和表头必须与样本一致：
+当前日报只要求 `笔记明细`。系统仍兼容并导入旧工作簿中的 4 张汇总表；缺少这些旧表不会再标记为不完整，其他未知工作表会被忽略。实际存在的目标表，其表名和表头必须与样本一致：
 
 - `总览KPI`，业务键为 `报表日期 + 指标`
 - `笔记明细`，业务键为 `report_date + note_id + placement`（报表日期 + 笔记ID + 场域）
@@ -135,6 +135,8 @@ make frontend-deploy
 - `淘搜趋势`，业务键为表内 `日期`
 
 “笔记明细”中的同日、同笔记、同场域行会合并保存，正式数据不保留子账户或计划名。“分子账户”是工作簿提供的另一套独立汇总，表内没有可验证的笔记归属，不能用它把笔记反推到子账户、计划或 SPU。
+
+`GET /v1/imports/maituo-provider-directories` 返回已启用服务商的日报目录统计。`GET /v1/downloads/maituo-provider/{provider_code}` 返回该服务商有匹配笔记的日报日期，`GET /v1/downloads/maituo-provider/{provider_code}/{YYYY-MM-DD}.xlsx` 下载纯 `笔记明细` 工作簿。服务商归属只按有效 `service_provider_note_executions.provider_code + note_id` 关联，不按金额、SPU 或子账户推断。
 
 报表日期优先从文件名中的 `YYYY-MM-DD` 提取；文件名没有日期时，使用 `淘搜趋势` 的最大日期。缺少 `淘搜趋势` 且文件名也没有日期时无法导入。成功导入过的文件 SHA-256 会返回 `already_saved=true`，避免重复写入。
 

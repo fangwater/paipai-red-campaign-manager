@@ -10,7 +10,11 @@ const (
 	SheetTrend      = "淘搜趋势"
 )
 
-var WorkbookSheets = []string{SheetKPI, SheetNotes, SheetSPU, SheetSubaccount, SheetTrend}
+// WorkbookSheets are required by the current note-grained daily report.
+// RecognizedWorkbookSheets keeps legacy summary sheets importable when present.
+var WorkbookSheets = []string{SheetNotes}
+
+var RecognizedWorkbookSheets = []string{SheetKPI, SheetNotes, SheetSPU, SheetSubaccount, SheetTrend}
 
 type Snapshot struct {
 	FileName      string
@@ -37,6 +41,27 @@ type SubaccountReport struct {
 	FileName   string `json:"file_name"`
 }
 
+type ProviderDirectory struct {
+	ProviderCode       string `json:"provider_code"`
+	ProviderName       string `json:"provider_name"`
+	ReportCount        int    `json:"report_count"`
+	NoteCount          int    `json:"note_count"`
+	EarliestReportDate string `json:"earliest_report_date"`
+	LatestReportDate   string `json:"latest_report_date"`
+}
+
+type ProviderReport struct {
+	ReportDate string `json:"report_date"`
+	FileName   string `json:"file_name"`
+	NoteCount  int    `json:"note_count"`
+}
+
+type ProviderSnapshot struct {
+	ProviderCode string
+	ProviderName string
+	Snapshot     Snapshot
+}
+
 func (snapshot Snapshot) HasSheet(name string) bool {
 	for _, sheet := range snapshot.PresentSheets {
 		if sheet == name {
@@ -51,7 +76,7 @@ func MissingSheets(present []string) []string {
 	for _, sheet := range present {
 		seen[sheet] = struct{}{}
 	}
-	missing := make([]string, 0, len(WorkbookSheets)-len(present))
+	missing := make([]string, 0, len(WorkbookSheets))
 	for _, sheet := range WorkbookSheets {
 		if _, ok := seen[sheet]; !ok {
 			missing = append(missing, sheet)

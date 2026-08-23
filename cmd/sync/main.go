@@ -62,6 +62,7 @@ type apiServer struct {
 	manualMaterials      manualMaterialStore
 	maituoImport         maituoImportStore
 	maituoSubaccounts    maituoSubaccountStore
+	maituoProviders      maituoProviderStore
 	maituoAnalytics      maituoAnalyticsStore
 	maituoXHSLinksStore  maituoXHSLinkStore
 	spotlightStore       spotlightCampaignStore
@@ -198,6 +199,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		manualMaterials:      destination,
 		maituoImport:         destination,
 		maituoSubaccounts:    destination,
+		maituoProviders:      destination,
 		maituoAnalytics:      destination,
 		maituoXHSLinksStore:  destination,
 		spotlightStore:       destination,
@@ -264,6 +266,8 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/sync/coenzyme-q10/status", server.coenzymeQ10StatusHandler)
 	mux.HandleFunc("/v1/imports/maituo-subaccount-directories", server.listMaituoSubaccountDirectories)
 	mux.HandleFunc(maituoSubaccountDownloadPrefix, server.maituoSubaccountDownload)
+	mux.HandleFunc("/v1/imports/maituo-provider-directories", server.listMaituoProviderDirectories)
+	mux.HandleFunc(maituoProviderDownloadPrefix, server.maituoProviderDownload)
 	mux.HandleFunc("/v1/analytics/maituo/note-campaigns", server.maituoNoteCampaignAnalysis)
 	mux.HandleFunc("/v1/analytics/maituo/note-content", server.maituoNoteContent)
 	mux.HandleFunc("/v1/analytics/maituo/reference-materials", server.maituoReferenceMaterials)

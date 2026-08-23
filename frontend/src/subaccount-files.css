@@ -1,4 +1,4 @@
-.subaccount-directories { margin-top: 16px; }
+.subaccount-directories, .provider-directories { margin-top: 16px; }
 .directory-table-wrap { overflow-x: auto; }
 .directory-table { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
 .directory-table th, .directory-table td { height: 45px; padding: 0 16px; border-bottom: 1px solid #eceeef; text-align: left; }
@@ -6,7 +6,7 @@
 .directory-table th:nth-child(1) { width: 150px; }
 .directory-table th:nth-child(2) { width: 210px; }
 .directory-table th:nth-child(3) { width: 70px; }
-.directory-table th:nth-child(5) { width: 90px; }
+.directory-table th:last-child { width: 90px; }
 .directory-url { width: 100%; min-width: 0; height: 29px; padding: 0 9px; overflow: hidden; border: 1px solid #dfe3e5; border-radius: 5px; background: #fafbfb; color: #5d656b; font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; }
 .directory-actions { display: flex; gap: 5px; }
 .directory-actions .icon-button { width: 30px; height: 30px; color: #397762; }

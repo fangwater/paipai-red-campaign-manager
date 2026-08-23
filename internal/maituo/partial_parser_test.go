@@ -18,10 +18,23 @@ func TestParsePartialWorkbook(t *testing.T) {
 	if _, err := workbook.NewSheet("说明"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := workbook.NewSheet(SheetNotes); err != nil {
+		t.Fatal(err)
+	}
 	if err := workbook.SetSheetRow(SheetKPI, "A1", &[]interface{}{"指标", "数值", "数据口径"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := workbook.SetSheetRow(SheetKPI, "A2", &[]interface{}{"消耗(元)", 123.45, "宽表加总"}); err != nil {
+		t.Fatal(err)
+	}
+	noteHeader := make([]interface{}, len(expectedHeaders[SheetNotes]))
+	for index, header := range expectedHeaders[SheetNotes] {
+		noteHeader[index] = header
+	}
+	if err := workbook.SetSheetRow(SheetNotes, "A1", &noteHeader); err != nil {
+		t.Fatal(err)
+	}
+	if err := workbook.SetSheetRow(SheetNotes, "A2", &[]interface{}{"note-1", "https://example.com/note-1", "信息流", "搜索", "", 123.45, 4, 30.86, 19.44, 4.2, 1.2, 3.4}); err != nil {
 		t.Fatal(err)
 	}
 	var data bytes.Buffer
@@ -36,15 +49,15 @@ func TestParsePartialWorkbook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snapshot.PresentSheets) != 1 || snapshot.PresentSheets[0] != SheetKPI {
+	if len(snapshot.PresentSheets) != 2 || snapshot.PresentSheets[0] != SheetKPI || snapshot.PresentSheets[1] != SheetNotes {
 		t.Fatalf("present sheets = %v", snapshot.PresentSheets)
 	}
 	missing := MissingSheets(snapshot.PresentSheets)
-	if len(missing) != 4 || missing[0] != SheetNotes || missing[3] != SheetTrend {
+	if len(missing) != 0 {
 		t.Fatalf("missing sheets = %v", missing)
 	}
-	if len(snapshot.KPIs) != 1 || snapshot.KPIs[0].Value != 123.45 {
-		t.Fatalf("KPIs = %+v", snapshot.KPIs)
+	if len(snapshot.KPIs) != 1 || snapshot.KPIs[0].Value != 123.45 || len(snapshot.Notes) != 1 {
+		t.Fatalf("KPIs = %+v, notes = %+v", snapshot.KPIs, snapshot.Notes)
 	}
 }
 

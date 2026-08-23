@@ -170,7 +170,8 @@ function SavedReportHistory({ reports, loading, expectedSheets }: Props) {
             {entries.map((entry) => {
               if (entry.kind === "report") {
                 const present = entry.report.present_sheets ?? [];
-                const missing = entry.report.missing_sheets ?? expectedSheets.filter((name) => !present.includes(name));
+                const requiredPresent = expectedSheets.filter((name) => present.includes(name));
+                const missing = expectedSheets.filter((name) => !present.includes(name));
                 const selected = entry.date === selectedDate;
                 return <tr
                   className={`saved-report-row${selected ? " selected" : ""}`}
@@ -187,7 +188,7 @@ function SavedReportHistory({ reports, loading, expectedSheets }: Props) {
                 >
                   <td><span className="report-date-value"><strong>{entry.date}</strong><small>{weekdayLabel(entry.date)}</small></span></td>
                   <td title={entry.report.file_name}>{entry.report.file_name}</td>
-                  <td title={missing.length ? `缺少：${missing.join("、")}` : "五张表齐全"}><span className={missing.length ? "coverage-count partial" : "coverage-count"}>{present.length}/5</span>{missing.length ? <small className="coverage-missing">缺 {missing.length}</small> : null}</td>
+                  <td title={missing.length ? `缺少：${missing.join("、")}` : "笔记明细已保存"}><span className={missing.length ? "coverage-count partial" : "coverage-count"}>{requiredPresent.length}/{expectedSheets.length}</span>{missing.length ? <small className="coverage-missing">缺 {missing.length}</small> : null}</td>
                   <td>{(entry.report.merged_rows ?? entry.report.fetched).toLocaleString()}</td>
                   <td>{formatSavedTime(entry.report.completed_at)}</td>
                   <td><span className="saved-badge"><Check size={13} />已保存</span></td>
