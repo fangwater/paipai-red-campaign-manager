@@ -136,7 +136,7 @@ make frontend-deploy
 
 “笔记明细”按工作簿中提供的子账户和计划名原样保存；只有业务键完全相同的重复行会被拒绝。`分子账户`仍是独立汇总表，不能根据 SPU、场域或金额反推笔记归属。
 
-`GET /v1/imports/maituo-subaccount-directories` 返回子账户的日报目录统计。`GET /v1/downloads/maituo-subaccount/{account_id}` 返回该子账户的日报日期，`GET /v1/downloads/maituo-subaccount/{account_id}/{YYYY-MM-DD}.xlsx` 下载包含该子账户的 `分子账户` 数据及对应 `笔记明细` 的工作簿。`account_id` 为子账户名的 base64 URL 编码；目录、笔记和导出都以工作簿提供的子账户精确筛选，不根据 SPU、金额或服务商归因进行推断。
+`GET /v1/imports/maituo-subaccount-directories` 返回子账户的日报目录统计。`GET /v1/downloads/maituo-subaccount/{account_id}` 返回该子账户的日报日期，`GET /v1/downloads/maituo-subaccount/{account_id}/{YYYY-MM-DD}.xlsx` 下载包含该子账户的 `分子账户` 数据及对应 `笔记明细` 的工作簿。`account_id` 为子账户名的 base64 URL 编码；目录按 `分子账户` 精确筛选，笔记会按工作簿子账户字段的单个值或 `、`、中英文逗号、分号分隔的成员匹配，不根据 SPU、金额或服务商归因进行推断。
 
 报表日期优先从文件名中的 `YYYY-MM-DD` 提取；文件名没有日期时，使用 `淘搜趋势` 的最大日期。缺少 `淘搜趋势` 且文件名也没有日期时无法导入。成功导入过的文件 SHA-256 会返回 `already_saved=true`，避免重复写入。
 

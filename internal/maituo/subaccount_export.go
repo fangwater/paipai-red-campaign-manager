@@ -33,7 +33,10 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 	}
 	rows := &subaccountRows{}
 	for _, row := range snapshot.Notes {
-		if strings.TrimSpace(row.Subaccount) == subaccount {
+		if noteBelongsToSubaccount(row.Subaccount, subaccount) {
+			// A source row can explicitly list several accounts. The exported
+			// copy represents the account whose directory is being downloaded.
+			row.Subaccount = subaccount
 			rows.notes = append(rows.notes, row)
 		}
 	}
@@ -53,6 +56,21 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 		FileName: exportBaseName(snapshot) + "-" + safeExportPart(subaccount) + ".xlsx",
 		Data:     data,
 	}, nil
+}
+
+func noteBelongsToSubaccount(source, subaccount string) bool {
+	subaccount = strings.TrimSpace(subaccount)
+	if subaccount == "" {
+		return false
+	}
+	for _, member := range strings.FieldsFunc(source, func(character rune) bool {
+		return strings.ContainsRune("、，,；;", character)
+	}) {
+		if strings.TrimSpace(member) == subaccount {
+			return true
+		}
+	}
+	return false
 }
 
 func buildSubaccountWorkbook(rows *subaccountRows) ([]byte, error) {

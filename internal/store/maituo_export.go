@@ -89,7 +89,12 @@ func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount stri
 		SELECT note_id,note_url,category,subaccount,campaign_name,placement,keyword_category_note,
 		       spend,search_users,search_cost,estimated_postback_cost,search_rate_pct,cpc,ctr_pct,source_row_number,content_hash
 		FROM maituo_customer_daily_notes
-		WHERE report_date=$1 AND subaccount=$2 AND deleted_at IS NULL
+		WHERE report_date=$1 AND deleted_at IS NULL
+		  AND EXISTS (
+			  SELECT 1
+			  FROM unnest(regexp_split_to_array(maituo_customer_daily_notes.subaccount, '[、，,；;]')) AS members(member)
+			  WHERE BTRIM(members.member)=BTRIM($2)
+		  )
 		ORDER BY source_row_number,note_id,campaign_name,placement
 	`, reportDate, subaccount)
 	if err != nil {

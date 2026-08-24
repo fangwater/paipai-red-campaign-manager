@@ -38,7 +38,7 @@ func TestMaituoSubaccountDirectoryIntegration(t *testing.T) {
 	snapshot := maituo.Snapshot{
 		FileName: fileName, FileSHA256: prefix, ReportDate: reportDate,
 		PresentSheets: []string{maituo.SheetNotes, maituo.SheetSubaccount},
-		Notes:         []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "测评", Subaccount: prefix, CampaignName: "计划", Placement: "搜索", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-note-hash"}}},
+		Notes:         []maituo.NoteDetail{{NoteID: prefix + "-note", NoteURL: "https://example.com", Category: "测评", Subaccount: prefix + "、其他账户", CampaignName: "计划", Placement: "搜索", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-note-hash"}}},
 		Subaccounts:   []maituo.SubaccountOverview{{SPU: prefix, Subaccount: prefix, Placement: "搜索", RowMetadata: maituo.RowMetadata{SourceRow: 2, ContentHash: prefix + "-sub-hash"}}},
 	}
 	if _, err := postgres.ImportMaituoCustomerDaily(ctx, snapshot); err != nil {
