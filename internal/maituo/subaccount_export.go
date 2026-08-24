@@ -12,6 +12,8 @@ import (
 
 var ErrNoSubaccountData = errors.New("该子账户在指定日期暂无数据")
 
+var noteExportWidths = []float64{28, 44, 14, 12, 18, 14, 12, 14, 18, 14, 10, 10}
+
 type SubaccountWorkbook struct {
 	FileName string
 	Data     []byte
@@ -37,7 +39,7 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 	if len(rows.subaccounts) == 0 {
 		return SubaccountWorkbook{}, ErrNoSubaccountData
 	}
-	data, err := buildSubaccountWorkbook(rows)
+	data, err := buildSubaccountWorkbook(rows, snapshot.Notes)
 	if err != nil {
 		return SubaccountWorkbook{}, fmt.Errorf("build subaccount workbook: %w", err)
 	}
@@ -47,10 +49,18 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 	}, nil
 }
 
-func buildSubaccountWorkbook(rows *subaccountRows) ([]byte, error) {
+func buildSubaccountWorkbook(rows *subaccountRows, notes []NoteDetail) ([]byte, error) {
 	workbook := excelize.NewFile()
 	defer func() { _ = workbook.Close() }()
-	if err := workbook.SetSheetName("Sheet1", SheetSubaccount); err != nil {
+	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
+		return nil, err
+	}
+	if _, err := workbook.NewSheet(SheetSubaccount); err != nil {
+		return nil, err
+	}
+	// Notes have no subaccount dimension, so each split workbook retains the
+	// complete aggregated daily note sheet without assigning notes to an account.
+	if err := writeNoteExportSheet(workbook, notes); err != nil {
 		return nil, err
 	}
 	subaccountRows := make([][]interface{}, len(rows.subaccounts))
@@ -65,6 +75,19 @@ func buildSubaccountWorkbook(rows *subaccountRows) ([]byte, error) {
 		return nil, err
 	}
 	return buffer.Bytes(), nil
+}
+
+func writeNoteExportSheet(workbook *excelize.File, notes []NoteDetail) error {
+	rows := make([][]interface{}, len(notes))
+	for index, row := range notes {
+		rows[index] = []interface{}{
+			row.NoteID, row.NoteURL, row.Category, row.Placement,
+			optionalExportValue(row.KeywordCategoryNote), row.Spend, row.SearchUsers,
+			optionalExportValue(row.SearchCost), optionalExportValue(row.EstimatedPostbackCost),
+			optionalExportValue(row.SearchRatePct), row.CPC, row.CTRPct,
+		}
+	}
+	return writeExportSheet(workbook, SheetNotes, expectedHeaders[SheetNotes], rows, noteExportWidths)
 }
 
 func writeExportSheet(workbook *excelize.File, sheet string, headers []string, rows [][]interface{}, widths []float64) error {

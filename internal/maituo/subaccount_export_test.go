@@ -28,8 +28,12 @@ func TestBuildSubaccountWorkbookFiltersOtherAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer workbook.Close()
-	if sheets := workbook.GetSheetList(); len(sheets) != 1 || sheets[0] != SheetSubaccount {
+	if sheets := workbook.GetSheetList(); len(sheets) != 2 || sheets[0] != SheetNotes || sheets[1] != SheetSubaccount {
 		t.Fatalf("sheets = %v", sheets)
+	}
+	notes, _ := workbook.GetRows(SheetNotes)
+	if len(notes) != 3 || notes[1][0] != "note-a" || notes[2][0] != "note-b" {
+		t.Fatalf("notes = %v", notes)
 	}
 	subaccounts, _ := workbook.GetRows(SheetSubaccount)
 	if len(subaccounts) != 2 || subaccounts[1][1] != "账户A" {

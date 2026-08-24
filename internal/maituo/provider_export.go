@@ -28,19 +28,7 @@ func BuildProviderWorkbook(providerName string, snapshot Snapshot) (ProviderWork
 	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
 		return ProviderWorkbook{}, fmt.Errorf("name provider workbook sheet: %w", err)
 	}
-	rows := make([][]interface{}, len(snapshot.Notes))
-	for index, row := range snapshot.Notes {
-		rows[index] = []interface{}{
-			row.NoteID, row.NoteURL, row.Category, row.Placement,
-			optionalExportValue(row.KeywordCategoryNote), row.Spend, row.SearchUsers,
-			optionalExportValue(row.SearchCost), optionalExportValue(row.EstimatedPostbackCost),
-			optionalExportValue(row.SearchRatePct), row.CPC, row.CTRPct,
-		}
-	}
-	if err := writeExportSheet(
-		workbook, SheetNotes, expectedHeaders[SheetNotes], rows,
-		[]float64{28, 44, 14, 12, 18, 14, 12, 14, 18, 14, 10, 10},
-	); err != nil {
+	if err := writeNoteExportSheet(workbook, snapshot.Notes); err != nil {
 		return ProviderWorkbook{}, fmt.Errorf("build provider workbook: %w", err)
 	}
 	buffer, err := workbook.WriteToBuffer()

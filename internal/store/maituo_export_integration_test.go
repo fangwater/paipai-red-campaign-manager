@@ -62,7 +62,7 @@ func TestMaituoSubaccountDirectoryIntegration(t *testing.T) {
 		t.Fatalf("reports=%+v err=%v", reports, err)
 	}
 	exported, err := postgres.MaituoSubaccountSnapshot(ctx, prefix, reportDate)
-	if err != nil || len(exported.Notes) != 0 || len(exported.Subaccounts) != 1 {
+	if err != nil || len(exported.Notes) != 1 || len(exported.Subaccounts) != 1 {
 		t.Fatalf("snapshot=%+v err=%v", exported, err)
 	}
 }

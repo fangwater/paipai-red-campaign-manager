@@ -74,7 +74,7 @@ func (p *Postgres) MaituoSubaccountReports(ctx context.Context, subaccount strin
 }
 
 func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount string, reportDate time.Time) (maituo.Snapshot, error) {
-	snapshot := maituo.Snapshot{ReportDate: reportDate, PresentSheets: []string{maituo.SheetSubaccount}}
+	snapshot := maituo.Snapshot{ReportDate: reportDate, PresentSheets: []string{maituo.SheetNotes, maituo.SheetSubaccount}}
 	if err := p.pool.QueryRow(ctx, `
 		SELECT file_name FROM maituo_customer_daily_import_runs
 		WHERE status='succeeded' AND report_date=$1
@@ -109,5 +109,12 @@ func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount stri
 	if len(snapshot.Subaccounts) == 0 {
 		return maituo.Snapshot{}, ErrMaituoSubaccountReportNotFound
 	}
+	dailyNotes, err := p.MaituoDailyNotes(ctx, reportDate)
+	if err != nil {
+		return maituo.Snapshot{}, fmt.Errorf("query Maituo daily notes for subaccount export: %w", err)
+	}
+	// The note sheet is copied into every account workbook; it is not matched to
+	// the account because the source data has no such relationship.
+	snapshot.Notes = dailyNotes.Items
 	return snapshot, nil
 }
