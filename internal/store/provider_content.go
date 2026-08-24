@@ -224,6 +224,10 @@ func (p *Postgres) UpsertProviderNotes(ctx context.Context, notes []model.Provid
 			SELECT 1 FROM service_provider_note_assets AS links
 			WHERE links.asset_id = assets.asset_id
 		)
+		AND NOT EXISTS (
+			SELECT 1 FROM manual_material_assets AS links
+			WHERE links.asset_id = assets.asset_id
+		)
 	`); err != nil {
 		return fmt.Errorf("delete unreferenced manuscript assets: %w", err)
 	}
@@ -311,6 +315,10 @@ func (p *Postgres) ReplaceProviderContentSnapshot(ctx context.Context, snapshot 
 		DELETE FROM manuscript_assets AS assets
 		WHERE NOT EXISTS (
 			SELECT 1 FROM service_provider_note_assets AS links
+			WHERE links.asset_id = assets.asset_id
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM manual_material_assets AS links
 			WHERE links.asset_id = assets.asset_id
 		)
 	`); err != nil {

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"testing"
 	"time"
@@ -124,5 +126,101 @@ func TestReplaceProviderContentSnapshotIntegration(t *testing.T) {
 		status != "succeeded" || lastSyncedAt == nil {
 		t.Fatalf("active=%d deleted=%d progress=%q note_content=%q status=%q last_synced_at=%v",
 			active, deleted, progress, noteContent, status, lastSyncedAt)
+	}
+}
+
+func TestProviderContentSyncPreservesManualMaterialAssetsIntegration(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	postgres, err := NewPostgres(ctx, databaseURL, "provider-manual-assets-integration-test")
+	if err != nil {
+		t.Fatalf("NewPostgres() error = %v", err)
+	}
+	defer postgres.Close()
+	if err := postgres.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	providerCode := "integration-manual-assets-" + time.Now().Format("20060102150405.000000000")
+	noteID := providerCode + "-note"
+	materialDigest := sha256.Sum256([]byte(providerCode + "-manual-material"))
+	materialID := hex.EncodeToString(materialDigest[:])[:32]
+	assetContent := []byte("manual material image")
+	assetDigest := sha256.Sum256(assetContent)
+	assetID := hex.EncodeToString(assetDigest[:])
+
+	_, err = postgres.pool.Exec(ctx, `
+		INSERT INTO service_provider_content_tables (
+			provider_code, provider_name, source_url, wiki_token, sheet_id, sheet_name, enabled
+		) VALUES ($1, $1, 'https://example.feishu.cn/wiki/test', 'wiki-test', 'sheet-test', '达人笔记执行表', TRUE)
+	`, providerCode)
+	if err != nil {
+		t.Fatalf("insert provider index: %v", err)
+	}
+	defer func() {
+		cleanup := context.Background()
+		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM manual_materials WHERE material_id=$1", materialID)
+		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM service_provider_notes WHERE note_id=$1", noteID)
+		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM manuscript_assets WHERE asset_id=$1", assetID)
+		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM service_provider_note_executions WHERE provider_code=$1", providerCode)
+		_, _ = postgres.pool.Exec(cleanup, "DELETE FROM service_provider_content_tables WHERE provider_code=$1", providerCode)
+	}()
+
+	if _, err := postgres.pool.Exec(ctx, `
+		INSERT INTO manuscript_assets (asset_id, content_type, byte_size, width, height, content)
+		VALUES ($1, 'image/png', $2, 1, 1, $3)
+	`, assetID, len(assetContent), assetContent); err != nil {
+		t.Fatalf("insert manual material asset: %v", err)
+	}
+	if _, err := postgres.pool.Exec(ctx, `
+		INSERT INTO manual_materials (material_id, title, body)
+		VALUES ($1, '手工素材', '手工素材正文')
+	`, materialID); err != nil {
+		t.Fatalf("insert manual material: %v", err)
+	}
+	if _, err := postgres.pool.Exec(ctx, `
+		INSERT INTO manual_material_assets (material_id, position, asset_id, width, height)
+		VALUES ($1, 0, $2, 1, 1)
+	`, materialID, assetID); err != nil {
+		t.Fatalf("link manual material asset: %v", err)
+	}
+
+	if err := postgres.UpsertProviderNotes(ctx, []model.ProviderNote{{
+		NoteID: noteID, NoteContent: "供应商稿件正文",
+	}}); err != nil {
+		t.Fatalf("UpsertProviderNotes() error = %v", err)
+	}
+	assertManuscriptAssetExists(t, ctx, postgres, assetID)
+
+	_, err = postgres.ReplaceProviderContentSnapshot(ctx, model.ProviderContentSnapshot{
+		Table: model.ProviderContentTable{
+			ProviderCode: providerCode, ProviderName: providerCode, SpreadsheetToken: "spreadsheet-test",
+			SheetID: "sheet-test", SheetName: "达人笔记执行表",
+		},
+		Records: []model.ProviderNoteExecution{{
+			RecordKey: "row:2", SourceRowNumber: 2, NoteID: noteID, Progress: "已通过",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceProviderContentSnapshot() error = %v", err)
+	}
+	assertManuscriptAssetExists(t, ctx, postgres, assetID)
+}
+
+func assertManuscriptAssetExists(t *testing.T, ctx context.Context, postgres *Postgres, assetID string) {
+	t.Helper()
+	var exists bool
+	if err := postgres.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM manuscript_assets WHERE asset_id=$1)
+	`, assetID).Scan(&exists); err != nil {
+		t.Fatalf("query manuscript asset: %v", err)
+	}
+	if !exists {
+		t.Fatalf("manual material asset %s was deleted", assetID)
 	}
 }
