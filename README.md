@@ -109,7 +109,7 @@ sudo -u postgres createdb -O "$USER" paipai_red
 
 前端位于 `frontend/`，使用 React、TypeScript 和 Vite。Maituo 客户日报模块支持一次选择或拖放多个 `.xlsx` 文件，本地解析后按报表日期升序执行，并展示服务器中已保存的报表日期和文件状态。
 蒲公英数据更新页会按文件内最大的“数据更新日期”展示历史上传，并补齐首尾上传日期间的日历：周五、周六作为非工作日默认缺省，其他未上传日期标记为缺少文件。
-历史列表中的已保存日期可打开该 `report_date` 对应的合并后笔记明细。明细只保留笔记和场域维度，不展示或推断子账户、广告账户和计划归属。页面同时按服务商稿件表中的笔记 ID 生成曼杰、有一有二、智元三个独立日报目录；每份下载文件只包含该服务商匹配到的 `笔记明细`。
+历史列表中的已保存日期可打开该 `report_date` 对应的合并后笔记明细。明细只保留笔记和场域维度，不展示或推断子账户、广告账户和计划归属。页面同时按 `分子账户` 工作表生成独立子账户日报目录；每份下载文件只包含该子账户对应的 `分子账户` 汇总数据。
 
 ```bash
 make frontend-dev
@@ -136,7 +136,7 @@ make frontend-deploy
 
 “笔记明细”中的同日、同笔记、同场域行会合并保存，正式数据不保留子账户或计划名。“分子账户”是工作簿提供的另一套独立汇总，表内没有可验证的笔记归属，不能用它把笔记反推到子账户、计划或 SPU。
 
-`GET /v1/imports/maituo-provider-directories` 返回已启用服务商的日报目录统计。`GET /v1/downloads/maituo-provider/{provider_code}` 返回该服务商有匹配笔记的日报日期，`GET /v1/downloads/maituo-provider/{provider_code}/{YYYY-MM-DD}.xlsx` 下载纯 `笔记明细` 工作簿。服务商归属只按有效 `service_provider_note_executions.provider_code + note_id` 关联，不按金额、SPU 或子账户推断。
+`GET /v1/imports/maituo-subaccount-directories` 返回子账户的日报目录统计。`GET /v1/downloads/maituo-subaccount/{account_id}` 返回该子账户的日报日期，`GET /v1/downloads/maituo-subaccount/{account_id}/{YYYY-MM-DD}.xlsx` 下载只包含该子账户的 `分子账户` 工作簿。`account_id` 为子账户名的 base64 URL 编码；目录和导出均直接以 `分子账户.子账户` 精确筛选，不通过笔记或稿件服务商推断。
 
 报表日期优先从文件名中的 `YYYY-MM-DD` 提取；文件名没有日期时，使用 `淘搜趋势` 的最大日期。缺少 `淘搜趋势` 且文件名也没有日期时无法导入。成功导入过的文件 SHA-256 会返回 `already_saved=true`，避免重复写入。
 

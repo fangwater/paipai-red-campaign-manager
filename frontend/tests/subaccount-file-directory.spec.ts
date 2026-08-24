@@ -2,19 +2,25 @@ import { expect, test } from "@playwright/test";
 
 const accountID = "6LSm5oi3QQ";
 
-test("does not expose subaccount directories from the daily report page", async ({ page }) => {
-  let directoryRequests = 0;
+test("shows subaccount report directories on the Maituo daily page", async ({ page }) => {
   await page.route("**/paipai/api/imports/maituo-customer-daily", (route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] })
   }));
-  await page.route("**/paipai/api/imports/maituo-subaccount-directories", async (route) => {
-    directoryRequests += 1;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: [] }) });
-  });
+  await page.route("**/paipai/api/imports/maituo-subaccount-directories", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ success: true, data: [{
+      subaccount: "账户A", account_id: accountID, report_count: 8,
+      earliest_report_date: "2026-08-10", latest_report_date: "2026-08-23"
+    }] })
+  }));
 
   await page.goto("/paipai/maituo-daily-report");
-  await expect(page.getByRole("heading", { name: "子账户文件目录" })).toHaveCount(0);
-  expect(directoryRequests).toBe(0);
+  const section = page.locator(".subaccount-directories");
+  await expect(section.getByRole("heading", { name: "子账户文件目录" })).toBeVisible();
+  await expect(section).toContainText("账户A");
+  await expect(section).toContainText("8");
+  await expect(section.getByRole("textbox", { name: "账户A 文件目录 URL" })).toHaveValue(/\/paipai\/subaccount-files\/6LSm5oi3QQ$/);
 });
 
 test("lists and downloads each historical date without exposing another account", async ({ page }) => {
