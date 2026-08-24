@@ -108,7 +108,7 @@ func (p *Postgres) MaituoProviderSnapshot(ctx context.Context, providerCode stri
 	}
 
 	rows, err := p.pool.Query(ctx, `
-		SELECT daily.note_id,daily.note_url,daily.category,daily.placement,daily.keyword_category_note,
+		SELECT daily.note_id,daily.note_url,daily.category,daily.subaccount,daily.campaign_name,daily.placement,daily.keyword_category_note,
 			daily.spend::DOUBLE PRECISION,daily.search_users,daily.search_cost::DOUBLE PRECISION,
 			daily.estimated_postback_cost::DOUBLE PRECISION,daily.search_rate_pct::DOUBLE PRECISION,
 			daily.cpc::DOUBLE PRECISION,daily.ctr_pct::DOUBLE PRECISION,
@@ -119,7 +119,7 @@ func (p *Postgres) MaituoProviderSnapshot(ctx context.Context, providerCode stri
 			WHERE execution.provider_code=$2 AND execution.deleted_at IS NULL
 			  AND LOWER(BTRIM(execution.note_id))=LOWER(BTRIM(daily.note_id))
 		)
-		ORDER BY daily.spend DESC,daily.note_id,daily.placement
+		ORDER BY daily.spend DESC,daily.note_id,daily.subaccount,daily.campaign_name,daily.placement
 	`, reportDate, providerCode)
 	if err != nil {
 		return maituo.ProviderSnapshot{}, fmt.Errorf("query Maituo provider notes: %w", err)
@@ -128,7 +128,7 @@ func (p *Postgres) MaituoProviderSnapshot(ctx context.Context, providerCode stri
 	for rows.Next() {
 		var row maituo.NoteDetail
 		if err := rows.Scan(
-			&row.NoteID, &row.NoteURL, &row.Category, &row.Placement, &row.KeywordCategoryNote,
+			&row.NoteID, &row.NoteURL, &row.Category, &row.Subaccount, &row.CampaignName, &row.Placement, &row.KeywordCategoryNote,
 			&row.Spend, &row.SearchUsers, &row.SearchCost, &row.EstimatedPostbackCost,
 			&row.SearchRatePct, &row.CPC, &row.CTRPct, &row.SourceRow, &row.ContentHash,
 		); err != nil {

@@ -63,7 +63,7 @@ func TestMaituoImportEndpointReturnsMergedDailyNotes(t *testing.T) {
 		Total:      1,
 		Items: []maituo.NoteDetail{{
 			NoteID: "note-1", NoteURL: "https://example.com/note-1", Category: "测评",
-			Placement: "搜索", Spend: 150, SearchUsers: 5, SearchCost: &searchCost, CPC: 2.1429, CTRPct: 11.6667,
+			Subaccount: "账户A", CampaignName: "计划A", Placement: "搜索", Spend: 150, SearchUsers: 5, SearchCost: &searchCost, CPC: 2.1429, CTRPct: 11.6667,
 		}},
 	}}
 	handler := newAPIHandler(&apiServer{maituoImport: stub, timeout: time.Second})
@@ -81,9 +81,9 @@ func TestMaituoImportEndpointReturnsMergedDailyNotes(t *testing.T) {
 			t.Fatalf("response missing %s: %s", expected, recorder.Body.String())
 		}
 	}
-	for _, removed := range []string{`"subaccount"`, `"campaign_name"`} {
-		if strings.Contains(recorder.Body.String(), removed) {
-			t.Fatalf("response contains removed field %s: %s", removed, recorder.Body.String())
+	for _, expected := range []string{`"subaccount":"账户A"`, `"campaign_name":"计划A"`} {
+		if !strings.Contains(recorder.Body.String(), expected) {
+			t.Fatalf("response missing %s: %s", expected, recorder.Body.String())
 		}
 	}
 }

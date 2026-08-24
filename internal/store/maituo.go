@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"paipai-red-campaign-manager/internal/maituo"
@@ -19,8 +20,14 @@ func (p *Postgres) ImportMaituoCustomerDaily(ctx context.Context, snapshot maitu
 	if saved, found, findErr := p.maituoImportByHash(ctx, snapshot.FileSHA256); findErr != nil {
 		return result, findErr
 	} else if found {
-		saved.AlreadySaved = true
-		return saved, nil
+		repairNeeded, repairErr := p.maituoNoteAttributionRepairNeeded(ctx, snapshot)
+		if repairErr != nil {
+			return result, repairErr
+		}
+		if !repairNeeded {
+			saved.AlreadySaved = true
+			return saved, nil
+		}
 	}
 	if err := p.pool.QueryRow(ctx, `INSERT INTO maituo_customer_daily_import_runs (file_name,file_sha256,report_date,present_sheets,status) VALUES ($1,$2,$3,$4,'running') RETURNING id`, snapshot.FileName, snapshot.FileSHA256, snapshot.ReportDate, snapshot.PresentSheets).Scan(&result.RunID); err != nil {
 		return result, fmt.Errorf("start Maituo import run: %w", err)
@@ -72,6 +79,31 @@ func (p *Postgres) ImportMaituoCustomerDaily(ctx context.Context, snapshot maitu
 	return result, nil
 }
 
+// maituoNoteAttributionRepairNeeded permits one replay of workbooks imported
+// before note account dimensions were restored. The parser requires these
+// values, so a replay can replace only the explicitly unassigned rows.
+func (p *Postgres) maituoNoteAttributionRepairNeeded(ctx context.Context, snapshot maituo.Snapshot) (bool, error) {
+	if !snapshot.HasSheet(maituo.SheetNotes) || len(snapshot.Notes) == 0 {
+		return false, nil
+	}
+	for _, note := range snapshot.Notes {
+		if strings.TrimSpace(note.Subaccount) == "" || strings.TrimSpace(note.CampaignName) == "" {
+			return false, nil
+		}
+	}
+	var found bool
+	if err := p.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM maituo_customer_daily_notes
+			WHERE report_date=$1 AND deleted_at IS NULL AND BTRIM(subaccount)=''
+		)
+	`, snapshot.ReportDate).Scan(&found); err != nil {
+		return false, fmt.Errorf("check Maituo note attribution repair: %w", err)
+	}
+	return found, nil
+}
+
 type maituoReconcileSpec struct{ key, name, target, stage, presence, join, deleteScope, upsert string }
 
 func reconcileMaituoTable(ctx context.Context, tx pgx.Tx, runID int64, reportDate time.Time, spec maituoReconcileSpec) (result maituo.TableResult, err error) {
@@ -101,7 +133,7 @@ func reconcileMaituoTable(ctx context.Context, tx pgx.Tx, runID int64, reportDat
 func createMaituoStages(ctx context.Context, tx pgx.Tx) error {
 	_, err := tx.Exec(ctx, `
 		CREATE TEMP TABLE maituo_stage_kpis (report_date DATE,metric TEXT,metric_value NUMERIC,data_basis TEXT,source_row_number INTEGER,content_hash TEXT,PRIMARY KEY(report_date,metric)) ON COMMIT DROP;
-			CREATE TEMP TABLE maituo_stage_notes (report_date DATE,note_id TEXT,note_url TEXT,category TEXT,placement TEXT,keyword_category_note TEXT,spend NUMERIC,search_users BIGINT,search_cost NUMERIC,estimated_postback_cost NUMERIC,search_rate_pct NUMERIC,cpc NUMERIC,ctr_pct NUMERIC,source_row_number INTEGER,content_hash TEXT,PRIMARY KEY(report_date,note_id,placement)) ON COMMIT DROP;
+		CREATE TEMP TABLE maituo_stage_notes (report_date DATE,note_id TEXT,note_url TEXT,category TEXT,subaccount TEXT,campaign_name TEXT,placement TEXT,keyword_category_note TEXT,spend NUMERIC,search_users BIGINT,search_cost NUMERIC,estimated_postback_cost NUMERIC,search_rate_pct NUMERIC,cpc NUMERIC,ctr_pct NUMERIC,source_row_number INTEGER,content_hash TEXT,PRIMARY KEY(report_date,note_id,subaccount,campaign_name,placement)) ON COMMIT DROP;
 		CREATE TEMP TABLE maituo_stage_spus (report_date DATE,spu TEXT,auction_spend NUMERIC,search_users BIGINT,search_cost NUMERIC,search_rate_pct NUMERIC,cpc NUMERIC,ctr_pct NUMERIC,note_count BIGINT,source_row_number INTEGER,content_hash TEXT,PRIMARY KEY(report_date,spu)) ON COMMIT DROP;
 		CREATE TEMP TABLE maituo_stage_subaccounts (report_date DATE,spu TEXT,subaccount TEXT,placement TEXT,search_cost NUMERIC,estimated_postback_cost NUMERIC,spend NUMERIC,search_users BIGINT,search_rate_pct NUMERIC,cpc NUMERIC,ctr_pct NUMERIC,note_count BIGINT,source_row_number INTEGER,content_hash TEXT,PRIMARY KEY(report_date,spu,subaccount,placement)) ON COMMIT DROP;
 		CREATE TEMP TABLE maituo_stage_trends (report_date DATE PRIMARY KEY,coenzyme_spend NUMERIC,coenzyme_search_uv BIGINT,coenzyme_order_uv BIGINT,coenzyme_search_cost NUMERIC,krill_oil_spend NUMERIC,krill_oil_search_uv BIGINT,krill_oil_order_uv BIGINT,krill_oil_search_cost NUMERIC,total_search_uv BIGINT,total_order_uv BIGINT,total_search_cost NUMERIC,total_spend NUMERIC,total_recall_search_cost NUMERIC,source_row_number INTEGER,content_hash TEXT) ON COMMIT DROP
@@ -122,9 +154,9 @@ func copyMaituoStages(ctx context.Context, tx pgx.Tx, snapshot maituo.Snapshot) 
 	}
 	notes := make([][]interface{}, len(snapshot.Notes))
 	for i, row := range snapshot.Notes {
-		notes[i] = []interface{}{snapshot.ReportDate, row.NoteID, row.NoteURL, row.Category, row.Placement, nullableString(row.KeywordCategoryNote), row.Spend, row.SearchUsers, nullableFloat(row.SearchCost), nullableFloat(row.EstimatedPostbackCost), nullableFloat(row.SearchRatePct), row.CPC, row.CTRPct, row.SourceRow, row.ContentHash}
+		notes[i] = []interface{}{snapshot.ReportDate, row.NoteID, row.NoteURL, row.Category, row.Subaccount, row.CampaignName, row.Placement, nullableString(row.KeywordCategoryNote), row.Spend, row.SearchUsers, nullableFloat(row.SearchCost), nullableFloat(row.EstimatedPostbackCost), nullableFloat(row.SearchRatePct), row.CPC, row.CTRPct, row.SourceRow, row.ContentHash}
 	}
-	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"maituo_stage_notes"}, []string{"report_date", "note_id", "note_url", "category", "placement", "keyword_category_note", "spend", "search_users", "search_cost", "estimated_postback_cost", "search_rate_pct", "cpc", "ctr_pct", "source_row_number", "content_hash"}, pgx.CopyFromRows(notes)); err != nil {
+	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"maituo_stage_notes"}, []string{"report_date", "note_id", "note_url", "category", "subaccount", "campaign_name", "placement", "keyword_category_note", "spend", "search_users", "search_cost", "estimated_postback_cost", "search_rate_pct", "cpc", "ctr_pct", "source_row_number", "content_hash"}, pgx.CopyFromRows(notes)); err != nil {
 		return fmt.Errorf("stage %s: %w", maituo.SheetNotes, err)
 	}
 	spus := make([][]interface{}, len(snapshot.SPUs))
@@ -230,13 +262,13 @@ func (p *Postgres) MaituoDailyNotes(ctx context.Context, reportDate time.Time) (
 		Items:      []maituo.NoteDetail{},
 	}
 	rows, err := p.pool.Query(ctx, `
-		SELECT note_id,note_url,category,placement,keyword_category_note,
+		SELECT note_id,note_url,category,subaccount,campaign_name,placement,keyword_category_note,
 			spend::DOUBLE PRECISION,search_users,search_cost::DOUBLE PRECISION,
 			estimated_postback_cost::DOUBLE PRECISION,search_rate_pct::DOUBLE PRECISION,
 			cpc::DOUBLE PRECISION,ctr_pct::DOUBLE PRECISION
 		FROM maituo_customer_daily_notes
 		WHERE report_date=$1 AND deleted_at IS NULL
-		ORDER BY spend DESC,note_id,placement
+		ORDER BY spend DESC,note_id,subaccount,campaign_name,placement
 	`, reportDate)
 	if err != nil {
 		return result, fmt.Errorf("query Maituo daily notes: %w", err)
@@ -245,7 +277,7 @@ func (p *Postgres) MaituoDailyNotes(ctx context.Context, reportDate time.Time) (
 	for rows.Next() {
 		var item maituo.NoteDetail
 		if err := rows.Scan(
-			&item.NoteID, &item.NoteURL, &item.Category, &item.Placement, &item.KeywordCategoryNote,
+			&item.NoteID, &item.NoteURL, &item.Category, &item.Subaccount, &item.CampaignName, &item.Placement, &item.KeywordCategoryNote,
 			&item.Spend, &item.SearchUsers, &item.SearchCost, &item.EstimatedPostbackCost,
 			&item.SearchRatePct, &item.CPC, &item.CTRPct,
 		); err != nil {
@@ -274,7 +306,7 @@ func (p *Postgres) finishMaituoImportRun(ctx context.Context, result maituo.Impo
 }
 
 const maituoKPIUpsert = `INSERT INTO maituo_customer_daily_kpis (report_date,metric,metric_value,data_basis,source_row_number,content_hash,import_run_id) SELECT report_date,metric,metric_value,data_basis,source_row_number,content_hash,$1 FROM maituo_stage_kpis ON CONFLICT(report_date,metric) DO UPDATE SET metric_value=EXCLUDED.metric_value,data_basis=EXCLUDED.data_basis,source_row_number=EXCLUDED.source_row_number,content_hash=EXCLUDED.content_hash,import_run_id=EXCLUDED.import_run_id,updated_at=NOW(),deleted_at=NULL WHERE maituo_customer_daily_kpis.content_hash IS DISTINCT FROM EXCLUDED.content_hash OR maituo_customer_daily_kpis.deleted_at IS NOT NULL`
-const maituoNoteUpsert = `INSERT INTO maituo_customer_daily_notes (report_date,note_id,note_url,category,placement,keyword_category_note,spend,search_users,search_cost,estimated_postback_cost,search_rate_pct,cpc,ctr_pct,source_row_number,content_hash,import_run_id) SELECT report_date,note_id,note_url,category,placement,keyword_category_note,spend,search_users,search_cost,ROUND(ROUND(search_cost,2)*0.63,2),search_rate_pct,cpc,ctr_pct,source_row_number,content_hash,$1 FROM maituo_stage_notes ON CONFLICT(report_date,note_id,placement) DO UPDATE SET note_url=EXCLUDED.note_url,category=EXCLUDED.category,keyword_category_note=EXCLUDED.keyword_category_note,spend=EXCLUDED.spend,search_users=EXCLUDED.search_users,search_cost=EXCLUDED.search_cost,estimated_postback_cost=EXCLUDED.estimated_postback_cost,search_rate_pct=EXCLUDED.search_rate_pct,cpc=EXCLUDED.cpc,ctr_pct=EXCLUDED.ctr_pct,source_row_number=EXCLUDED.source_row_number,content_hash=EXCLUDED.content_hash,import_run_id=EXCLUDED.import_run_id,updated_at=NOW(),deleted_at=NULL WHERE maituo_customer_daily_notes.content_hash IS DISTINCT FROM EXCLUDED.content_hash OR maituo_customer_daily_notes.deleted_at IS NOT NULL`
+const maituoNoteUpsert = `INSERT INTO maituo_customer_daily_notes (report_date,note_id,note_url,category,subaccount,campaign_name,placement,keyword_category_note,spend,search_users,search_cost,estimated_postback_cost,search_rate_pct,cpc,ctr_pct,source_row_number,content_hash,import_run_id) SELECT report_date,note_id,note_url,category,subaccount,campaign_name,placement,keyword_category_note,spend,search_users,search_cost,ROUND(ROUND(search_cost,2)*0.63,2),search_rate_pct,cpc,ctr_pct,source_row_number,content_hash,$1 FROM maituo_stage_notes ON CONFLICT(report_date,note_id,subaccount,campaign_name,placement) DO UPDATE SET note_url=EXCLUDED.note_url,category=EXCLUDED.category,keyword_category_note=EXCLUDED.keyword_category_note,spend=EXCLUDED.spend,search_users=EXCLUDED.search_users,search_cost=EXCLUDED.search_cost,estimated_postback_cost=EXCLUDED.estimated_postback_cost,search_rate_pct=EXCLUDED.search_rate_pct,cpc=EXCLUDED.cpc,ctr_pct=EXCLUDED.ctr_pct,source_row_number=EXCLUDED.source_row_number,content_hash=EXCLUDED.content_hash,import_run_id=EXCLUDED.import_run_id,updated_at=NOW(),deleted_at=NULL WHERE maituo_customer_daily_notes.content_hash IS DISTINCT FROM EXCLUDED.content_hash OR maituo_customer_daily_notes.deleted_at IS NOT NULL`
 const maituoSPUUpsert = `INSERT INTO maituo_customer_daily_spus (report_date,spu,auction_spend,search_users,search_cost,search_rate_pct,cpc,ctr_pct,note_count,source_row_number,content_hash,import_run_id) SELECT report_date,spu,auction_spend,search_users,search_cost,search_rate_pct,cpc,ctr_pct,note_count,source_row_number,content_hash,$1 FROM maituo_stage_spus ON CONFLICT(report_date,spu) DO UPDATE SET auction_spend=EXCLUDED.auction_spend,search_users=EXCLUDED.search_users,search_cost=EXCLUDED.search_cost,search_rate_pct=EXCLUDED.search_rate_pct,cpc=EXCLUDED.cpc,ctr_pct=EXCLUDED.ctr_pct,note_count=EXCLUDED.note_count,source_row_number=EXCLUDED.source_row_number,content_hash=EXCLUDED.content_hash,import_run_id=EXCLUDED.import_run_id,updated_at=NOW(),deleted_at=NULL WHERE maituo_customer_daily_spus.content_hash IS DISTINCT FROM EXCLUDED.content_hash OR maituo_customer_daily_spus.deleted_at IS NOT NULL`
 const maituoSubaccountUpsert = `INSERT INTO maituo_customer_daily_subaccounts (report_date,spu,subaccount,placement,search_cost,estimated_postback_cost,spend,search_users,search_rate_pct,cpc,ctr_pct,note_count,source_row_number,content_hash,import_run_id) SELECT report_date,spu,subaccount,placement,search_cost,ROUND(ROUND(search_cost,2)*0.63,2),spend,search_users,search_rate_pct,cpc,ctr_pct,note_count,source_row_number,content_hash,$1 FROM maituo_stage_subaccounts ON CONFLICT(report_date,spu,subaccount,placement) DO UPDATE SET search_cost=EXCLUDED.search_cost,estimated_postback_cost=EXCLUDED.estimated_postback_cost,spend=EXCLUDED.spend,search_users=EXCLUDED.search_users,search_rate_pct=EXCLUDED.search_rate_pct,cpc=EXCLUDED.cpc,ctr_pct=EXCLUDED.ctr_pct,note_count=EXCLUDED.note_count,source_row_number=EXCLUDED.source_row_number,content_hash=EXCLUDED.content_hash,import_run_id=EXCLUDED.import_run_id,updated_at=NOW(),deleted_at=NULL WHERE maituo_customer_daily_subaccounts.content_hash IS DISTINCT FROM EXCLUDED.content_hash OR maituo_customer_daily_subaccounts.deleted_at IS NOT NULL`
 const maituoTrendUpsert = `INSERT INTO maituo_customer_daily_trends (report_date,coenzyme_spend,coenzyme_search_uv,coenzyme_order_uv,coenzyme_search_cost,krill_oil_spend,krill_oil_search_uv,krill_oil_order_uv,krill_oil_search_cost,total_search_uv,total_order_uv,total_search_cost,total_spend,total_recall_search_cost,source_row_number,content_hash,import_run_id) SELECT report_date,coenzyme_spend,coenzyme_search_uv,coenzyme_order_uv,coenzyme_search_cost,krill_oil_spend,krill_oil_search_uv,krill_oil_order_uv,krill_oil_search_cost,total_search_uv,total_order_uv,total_search_cost,total_spend,total_recall_search_cost,source_row_number,content_hash,$1 FROM maituo_stage_trends ON CONFLICT(report_date) DO UPDATE SET coenzyme_spend=EXCLUDED.coenzyme_spend,coenzyme_search_uv=EXCLUDED.coenzyme_search_uv,coenzyme_order_uv=EXCLUDED.coenzyme_order_uv,coenzyme_search_cost=EXCLUDED.coenzyme_search_cost,krill_oil_spend=EXCLUDED.krill_oil_spend,krill_oil_search_uv=EXCLUDED.krill_oil_search_uv,krill_oil_order_uv=EXCLUDED.krill_oil_order_uv,krill_oil_search_cost=EXCLUDED.krill_oil_search_cost,total_search_uv=EXCLUDED.total_search_uv,total_order_uv=EXCLUDED.total_order_uv,total_search_cost=EXCLUDED.total_search_cost,total_spend=EXCLUDED.total_spend,total_recall_search_cost=EXCLUDED.total_recall_search_cost,source_row_number=EXCLUDED.source_row_number,content_hash=EXCLUDED.content_hash,import_run_id=EXCLUDED.import_run_id,updated_at=NOW(),deleted_at=NULL WHERE maituo_customer_daily_trends.content_hash IS DISTINCT FROM EXCLUDED.content_hash OR maituo_customer_daily_trends.deleted_at IS NOT NULL`

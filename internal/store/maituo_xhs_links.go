@@ -24,7 +24,7 @@ func (p *Postgres) MaituoXHSLinks(ctx context.Context, query maituo.XHSLinkQuery
 			SELECT note_id, placement,
 				SUM(spend)::DOUBLE PRECISION AS spend,
 				SUM(search_users)::BIGINT AS search_users,
-				SUM(COALESCE(search_cost, 0))::DOUBLE PRECISION AS search_cost
+				COALESCE(SUM(spend) / NULLIF(SUM(search_users), 0), 0)::DOUBLE PRECISION AS search_cost
 			FROM maituo_customer_daily_notes
 			WHERE report_date=$1::DATE AND deleted_at IS NULL
 			GROUP BY note_id, placement

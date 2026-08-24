@@ -34,7 +34,8 @@ BEGIN
         RETURN;
     END IF;
     IF to_regclass('public.maituo_customer_daily_notes_account_plan_archive') IS NOT NULL THEN
-        RAISE EXCEPTION 'Maituo legacy archive already exists while the formal table still has account/plan columns';
+        -- Migration 031 restores the account/plan dimensions from this archive.
+        RETURN;
     END IF;
 
     LOCK TABLE public.maituo_customer_daily_notes IN ACCESS EXCLUSIVE MODE;
@@ -232,7 +233,18 @@ BEGIN
           AND attname IN ('subaccount', 'campaign_name')
           AND NOT attisdropped
     ) THEN
-        RAISE EXCEPTION 'Maituo formal notes table still contains retired account/plan columns';
+        IF to_regclass('public.maituo_customer_daily_notes_account_plan_archive') IS NULL THEN
+            RAISE EXCEPTION 'Maituo formal notes table has account/plan columns without the rollback archive';
+        END IF;
+        SELECT pg_get_constraintdef(oid)
+        INTO primary_key_definition
+        FROM pg_constraint
+        WHERE conrelid = 'public.maituo_customer_daily_notes'::regclass
+          AND contype = 'p';
+        IF primary_key_definition IS DISTINCT FROM 'PRIMARY KEY (report_date, note_id, subaccount, campaign_name, placement)' THEN
+            RAISE EXCEPTION 'Unexpected restored Maituo notes primary key: %', primary_key_definition;
+        END IF;
+        RETURN;
     END IF;
 
     SELECT pg_get_constraintdef(oid)

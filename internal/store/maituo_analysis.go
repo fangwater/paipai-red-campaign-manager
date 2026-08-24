@@ -178,7 +178,7 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 			SELECT notes.report_date, notes.note_id, notes.placement,
 				SUM(notes.spend)::DOUBLE PRECISION AS spend,
 				SUM(notes.search_users)::BIGINT AS search_users,
-				SUM(COALESCE(notes.search_cost, 0))::DOUBLE PRECISION AS search_cost
+				COALESCE(SUM(notes.spend) / NULLIF(SUM(notes.search_users), 0), 0)::DOUBLE PRECISION AS search_cost
 			FROM maituo_customer_daily_notes notes
 			JOIN selected_dates dates USING (report_date)
 			WHERE notes.deleted_at IS NULL
@@ -260,7 +260,7 @@ func (p *Postgres) MaituoNoteCampaignAnalysis(ctx context.Context, query maituo.
 			SELECT notes.report_date, notes.note_id, notes.placement,
 				SUM(notes.spend)::DOUBLE PRECISION AS spend,
 				SUM(notes.search_users)::BIGINT AS search_users,
-				SUM(COALESCE(notes.search_cost, 0))::DOUBLE PRECISION AS search_cost
+				COALESCE(SUM(notes.spend) / NULLIF(SUM(notes.search_users), 0), 0)::DOUBLE PRECISION AS search_cost
 			FROM maituo_customer_daily_notes notes
 			JOIN selected_dates dates USING (report_date)
 			JOIN selected_keys key USING (note_id, placement)

@@ -85,6 +85,35 @@ func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount stri
 		return maituo.Snapshot{}, fmt.Errorf("find Maituo report for subaccount export: %w", err)
 	}
 
+	noteRows, err := p.pool.Query(ctx, `
+		SELECT note_id,note_url,category,subaccount,campaign_name,placement,keyword_category_note,
+		       spend,search_users,search_cost,estimated_postback_cost,search_rate_pct,cpc,ctr_pct,source_row_number,content_hash
+		FROM maituo_customer_daily_notes
+		WHERE report_date=$1 AND subaccount=$2 AND deleted_at IS NULL
+		ORDER BY source_row_number,note_id,campaign_name,placement
+	`, reportDate, subaccount)
+	if err != nil {
+		return maituo.Snapshot{}, fmt.Errorf("query Maituo subaccount notes: %w", err)
+	}
+	for noteRows.Next() {
+		var row maituo.NoteDetail
+		if err := noteRows.Scan(
+			&row.NoteID, &row.NoteURL, &row.Category, &row.Subaccount, &row.CampaignName, &row.Placement,
+			&row.KeywordCategoryNote, &row.Spend, &row.SearchUsers, &row.SearchCost,
+			&row.EstimatedPostbackCost, &row.SearchRatePct, &row.CPC, &row.CTRPct,
+			&row.SourceRow, &row.ContentHash,
+		); err != nil {
+			noteRows.Close()
+			return maituo.Snapshot{}, fmt.Errorf("scan Maituo subaccount note: %w", err)
+		}
+		snapshot.Notes = append(snapshot.Notes, row)
+	}
+	if err := noteRows.Err(); err != nil {
+		noteRows.Close()
+		return maituo.Snapshot{}, fmt.Errorf("iterate Maituo subaccount notes: %w", err)
+	}
+	noteRows.Close()
+
 	subRows, err := p.pool.Query(ctx, `
 		SELECT spu,subaccount,placement,search_cost,estimated_postback_cost,spend,search_users,
 		       search_rate_pct,cpc,ctr_pct,note_count,source_row_number,content_hash
@@ -106,15 +135,8 @@ func (p *Postgres) MaituoSubaccountSnapshot(ctx context.Context, subaccount stri
 	if err := subRows.Err(); err != nil {
 		return maituo.Snapshot{}, fmt.Errorf("iterate Maituo subaccount summary: %w", err)
 	}
-	if len(snapshot.Subaccounts) == 0 {
+	if len(snapshot.Notes) == 0 && len(snapshot.Subaccounts) == 0 {
 		return maituo.Snapshot{}, ErrMaituoSubaccountReportNotFound
 	}
-	dailyNotes, err := p.MaituoDailyNotes(ctx, reportDate)
-	if err != nil {
-		return maituo.Snapshot{}, fmt.Errorf("query Maituo daily notes for subaccount export: %w", err)
-	}
-	// The note sheet is copied into every account workbook; it is not matched to
-	// the account because the source data has no such relationship.
-	snapshot.Notes = dailyNotes.Items
 	return snapshot, nil
 }

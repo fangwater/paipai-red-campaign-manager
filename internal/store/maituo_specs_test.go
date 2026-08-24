@@ -20,18 +20,18 @@ func TestMaituoReconcileSpecsOnlyIncludePresentSheets(t *testing.T) {
 	}
 }
 
-func TestMaituoNoteReconcileSpecUsesCanonicalPlacementKey(t *testing.T) {
+func TestMaituoNoteReconcileSpecUsesAccountPlanKey(t *testing.T) {
 	specs := maituoReconcileSpecs(maituo.Snapshot{PresentSheets: []string{maituo.SheetNotes}}, true)
 	if len(specs) != 1 {
 		t.Fatalf("specs = %+v", specs)
 	}
 	spec := specs[0]
-	if spec.join != "t.report_date=s.report_date AND t.note_id=s.note_id AND t.placement=s.placement" {
+	if spec.join != "t.report_date=s.report_date AND t.note_id=s.note_id AND t.subaccount=s.subaccount AND t.campaign_name=s.campaign_name AND t.placement=s.placement" {
 		t.Fatalf("join = %q", spec.join)
 	}
-	for _, removed := range []string{"subaccount", "campaign_name"} {
-		if strings.Contains(spec.join, removed) || strings.Contains(spec.upsert, removed) {
-			t.Fatalf("canonical note spec contains %q: join=%q upsert=%q", removed, spec.join, spec.upsert)
+	for _, dimension := range []string{"subaccount", "campaign_name"} {
+		if !strings.Contains(spec.join, dimension) || !strings.Contains(spec.upsert, dimension) {
+			t.Fatalf("account-plan note spec omits %q: join=%q upsert=%q", dimension, spec.join, spec.upsert)
 		}
 	}
 }

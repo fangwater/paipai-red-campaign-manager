@@ -16,7 +16,7 @@ lark-sync-start: lark-sync-build
 	pm2 startOrReload ecosystem.config.cjs --only paipai-lark-sync --update-env; \
 	ready=; \
 	for attempt in $$(seq 1 60); do \
-		schema_ready=$$(sudo -u postgres psql "$$DATABASE_URL" -X -Atqc "SELECT NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='public.maituo_customer_daily_notes'::regclass AND attname IN ('subaccount','campaign_name') AND NOT attisdropped) AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.maituo_customer_daily_notes'::regclass AND contype='p' AND pg_get_constraintdef(oid)='PRIMARY KEY (report_date, note_id, placement)')" 2>/dev/null || true); \
+		schema_ready=$$(sudo -u postgres psql "$$DATABASE_URL" -X -Atqc "SELECT COUNT(*)=2 AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.maituo_customer_daily_notes'::regclass AND contype='p' AND pg_get_constraintdef(oid)='PRIMARY KEY (report_date, note_id, subaccount, campaign_name, placement)') FROM pg_attribute WHERE attrelid='public.maituo_customer_daily_notes'::regclass AND attname IN ('subaccount','campaign_name') AND NOT attisdropped" 2>/dev/null || true); \
 		if curl -fsS http://127.0.0.1:18081/healthz >/dev/null && [ "$$schema_ready" = "t" ]; then ready=1; break; fi; \
 		sleep 1; \
 	done; \
@@ -26,7 +26,7 @@ lark-sync-start: lark-sync-build
 postgres-readonly-deploy:
 	@set -e; set -a; . ./.env; set +a; \
 	sudo -u postgres psql "$$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f deploy/postgres/paipai_readonly.sql; \
-	view_ready=$$(sudo -u postgres psql "$$DATABASE_URL" -X -Atqc "SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='paipai_readonly' AND table_name='maituo_customer_daily_notes' AND column_name IN ('subaccount','campaign_name')) AND POSITION('account_plan_archive' IN pg_get_viewdef('paipai_readonly.maituo_customer_daily_notes'::regclass, true))=0"); \
+	view_ready=$$(sudo -u postgres psql "$$DATABASE_URL" -X -Atqc "SELECT COUNT(*)=2 AND POSITION('account_plan_archive' IN pg_get_viewdef('paipai_readonly.maituo_customer_daily_notes'::regclass, true))=0 FROM information_schema.columns WHERE table_schema='paipai_readonly' AND table_name='maituo_customer_daily_notes' AND column_name IN ('subaccount','campaign_name')"); \
 	if [ "$$view_ready" != "t" ]; then echo "Maituo readonly view did not bind to the canonical table" >&2; exit 1; fi
 
 lark-sync-manuscripts:

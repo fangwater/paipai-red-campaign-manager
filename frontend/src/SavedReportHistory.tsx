@@ -13,10 +13,12 @@ export type SavedImport = {
   completed_at: string;
 };
 
-type MergedDailyNote = {
+type DailyNote = {
   note_id: string;
   note_url: string;
   category: string;
+  subaccount: string;
+  campaign_name: string;
   placement: string;
   keyword_category_note: string | null;
   spend: number;
@@ -31,7 +33,7 @@ type MergedDailyNote = {
 type MergedDailyReport = {
   report_date: string;
   total: number;
-  items: MergedDailyNote[];
+  items: DailyNote[];
 };
 
 export type CalendarEntry<T> =
@@ -213,18 +215,20 @@ function SavedReportHistory({ reports, loading, expectedSheets }: Props) {
       aria-live="polite"
     >
       <div className="history-detail-header">
-        <div><h3 id="saved-report-detail-title">{selectedDate} 合并明细</h3><p>笔记 ID + 场域</p></div>
+        <div><h3 id="saved-report-detail-title">{selectedDate} 笔记明细</h3><p>笔记 ID + 子账户 + 计划名 + 场域</p></div>
         {detail && !detailLoading ? <span>{detail.total.toLocaleString()} 条</span> : null}
       </div>
-      {detailLoading ? <div className="history-detail-state"><LoaderCircle size={20} className="spin" /><span>正在读取合并明细</span></div>
+      {detailLoading ? <div className="history-detail-state"><LoaderCircle size={20} className="spin" /><span>正在读取笔记明细</span></div>
         : detailError ? <div className="history-detail-state error" role="alert"><AlertCircle size={20} /><span>{detailError}</span></div>
           : detail && detail.items.length === 0 ? <div className="history-detail-state"><FileSpreadsheet size={22} /><span>该日期暂无笔记明细</span></div>
             : detail ? <div className="history-detail-table-wrap">
-              <table className="history-detail-table" aria-label={`${detail.report_date} 合并笔记明细`}>
-                <thead><tr><th>笔记 ID</th><th>分类</th><th>场域</th><th>词类备注</th><th>消耗</th><th>回搜人数</th><th>回搜成本</th><th>预计回流后成本</th><th>回搜率</th><th>CPC</th><th>CTR</th></tr></thead>
-                <tbody>{detail.items.map((item) => <tr key={`${item.note_id}\u0000${item.placement}`}>
+              <table className="history-detail-table" aria-label={`${detail.report_date} 笔记明细`}>
+                <thead><tr><th>笔记 ID</th><th>分类</th><th>子账户</th><th>计划</th><th>场域</th><th>词类备注</th><th>消耗</th><th>回搜人数</th><th>回搜成本</th><th>预计回流后成本</th><th>回搜率</th><th>CPC</th><th>CTR</th></tr></thead>
+                <tbody>{detail.items.map((item) => <tr key={`${item.note_id}\u0000${item.subaccount}\u0000${item.campaign_name}\u0000${item.placement}`}>
                   <td>{item.note_url ? <a href={item.note_url} target="_blank" rel="noreferrer" title={item.note_id}>{item.note_id}<ExternalLink size={12} /></a> : <strong title={item.note_id}>{item.note_id}</strong>}</td>
                   <td>{item.category || "-"}</td>
+                  <td>{item.subaccount || "-"}</td>
+                  <td>{item.campaign_name || "-"}</td>
                   <td><span className={`placement-swatch placement-${item.placement}`}>{item.placement || "-"}</span></td>
                   <td>{item.keyword_category_note || "-"}</td>
                   <td>{formatMoney(item.spend)}</td>

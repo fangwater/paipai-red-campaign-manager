@@ -17,7 +17,7 @@ func maituoReconcileSpecs(snapshot maituo.Snapshot, applyTrend bool) []maituoRec
 		case maituo.SheetNotes:
 			result = append(result, maituoReconcileSpec{
 				key: "notes", name: sheet, target: "maituo_customer_daily_notes", stage: "maituo_stage_notes",
-				presence: "t.note_id", join: "t.report_date=s.report_date AND t.note_id=s.note_id AND t.placement=s.placement",
+				presence: "t.note_id", join: "t.report_date=s.report_date AND t.note_id=s.note_id AND t.subaccount=s.subaccount AND t.campaign_name=s.campaign_name AND t.placement=s.placement",
 				deleteScope: "t.report_date=$2", upsert: maituoNoteUpsert,
 			})
 		case maituo.SheetSPU:

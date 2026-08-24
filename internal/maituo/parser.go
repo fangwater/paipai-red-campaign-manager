@@ -26,17 +26,13 @@ const defaultNoteCategory = "信息流"
 
 var expectedHeaders = map[string][]string{
 	SheetKPI:        {"指标", "数值", "数据口径"},
-	SheetNotes:      {"笔记ID", "笔记链接", "分类", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"},
+	SheetNotes:      {"笔记ID", "笔记链接", "分类", "子账户", "计划名", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"},
 	SheetSPU:        {"SPU", "竞价消耗", "回搜", "回搜成本", "回搜率(%)", "CPC", "CTR(%)", "笔记数"},
 	SheetSubaccount: {"SPU", "子账户", "场域", "回搜成本", "预计回流后成本", "消耗", "回搜", "回搜率(%)", "CPC", "CTR(%)", "笔记数"},
 	SheetTrend:      {"日期", "辅酶消耗(元)", "辅酶淘搜UV", "辅酶成交UV", "辅酶淘搜成本(元/人)", "磷虾油消耗(元)", "磷虾油淘搜UV", "磷虾油成交UV", "磷虾油淘搜成本(元/人)", "合计淘搜UV", "合计成交UV", "合计淘搜成本(元/人)", "合计消耗(元)", "合计回搜成本(元/人)"},
 }
 
-var noteHeadersWithoutCategory = []string{"笔记ID", "笔记链接", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"}
-
-var legacyNoteHeaders = []string{"笔记ID", "笔记链接", "分类", "子账户", "计划名", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"}
-
-var legacyNoteHeadersWithoutCategory = []string{"笔记ID", "笔记链接", "子账户", "计划名", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"}
+var noteHeadersWithoutCategory = []string{"笔记ID", "笔记链接", "子账户", "计划名", "场域", "词类备注", "消耗", "回搜人数", "回搜成本", "预计回流后成本", "回搜率(%)", "CPC", "CTR(%)"}
 
 func Parse(reader io.Reader, fileName string) (Snapshot, error) {
 	data, err := io.ReadAll(reader)
@@ -117,10 +113,6 @@ func sheetRows(workbook *excelize.File, sheet string) ([][]string, error) {
 			return rows[1:], nil
 		case headersMatch(rows[0], noteHeadersWithoutCategory):
 			return normalizeNoteRowsWithoutCategory(rows[1:]), nil
-		case headersMatch(rows[0], legacyNoteHeaders):
-			return normalizeLegacyNoteRows(rows[1:], true), nil
-		case headersMatch(rows[0], legacyNoteHeadersWithoutCategory):
-			return normalizeLegacyNoteRows(rows[1:], false), nil
 		}
 	}
 	expected := expectedHeaders[sheet]
@@ -169,37 +161,6 @@ func normalizeNoteRowsWithoutCategory(rows [][]string) [][]string {
 	return result
 }
 
-func normalizeLegacyNoteRows(rows [][]string, hasCategory bool) [][]string {
-	result := make([][]string, len(rows))
-	for index, row := range rows {
-		if rowBlank(row) {
-			result[index] = row
-			continue
-		}
-		normalized := make([]string, len(expectedHeaders[SheetNotes]))
-		if len(row) > 0 {
-			normalized[0] = row[0]
-		}
-		if len(row) > 1 {
-			normalized[1] = row[1]
-		}
-		legacyMetricStart := 4
-		if hasCategory {
-			if len(row) > 2 {
-				normalized[2] = row[2]
-			}
-			legacyMetricStart = 5
-		} else {
-			normalized[2] = defaultNoteCategory
-		}
-		if len(row) > legacyMetricStart {
-			copy(normalized[3:], row[legacyMetricStart:])
-		}
-		result[index] = normalized
-	}
-	return result
-}
-
 func parseKPIs(workbook *excelize.File) ([]KPI, error) {
 	rows, err := sheetRows(workbook, SheetKPI)
 	if err != nil {
@@ -234,92 +195,46 @@ func parseNotes(workbook *excelize.File) ([]NoteDetail, error) {
 	if err != nil {
 		return nil, err
 	}
-	type noteAggregate struct {
-		item           NoteDetail
-		componentCount int
-		clicks         float64
-		impressions    float64
-	}
-	aggregates := make(map[string]*noteAggregate, len(rows))
-	keys := make([]string, 0, len(rows))
+	result := make([]NoteDetail, 0, len(rows))
+	seen := make(map[string]int, len(rows))
 	for index, row := range rows {
 		if rowBlank(row) {
 			continue
 		}
 		n := index + 2
-		item := NoteDetail{NoteID: required(row, 0), NoteURL: required(row, 1), Category: required(row, 2), Placement: required(row, 3), KeywordCategoryNote: optionalString(row, 4), RowMetadata: RowMetadata{SourceRow: n}}
+		item := NoteDetail{NoteID: required(row, 0), NoteURL: required(row, 1), Category: required(row, 2), Subaccount: required(row, 3), CampaignName: required(row, 4), Placement: required(row, 5), KeywordCategoryNote: optionalString(row, 6), RowMetadata: RowMetadata{SourceRow: n}}
 		if item.Category == "" {
 			item.Category = defaultNoteCategory
 		}
-		if item.NoteID == "" || item.NoteURL == "" || item.Placement == "" {
+		if item.NoteID == "" || item.NoteURL == "" || item.Subaccount == "" || item.CampaignName == "" || item.Placement == "" {
 			return nil, invalid("工作表 %q 第 %d 行关键字段为空", SheetNotes, n)
 		}
-		if item.Spend, err = requiredFloat(row, 5, SheetNotes, n); err != nil {
+		if item.Spend, err = requiredFloat(row, 7, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		if item.SearchUsers, err = requiredInt(row, 6, SheetNotes, n); err != nil {
+		if item.SearchUsers, err = requiredInt(row, 8, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		if item.SearchCost, err = optionalFloat(row, 7, SheetNotes, n); err != nil {
+		if item.SearchCost, err = optionalFloat(row, 9, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		if item.EstimatedPostbackCost, err = optionalFloat(row, 8, SheetNotes, n); err != nil {
+		if item.EstimatedPostbackCost, err = optionalFloat(row, 10, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		if item.SearchRatePct, err = optionalFloat(row, 9, SheetNotes, n); err != nil {
+		if item.SearchRatePct, err = optionalFloat(row, 11, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		if item.CPC, err = requiredFloat(row, 10, SheetNotes, n); err != nil {
+		if item.CPC, err = requiredFloat(row, 12, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		if item.CTRPct, err = requiredFloat(row, 11, SheetNotes, n); err != nil {
+		if item.CTRPct, err = requiredFloat(row, 13, SheetNotes, n); err != nil {
 			return nil, err
 		}
-		key := strings.Join([]string{item.NoteID, item.Placement}, "\x00")
-		aggregate, ok := aggregates[key]
-		if !ok {
-			aggregate = &noteAggregate{item: item}
-			aggregates[key] = aggregate
-			keys = append(keys, key)
-		} else if aggregate.item.NoteURL != item.NoteURL || aggregate.item.Category != item.Category || !equalOptionalString(aggregate.item.KeywordCategoryNote, item.KeywordCategoryNote) {
-			return nil, invalid("工作表 %q 笔记 %q 场域 %q 的基础信息在第 %d、%d 行不一致", SheetNotes, item.NoteID, item.Placement, aggregate.item.SourceRow, n)
-		} else {
-			aggregate.item.Spend += item.Spend
-			aggregate.item.SearchUsers += item.SearchUsers
+		key := strings.Join([]string{item.NoteID, item.Subaccount, item.CampaignName, item.Placement}, "\x00")
+		if first, duplicate := seen[key]; duplicate {
+			return nil, invalid("工作表 %q 第 %d、%d 行业务键重复", SheetNotes, first, n)
 		}
-		aggregate.componentCount++
-		if item.CPC > 0 {
-			clicks := math.Round(item.Spend / item.CPC)
-			aggregate.clicks += clicks
-			if item.CTRPct > 0 {
-				aggregate.impressions += math.Round(clicks / (item.CTRPct / 100))
-			}
-		}
-	}
-	result := make([]NoteDetail, 0, len(keys))
-	for _, key := range keys {
-		aggregate := aggregates[key]
-		item := aggregate.item
-		if aggregate.componentCount > 1 {
-			item.SearchCost = nil
-			item.EstimatedPostbackCost = nil
-			item.SearchRatePct = nil
-			item.CPC = 0
-			item.CTRPct = 0
-			if item.SearchUsers > 0 {
-				searchCost := item.Spend / float64(item.SearchUsers)
-				item.SearchCost = floatPointer(roundNoteMetric(searchCost, 2))
-			}
-			if aggregate.clicks > 0 {
-				item.CPC = roundNoteMetric(item.Spend/aggregate.clicks, 4)
-				if item.SearchUsers > 0 {
-					item.SearchRatePct = floatPointer(roundNoteMetric(float64(item.SearchUsers)/aggregate.clicks*100, 4))
-				}
-			}
-			if aggregate.impressions > 0 {
-				item.CTRPct = roundNoteMetric(aggregate.clicks/aggregate.impressions*100, 4)
-			}
-		}
+		seen[key] = n
 		item.EstimatedPostbackCost = estimatedPostbackCost(item.SearchCost)
 		item.ContentHash = hash(item)
 		result = append(result, item)
@@ -327,20 +242,8 @@ func parseNotes(workbook *excelize.File) ([]NoteDetail, error) {
 	return result, nil
 }
 
-func equalOptionalString(left, right *string) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}
-
 func floatPointer(value float64) *float64 {
 	return &value
-}
-
-func roundNoteMetric(value float64, places int) float64 {
-	factor := math.Pow10(places)
-	return math.Round(value*factor) / factor
 }
 
 func estimatedPostbackCost(searchCost *float64) *float64 {

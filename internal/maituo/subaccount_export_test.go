@@ -11,9 +11,12 @@ import (
 
 func TestBuildSubaccountWorkbookFiltersOtherAccounts(t *testing.T) {
 	snapshot := Snapshot{
-		FileName:    "2026-08-05-Maituo-客户日报.xlsx",
-		ReportDate:  time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC),
-		Notes:       []NoteDetail{{NoteID: "note-a"}, {NoteID: "note-b"}},
+		FileName:   "2026-08-05-Maituo-客户日报.xlsx",
+		ReportDate: time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC),
+		Notes: []NoteDetail{
+			{NoteID: "shared-note", Subaccount: "账户A", CampaignName: "计划A"},
+			{NoteID: "shared-note", Subaccount: "账户B", CampaignName: "计划B"},
+		},
 		Subaccounts: []SubaccountOverview{{SPU: "辅酶", Subaccount: "账户A"}, {SPU: "辅酶", Subaccount: "账户B"}},
 	}
 	result, err := BuildSubaccountWorkbook("账户A", snapshot)
@@ -32,7 +35,7 @@ func TestBuildSubaccountWorkbookFiltersOtherAccounts(t *testing.T) {
 		t.Fatalf("sheets = %v", sheets)
 	}
 	notes, _ := workbook.GetRows(SheetNotes)
-	if len(notes) != 3 || notes[1][0] != "note-a" || notes[2][0] != "note-b" {
+	if len(notes) != 2 || notes[1][0] != "shared-note" || notes[1][3] != "账户A" || notes[1][4] != "计划A" {
 		t.Fatalf("notes = %v", notes)
 	}
 	subaccounts, _ := workbook.GetRows(SheetSubaccount)

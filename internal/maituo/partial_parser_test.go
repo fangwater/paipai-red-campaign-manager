@@ -3,7 +3,6 @@ package maituo
 import (
 	"bytes"
 	"errors"
-	"math"
 	"strings"
 	"testing"
 
@@ -34,7 +33,7 @@ func TestParsePartialWorkbook(t *testing.T) {
 	if err := workbook.SetSheetRow(SheetNotes, "A1", &noteHeader); err != nil {
 		t.Fatal(err)
 	}
-	if err := workbook.SetSheetRow(SheetNotes, "A2", &[]interface{}{"note-1", "https://example.com/note-1", "信息流", "搜索", "", 123.45, 4, 30.86, 19.44, 4.2, 1.2, 3.4}); err != nil {
+	if err := workbook.SetSheetRow(SheetNotes, "A2", &[]interface{}{"note-1", "https://example.com/note-1", "信息流", "账户A", "计划A", "搜索", "", 123.45, 4, 30.86, 19.44, 4.2, 1.2, 3.4}); err != nil {
 		t.Fatal(err)
 	}
 	var data bytes.Buffer
@@ -73,7 +72,7 @@ func TestParseNotesWithoutCategoryColumn(t *testing.T) {
 	if err := workbook.SetSheetRow(SheetNotes, "A1", &header); err != nil {
 		t.Fatal(err)
 	}
-	row := []interface{}{"note-1", "https://example.com/note-1", "搜索", "品牌词", 100.5, 10, 10.05, 9.5, 4.2, 0.8, 1.2}
+	row := []interface{}{"note-1", "https://example.com/note-1", "账户A", "计划A", "搜索", "品牌词", 100.5, 10, 10.05, 9.5, 4.2, 0.8, 1.2}
 	if err := workbook.SetSheetRow(SheetNotes, "A2", &row); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +81,7 @@ func TestParseNotesWithoutCategoryColumn(t *testing.T) {
 		t.Fatalf("notes = %+v", snapshot.Notes)
 	}
 	note := snapshot.Notes[0]
-	if note.Category != defaultNoteCategory || note.Placement != "搜索" || note.Spend != 100.5 || note.CTRPct != 1.2 {
+	if note.Category != defaultNoteCategory || note.Subaccount != "账户A" || note.CampaignName != "计划A" || note.Placement != "搜索" || note.Spend != 100.5 || note.CTRPct != 1.2 {
 		t.Fatalf("note = %+v", note)
 	}
 	if note.EstimatedPostbackCost == nil || *note.EstimatedPostbackCost != 6.33 {
@@ -90,35 +89,13 @@ func TestParseNotesWithoutCategoryColumn(t *testing.T) {
 	}
 }
 
-func TestParseLegacyNotesWithoutCategoryColumn(t *testing.T) {
+func TestParseNotesPreservesSubaccountsAndCampaigns(t *testing.T) {
 	workbook := excelize.NewFile()
 	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
 		t.Fatal(err)
 	}
-	header := make([]interface{}, len(legacyNoteHeadersWithoutCategory))
-	for index, value := range legacyNoteHeadersWithoutCategory {
-		header[index] = value
-	}
-	if err := workbook.SetSheetRow(SheetNotes, "A1", &header); err != nil {
-		t.Fatal(err)
-	}
-	row := []interface{}{"note-1", "https://example.com/note-1", "测试子账户", "测试计划", "搜索", "品牌词", 100, 10, 10, 6.3, 10, 1, 10}
-	if err := workbook.SetSheetRow(SheetNotes, "A2", &row); err != nil {
-		t.Fatal(err)
-	}
-	snapshot := parseTestWorkbook(t, workbook)
-	if len(snapshot.Notes) != 1 || snapshot.Notes[0].Category != defaultNoteCategory || snapshot.Notes[0].Placement != "搜索" {
-		t.Fatalf("notes = %+v", snapshot.Notes)
-	}
-}
-
-func TestParseNotesMergesSubaccountsAndCampaigns(t *testing.T) {
-	workbook := excelize.NewFile()
-	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
-		t.Fatal(err)
-	}
-	header := make([]interface{}, len(legacyNoteHeaders))
-	for index, value := range legacyNoteHeaders {
+	header := make([]interface{}, len(expectedHeaders[SheetNotes]))
+	for index, value := range expectedHeaders[SheetNotes] {
 		header[index] = value
 	}
 	if err := workbook.SetSheetRow(SheetNotes, "A1", &header); err != nil {
@@ -138,50 +115,11 @@ func TestParseNotesMergesSubaccountsAndCampaigns(t *testing.T) {
 	}
 
 	snapshot := parseTestWorkbook(t, workbook)
-	if len(snapshot.Notes) != 2 {
+	if len(snapshot.Notes) != 4 {
 		t.Fatalf("notes = %+v", snapshot.Notes)
 	}
-	note := snapshot.Notes[0]
-	if note.NoteID != "note-1" || note.Placement != "搜索" || note.Spend != 150 || note.SearchUsers != 5 {
-		t.Fatalf("identity and totals = %+v", note)
-	}
-	if note.SearchCost == nil || *note.SearchCost != 30 || note.EstimatedPostbackCost == nil || *note.EstimatedPostbackCost != 18.9 {
-		t.Fatalf("costs = %+v", note)
-	}
-	if note.SearchRatePct == nil || *note.SearchRatePct != 7.1429 || note.CPC != 2.1429 || note.CTRPct != 11.6667 {
-		t.Fatalf("rates = %+v", note)
-	}
-	if precisionNote := snapshot.Notes[1]; math.Abs(precisionNote.Spend-0.358023) > 1e-12 {
-		t.Fatalf("merged spend lost source precision: %+v", precisionNote)
-	}
-}
-
-func TestParseNotesDerivesMergedPostbackCostWhenSourceValuesAreNil(t *testing.T) {
-	workbook := excelize.NewFile()
-	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
-		t.Fatal(err)
-	}
-	header := make([]interface{}, len(legacyNoteHeaders))
-	for index, value := range legacyNoteHeaders {
-		header[index] = value
-	}
-	if err := workbook.SetSheetRow(SheetNotes, "A1", &header); err != nil {
-		t.Fatal(err)
-	}
-	rows := [][]interface{}{
-		{"note-1", "https://example.com/note-1", "测评", "账户 A", "计划 A", "搜索", "品类词", 100, 4, 25, "", 8, 2, 10},
-		{"note-1", "https://example.com/note-1", "测评", "账户 B", "计划 B", "搜索", "品类词", 50, 1, 50, "", 5, 2.5, 20},
-	}
-	for index, row := range rows {
-		cell, _ := excelize.CoordinatesToCellName(1, index+2)
-		if err := workbook.SetSheetRow(SheetNotes, cell, &row); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	snapshot := parseTestWorkbook(t, workbook)
-	if len(snapshot.Notes) != 1 || snapshot.Notes[0].EstimatedPostbackCost == nil || *snapshot.Notes[0].EstimatedPostbackCost != 18.9 {
-		t.Fatalf("notes = %+v", snapshot.Notes)
+	if snapshot.Notes[0].Subaccount != "账户 A" || snapshot.Notes[0].CampaignName != "计划 A" || snapshot.Notes[0].Spend != 100 || snapshot.Notes[1].Subaccount != "账户 B" || snapshot.Notes[1].Spend != 50 {
+		t.Fatalf("account dimensions were not preserved: %+v", snapshot.Notes)
 	}
 }
 
@@ -198,8 +136,7 @@ func TestParseNotesUsesRoundedSearchCostForPostbackCost(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := [][]interface{}{
-		{"note-1", "https://example.com/note-1", "测评", "搜索", "品类词", 7.499, 1, 7.499, "", 8, 1, 10},
-		{"note-1", "https://example.com/note-1", "测评", "搜索", "品类词", 7.499, 1, 7.499, "", 8, 1, 10},
+		{"note-1", "https://example.com/note-1", "测评", "账户A", "计划A", "搜索", "品类词", 7.499, 1, 7.499, "", 8, 1, 10},
 	}
 	for index, row := range rows {
 		cell, _ := excelize.CoordinatesToCellName(1, index+2)
@@ -209,8 +146,8 @@ func TestParseNotesUsesRoundedSearchCostForPostbackCost(t *testing.T) {
 	}
 
 	note := parseTestWorkbook(t, workbook).Notes[0]
-	if note.SearchCost == nil || *note.SearchCost != 7.5 || note.EstimatedPostbackCost == nil || *note.EstimatedPostbackCost != 4.73 {
-		t.Fatalf("costs = %+v, want search cost 7.50 and estimated postback cost 4.73", note)
+	if note.SearchCost == nil || *note.SearchCost != 7.499 || note.EstimatedPostbackCost == nil || *note.EstimatedPostbackCost != 4.73 {
+		t.Fatalf("costs = %+v, want source search cost 7.499 and estimated postback cost 4.73", note)
 	}
 }
 
@@ -243,7 +180,7 @@ func TestParseCanonicalNotesDefaultsBlankCategory(t *testing.T) {
 	if err := workbook.SetSheetRow(SheetNotes, "A1", &header); err != nil {
 		t.Fatal(err)
 	}
-	row := []interface{}{"note-1", "https://example.com/note-1", "", "信息流", "", 20, 2, 10, "", 3.5, 0.7, 1.1}
+	row := []interface{}{"note-1", "https://example.com/note-1", "", "账户A", "计划A", "信息流", "", 20, 2, 10, "", 3.5, 0.7, 1.1}
 	if err := workbook.SetSheetRow(SheetNotes, "A2", &row); err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +229,7 @@ func TestParseSubaccountsDerivesPostbackCostFromSearchCost(t *testing.T) {
 	}
 }
 
-func TestParseNotesRejectsConflictingCanonicalMetadata(t *testing.T) {
+func TestParseNotesRejectsDuplicateAccountPlanKey(t *testing.T) {
 	workbook := excelize.NewFile()
 	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
 		t.Fatal(err)
@@ -305,8 +242,8 @@ func TestParseNotesRejectsConflictingCanonicalMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := [][]interface{}{
-		{"note-1", "https://example.com/note-1", "测评", "搜索", "品类词", 100, 4, 25, 15.75, 8, 2, 10},
-		{"note-1", "https://example.com/other", "测评", "搜索", "品类词", 50, 1, 50, 31.5, 5, 2.5, 20},
+		{"note-1", "https://example.com/note-1", "测评", "账户A", "计划A", "搜索", "品类词", 100, 4, 25, 15.75, 8, 2, 10},
+		{"note-1", "https://example.com/other", "测评", "账户A", "计划A", "搜索", "品类词", 50, 1, 50, 31.5, 5, 2.5, 20},
 	}
 	for index, row := range rows {
 		cell, _ := excelize.CoordinatesToCellName(1, index+2)
@@ -322,7 +259,7 @@ func TestParseNotesRejectsConflictingCanonicalMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := Parse(bytes.NewReader(data.Bytes()), "2026-08-13-MaiTuo-客户日报.xlsx")
-	if !errors.Is(err, ErrInvalidWorkbook) || !strings.Contains(err.Error(), "基础信息") {
+	if !errors.Is(err, ErrInvalidWorkbook) || !strings.Contains(err.Error(), "业务键重复") {
 		t.Fatalf("error = %v", err)
 	}
 }

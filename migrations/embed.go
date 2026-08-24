@@ -126,3 +126,8 @@ var MaituoNotePlacementSQL string
 //
 //go:embed 027_maituo_estimated_postback_cost.sql
 var MaituoEstimatedPostbackCostSQL string
+
+// MaituoNoteSubaccountsSQL restores account-level note attribution for exports.
+//
+//go:embed 031_restore_maituo_note_subaccounts.sql
+var MaituoNoteSubaccountsSQL string

@@ -101,6 +101,8 @@ type NoteDetail struct {
 	NoteID                string   `json:"note_id"`
 	NoteURL               string   `json:"note_url"`
 	Category              string   `json:"category"`
+	Subaccount            string   `json:"subaccount"`
+	CampaignName          string   `json:"campaign_name"`
 	Placement             string   `json:"placement"`
 	KeywordCategoryNote   *string  `json:"keyword_category_note"`
 	Spend                 float64  `json:"spend"`

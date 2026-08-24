@@ -46,7 +46,10 @@ func TestMaituoSubaccountDirectoryAndSingleDateDownload(t *testing.T) {
 		reports:     map[string][]maituo.SubaccountReport{"账户A": {{ReportDate: "2026-08-05", FileName: "daily.xlsx"}}},
 		snapshots: map[string]maituo.Snapshot{"账户A/2026-08-05": {
 			FileName: "2026-08-05-Maituo-客户日报.xlsx", ReportDate: date,
-			Notes:       []maituo.NoteDetail{{NoteID: "note-a", NoteURL: "https://example.com/note-a", Category: "信息流", Placement: "搜索"}},
+			Notes: []maituo.NoteDetail{
+				{NoteID: "shared-note", NoteURL: "https://example.com/note-a", Category: "信息流", Subaccount: "账户A", CampaignName: "计划A", Placement: "搜索"},
+				{NoteID: "shared-note", NoteURL: "https://example.com/note-b", Category: "信息流", Subaccount: "账户B", CampaignName: "计划B", Placement: "搜索"},
+			},
 			Subaccounts: []maituo.SubaccountOverview{{SPU: "辅酶", Subaccount: "账户A"}, {SPU: "辅酶", Subaccount: "账户B"}},
 		}},
 	}
@@ -78,7 +81,7 @@ func TestMaituoSubaccountDirectoryAndSingleDateDownload(t *testing.T) {
 		t.Fatalf("download sheets=%v", sheets)
 	}
 	notes, _ := workbook.GetRows(maituo.SheetNotes)
-	if len(notes) != 2 || notes[1][0] != "note-a" {
+	if len(notes) != 2 || notes[1][0] != "shared-note" || notes[1][3] != "账户A" || notes[1][4] != "计划A" {
 		t.Fatalf("download contained unexpected notes: notes=%v", notes)
 	}
 	subaccounts, _ := workbook.GetRows(maituo.SheetSubaccount)

@@ -15,7 +15,7 @@ func TestBuildProviderWorkbookContainsOnlyNoteSheet(t *testing.T) {
 		ReportDate: time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC),
 		Notes: []NoteDetail{{
 			NoteID: "68a123456789abcdef123456", NoteURL: "https://example.com/note",
-			Category: "信息流", Placement: "搜索", Spend: 120.5, SearchUsers: 4,
+			Category: "信息流", Subaccount: "账户A", CampaignName: "计划A", Placement: "搜索", Spend: 120.5, SearchUsers: 4,
 		}},
 	})
 	if err != nil {
@@ -36,7 +36,7 @@ func TestBuildProviderWorkbookContainsOnlyNoteSheet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 2 || rows[1][0] != "68a123456789abcdef123456" || rows[1][3] != "搜索" {
+	if len(rows) != 2 || rows[1][0] != "68a123456789abcdef123456" || rows[1][3] != "账户A" || rows[1][5] != "搜索" {
 		t.Fatalf("rows = %v", rows)
 	}
 }

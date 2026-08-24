@@ -106,7 +106,7 @@ test("opens a saved report as a note and placement merged table", async ({ page 
 
   const detail = page.locator("#saved-report-detail");
   await expect(detail).toBeFocused();
-  const table = page.getByRole("table", { name: "2026-08-20 合并笔记明细" });
+  const table = page.getByRole("table", { name: "2026-08-20 笔记明细" });
   await expect(table).toBeVisible();
   await expect.poll(() => detail.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
@@ -118,10 +118,10 @@ test("opens a saved report as a note and placement merged table", async ({ page 
   await expect(table).toContainText("note-merged");
   await expect(table).toContainText("搜索");
   await expect(table).toContainText("¥120.50");
-  await expect(table.getByRole("columnheader", { name: "子账户", exact: true })).toHaveCount(0);
-  await expect(table.getByRole("columnheader", { name: "计划", exact: true })).toHaveCount(0);
-  await expect(table).not.toContainText("不应展示的子账户");
-  await expect(table).not.toContainText("不应展示的计划");
+  await expect(table.getByRole("columnheader", { name: "子账户", exact: true })).toHaveCount(1);
+  await expect(table.getByRole("columnheader", { name: "计划", exact: true })).toHaveCount(1);
+  await expect(table).toContainText("不应展示的子账户");
+  await expect(table).toContainText("不应展示的计划");
   await expect(page.getByRole("heading", { name: "子账户文件目录" })).toHaveCount(0);
 });
 
@@ -149,5 +149,5 @@ test("shows an error when a saved report detail cannot be loaded", async ({ page
   await reportRow.press("Enter");
   await expect(page.getByRole("alert")).toContainText("历史明细暂不可用");
   await expect(page.locator("#saved-report-detail")).toBeFocused();
-  await expect(page.getByRole("table", { name: /合并笔记明细/ })).toHaveCount(0);
+  await expect(page.getByRole("table", { name: /笔记明细/ })).toHaveCount(0);
 });

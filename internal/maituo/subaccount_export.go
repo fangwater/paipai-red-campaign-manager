@@ -12,7 +12,7 @@ import (
 
 var ErrNoSubaccountData = errors.New("该子账户在指定日期暂无数据")
 
-var noteExportWidths = []float64{28, 44, 14, 12, 18, 14, 12, 14, 18, 14, 10, 10}
+var noteExportWidths = []float64{22, 34, 14, 18, 24, 12, 16, 14, 12, 14, 18, 14, 10, 10}
 
 type SubaccountWorkbook struct {
 	FileName string
@@ -20,6 +20,7 @@ type SubaccountWorkbook struct {
 }
 
 type subaccountRows struct {
+	notes       []NoteDetail
 	subaccounts []SubaccountOverview
 }
 
@@ -31,15 +32,20 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 		return SubaccountWorkbook{}, ErrNoSubaccountData
 	}
 	rows := &subaccountRows{}
+	for _, row := range snapshot.Notes {
+		if strings.TrimSpace(row.Subaccount) == subaccount {
+			rows.notes = append(rows.notes, row)
+		}
+	}
 	for _, row := range snapshot.Subaccounts {
 		if strings.TrimSpace(row.Subaccount) == subaccount {
 			rows.subaccounts = append(rows.subaccounts, row)
 		}
 	}
-	if len(rows.subaccounts) == 0 {
+	if len(rows.notes) == 0 && len(rows.subaccounts) == 0 {
 		return SubaccountWorkbook{}, ErrNoSubaccountData
 	}
-	data, err := buildSubaccountWorkbook(rows, snapshot.Notes)
+	data, err := buildSubaccountWorkbook(rows)
 	if err != nil {
 		return SubaccountWorkbook{}, fmt.Errorf("build subaccount workbook: %w", err)
 	}
@@ -49,7 +55,7 @@ func BuildSubaccountWorkbook(subaccount string, snapshot Snapshot) (SubaccountWo
 	}, nil
 }
 
-func buildSubaccountWorkbook(rows *subaccountRows, notes []NoteDetail) ([]byte, error) {
+func buildSubaccountWorkbook(rows *subaccountRows) ([]byte, error) {
 	workbook := excelize.NewFile()
 	defer func() { _ = workbook.Close() }()
 	if err := workbook.SetSheetName("Sheet1", SheetNotes); err != nil {
@@ -58,9 +64,7 @@ func buildSubaccountWorkbook(rows *subaccountRows, notes []NoteDetail) ([]byte, 
 	if _, err := workbook.NewSheet(SheetSubaccount); err != nil {
 		return nil, err
 	}
-	// Notes have no subaccount dimension, so each split workbook retains the
-	// complete aggregated daily note sheet without assigning notes to an account.
-	if err := writeNoteExportSheet(workbook, notes); err != nil {
+	if err := writeNoteExportSheet(workbook, rows.notes); err != nil {
 		return nil, err
 	}
 	subaccountRows := make([][]interface{}, len(rows.subaccounts))
@@ -81,7 +85,7 @@ func writeNoteExportSheet(workbook *excelize.File, notes []NoteDetail) error {
 	rows := make([][]interface{}, len(notes))
 	for index, row := range notes {
 		rows[index] = []interface{}{
-			row.NoteID, row.NoteURL, row.Category, row.Placement,
+			row.NoteID, row.NoteURL, row.Category, row.Subaccount, row.CampaignName, row.Placement,
 			optionalExportValue(row.KeywordCategoryNote), row.Spend, row.SearchUsers,
 			optionalExportValue(row.SearchCost), optionalExportValue(row.EstimatedPostbackCost),
 			optionalExportValue(row.SearchRatePct), row.CPC, row.CTRPct,
