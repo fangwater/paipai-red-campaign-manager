@@ -292,6 +292,8 @@ func newAPIHandler(server *apiServer) http.Handler {
 	mux.HandleFunc("/v1/delivery/session", server.deliverySession)
 	mux.HandleFunc("/v1/delivery/capabilities", server.deliveryCapabilities)
 	mux.HandleFunc("/v1/delivery/assets", server.deliveryAssets)
+	mux.HandleFunc("/v1/delivery/quick-plan/templates", server.deliveryQuickPlanTemplates)
+	mux.HandleFunc("/v1/delivery/quick-plan/drafts", server.deliveryQuickPlanDrafts)
 	mux.HandleFunc("/v1/delivery/assets/platform", server.deliveryPlatformAssets)
 	mux.HandleFunc("/v1/delivery/target-options", server.deliveryTargetOptions)
 	mux.HandleFunc("/v1/delivery/keyword-candidates", server.deliveryKeywordCandidates)

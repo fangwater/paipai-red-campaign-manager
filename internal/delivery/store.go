@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -30,6 +31,14 @@ type Assets struct {
 	Notes        []CandidateNote `json:"notes"`
 	Count        int             `json:"count"`
 	GeneratedAt  time.Time       `json:"generated_at"`
+}
+
+type QuickPlanTemplateSample struct {
+	Placement       int
+	CampaignPayload json.RawMessage
+	UnitPayload     json.RawMessage
+	CreativePayload json.RawMessage
+	LatestSyncedAt  time.Time
 }
 
 type APIAttempt struct {
@@ -72,6 +81,7 @@ type Store interface {
 	SaveAPIAttempt(context.Context, APIAttempt) error
 	SavePerformanceSnapshot(context.Context, PerformanceQuery, map[string]any, string) error
 	Assets(context.Context, AssetQuery) (Assets, error)
+	QuickPlanTemplateSamples(context.Context) ([]QuickPlanTemplateSample, error)
 	RecommendationCandidates(context.Context, []string) ([]CandidateNote, error)
 	Audit(context.Context, Actor, string, string, string, int64, map[string]any) error
 }

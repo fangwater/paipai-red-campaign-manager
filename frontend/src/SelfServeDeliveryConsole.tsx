@@ -2,7 +2,8 @@ import {
 	BarChart3, BookOpenCheck, BrainCircuit, ChevronDown, CircleAlert, Database,
 	LockKeyhole, RefreshCw, Route, Workflow
 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import DeliveryDataWorkspace from "./DeliveryDataWorkspace";
 import DeliveryDraftWorkspace from "./DeliveryDraftWorkspace";
 import DeliveryIntelligenceLab from "./DeliveryIntelligenceLab";
@@ -42,6 +43,15 @@ function SessionBar({ session, advertiserID, capability, refreshing, onAdvertise
 }
 
 export default function SelfServeDeliveryConsole() {
+  const location = useLocation();
+  const initialRoute = useMemo(() => {
+    const query = new URLSearchParams(location.search);
+    const advertiserID = Number(query.get("advertiser_id")) || 0;
+    const draftID = query.get("draft") || undefined;
+    const requestedView = query.get("view");
+    const workspaceView: "editor" | "review" | "publish" | undefined = requestedView === "review" || requestedView === "publish" || requestedView === "editor" ? requestedView : undefined;
+    return { advertiserID, draftID, workspaceView };
+  }, [location.search]);
   const [view, setView] = useState<ConsoleView>("workspace");
   const [session, setSession] = useState<DeliverySession | null>();
   const [advertiserID, setAdvertiserID] = useState(0);
@@ -52,8 +62,12 @@ export default function SelfServeDeliveryConsole() {
 
   const applySession = useCallback((next: DeliverySession) => {
     setSession(next);
-    setAdvertiserID((current) => next.advertisers.some((item) => item.advertiser_id === current) ? current : next.advertisers[0]?.advertiser_id || 0);
-  }, []);
+    setAdvertiserID((current) => {
+      if (next.advertisers.some((item) => item.advertiser_id === current)) return current;
+      const preferred = next.advertisers.some((item) => item.advertiser_id === initialRoute.advertiserID) ? initialRoute.advertiserID : 0;
+      return preferred || next.advertisers[0]?.advertiser_id || 0;
+    });
+  }, [initialRoute.advertiserID]);
 
   const loadSession = useCallback(async (quiet = false) => {
     if (!quiet) setLoadingSession(true);
@@ -99,7 +113,7 @@ export default function SelfServeDeliveryConsole() {
 
     {!loadingSession && !session && view !== "blueprint" ? <section className="dc-no-advertiser"><CircleAlert size={21} /><div><strong>投放服务暂不可用</strong><p>控制台已配置为直接进入，请刷新页面或检查后端服务状态。</p></div></section> : null}
     {!loadingSession && session && session.advertisers.length === 0 && view !== "blueprint" ? <section className="dc-no-advertiser"><CircleAlert size={21} /><div><strong>没有可用广告主</strong><p>请检查聚光 OAuth 授权中是否包含广告主。</p></div></section> : null}
-    {session && advertiserID && view === "workspace" ? <DeliveryDraftWorkspace key={advertiserID} advertiserID={advertiserID} actor={session.actor} capability={capability} /> : null}
+    {session && advertiserID && view === "workspace" ? <DeliveryDraftWorkspace key={advertiserID} advertiserID={advertiserID} actor={session.actor} capability={capability} initialDraftID={advertiserID === initialRoute.advertiserID ? initialRoute.draftID : undefined} initialView={initialRoute.workspaceView} /> : null}
     {session && advertiserID && view === "data" ? <DeliveryDataWorkspace key={advertiserID} advertiserID={advertiserID} /> : null}
     {session && view === "intelligence" ? <DeliveryIntelligenceLab role={session.actor.role} /> : null}
     {view === "blueprint" ? <div className="dc-blueprint"><Suspense fallback={<LoadingState label="加载设计与边界" />}><SelfServeDeliveryPlan /></Suspense></div> : null}

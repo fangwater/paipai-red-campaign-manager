@@ -151,6 +151,8 @@ func (server *apiServer) deliveryOverview(writer http.ResponseWriter, request *h
 			{"method": "GET", "path": "/v1/delivery/session", "domain": "控制台直通上下文与广告主发现"},
 			{"method": "GET", "path": "/v1/delivery/capabilities", "domain": "OAuth、广告主与上游能力"},
 			{"method": "GET", "path": "/v1/delivery/assets", "domain": "本地稿件候选"},
+			{"method": "GET", "path": "/v1/delivery/quick-plan/templates", "domain": "按场域归纳全量当前在投基础模板"},
+			{"method": "POST", "path": "/v1/delivery/quick-plan/drafts", "domain": "按笔记、人群与关键词快速创建草稿"},
 			{"method": "POST", "path": "/v1/delivery/assets/platform", "domain": "平台笔记、SPU、资质、事件资产"},
 			{"method": "POST", "path": "/v1/delivery/target-options", "domain": "实时可用定向"},
 			{"method": "POST", "path": "/v1/delivery/keyword-candidates", "domain": "关键词推荐与词包"},
@@ -272,6 +274,50 @@ func (server *apiServer) deliveryAssets(writer http.ResponseWriter, request *htt
 	result, err := server.delivery.Assets(ctx, delivery.AssetQuery{
 		AdvertiserID: advertiserID, Search: request.URL.Query().Get("search"), Limit: limit,
 	})
+	server.writeDeliveryResult(writer, result, err)
+}
+
+func (server *apiServer) deliveryQuickPlanTemplates(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		methodNotAllowed(writer, http.MethodGet)
+		return
+	}
+	actor, ok := server.deliveryActor(writer, request, "viewer", "analyst", "operator", "budget_owner", "admin")
+	if !ok {
+		return
+	}
+	if !server.deliveryAllAdvertisersAllowed(writer, actor) {
+		return
+	}
+	ctx, cancel := server.deliveryContext(request)
+	defer cancel()
+	result, err := server.delivery.QuickPlanTemplates(ctx)
+	server.writeDeliveryResult(writer, result, err)
+}
+
+func (server *apiServer) deliveryQuickPlanDrafts(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		methodNotAllowed(writer, http.MethodPost)
+		return
+	}
+	actor, ok := server.deliveryActor(writer, request, "operator", "admin")
+	if !ok {
+		return
+	}
+	var input delivery.CreateQuickPlanDraftInput
+	if !decodeDeliveryJSON(writer, request, &input, false) {
+		return
+	}
+	if !server.deliveryAdvertiserAllowed(writer, actor, input.AdvertiserID) {
+		return
+	}
+	ctx, cancel := server.deliveryContext(request)
+	defer cancel()
+	result, err := server.delivery.CreateQuickPlanDraft(ctx, input, actor)
+	if err == nil {
+		writeJSON(writer, http.StatusCreated, apiResponse{Success: true, Data: result})
+		return
+	}
 	server.writeDeliveryResult(writer, result, err)
 }
 

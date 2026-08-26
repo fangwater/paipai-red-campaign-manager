@@ -101,6 +101,9 @@ func (handlerStore) SavePerformanceSnapshot(context.Context, delivery.Performanc
 func (handlerStore) Assets(context.Context, delivery.AssetQuery) (delivery.Assets, error) {
 	return delivery.Assets{}, nil
 }
+func (handlerStore) QuickPlanTemplateSamples(context.Context) ([]delivery.QuickPlanTemplateSample, error) {
+	return []delivery.QuickPlanTemplateSample{}, nil
+}
 func (handlerStore) RecommendationCandidates(context.Context, []string) ([]delivery.CandidateNote, error) {
 	return nil, nil
 }
@@ -139,6 +142,27 @@ func TestDeliveryRoutesAllowDirectConsoleAndRejectInvalidExplicitKey(t *testing.
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"id":"delivery-console"`) || !strings.Contains(recorder.Body.String(), `"role":"operator"`) || !strings.Contains(recorder.Body.String(), `"all_advertisers":true`) {
 		t.Fatalf("direct session status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestDeliveryQuickPlanTemplateRouteReturnsGlobalTemplates(t *testing.T) {
+	service, err := delivery.NewService(handlerStore{}, handlerDeliveryGateway{}, delivery.RuleSemanticAdvisor{}, delivery.HeuristicRanker{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newAPIHandler(&apiServer{delivery: service, timeout: time.Second})
+	request := httptest.NewRequest(http.MethodGet, "/v1/delivery/quick-plan/templates", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"placement":"feed"`) || !strings.Contains(recorder.Body.String(), `"placement":"search"`) {
+		t.Fatalf("quick-plan templates status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/v1/delivery/quick-plan/drafts", strings.NewReader(`{"advertiser_id":1234,"placement":"search","note_id":"64a1b2c3d4e5f60718293a4b","audience_id":"aud_test","keywords":["辅酶Q10"],"overrides":{"day_budget_fen":72000,"keyword_bid_fen":1250},"idempotency_key":"quick-plan-test-key"}`))
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("quick-plan draft without active template status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -206,6 +230,7 @@ func TestDeliveryOpenAPIIsPublicAndDocumentsEveryMountedRoute(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/delivery", "/delivery/capabilities", "/delivery/assets", "/delivery/drafts", "/delivery/drafts/{draft_id}",
+		"/delivery/quick-plan/templates", "/delivery/quick-plan/drafts",
 		"/delivery/drafts/{draft_id}/publish", "/delivery/jobs/{job_id}",
 		"/delivery/campaigns/status", "/delivery/entities/{entity_type}/{media_id}/status", "/delivery/performance",
 		"/delivery/intelligence/bandit-shadow",

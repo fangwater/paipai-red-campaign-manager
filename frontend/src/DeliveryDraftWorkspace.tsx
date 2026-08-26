@@ -17,6 +17,8 @@ type Props = {
   advertiserID: number;
   actor: Actor;
   capability?: Capability;
+  initialDraftID?: string;
+  initialView?: WorkspaceView;
 };
 
 type WorkspaceView = "editor" | "review" | "publish";
@@ -373,13 +375,13 @@ function EntityList({ workflow, capability, actor, updating, onStatus }: { workf
   </section>;
 }
 
-export default function DeliveryDraftWorkspace({ advertiserID, actor, capability }: Props) {
+export default function DeliveryDraftWorkspace({ advertiserID, actor, capability, initialDraftID, initialView }: Props) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<Workflow>();
   const [spec, setSpec] = useState(() => createDefaultDraftSpec(advertiserID));
   const [baseline, setBaseline] = useState(() => JSON.stringify(createDefaultDraftSpec(advertiserID)));
-  const [view, setView] = useState<WorkspaceView>("editor");
+  const [view, setView] = useState<WorkspaceView>(initialView || "editor");
   const [mode, setMode] = useState<EditorMode>("form");
   const [jsonText, setJSONText] = useState("");
   const [changeReason, setChangeReason] = useState("");
@@ -423,11 +425,11 @@ export default function DeliveryDraftWorkspace({ advertiserID, actor, capability
   }, []);
 
   useEffect(() => {
-    setWorkflow(undefined); setView("editor"); setMode("form"); setChangeReason("");
+    setWorkflow(undefined); setView(initialView || "editor"); setMode("form"); setChangeReason("");
     const empty = createDefaultDraftSpec(advertiserID);
     setSpec(empty); setBaseline(JSON.stringify(empty));
-    void loadDrafts();
-  }, [advertiserID, loadDrafts]);
+    void loadDrafts(initialDraftID);
+  }, [advertiserID, initialDraftID, initialView, loadDrafts]);
 
   useEffect(() => {
     if (selectedID) void loadWorkflow(selectedID);

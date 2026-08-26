@@ -101,12 +101,13 @@ export type CampaignSpec = {
   start_time?: string;
   expire_time?: string;
   time_period_type: number;
-  time_period?: Record<string, string>;
+  time_period?: string | Record<string, string>;
   bidding_strategy: number;
   limit_day_budget: number;
   day_budget_fen?: number;
   optimize_target: number;
   constraint_type?: number;
+  constraint_value_fen?: number;
   smart_switch?: number;
   pacing_mode?: number;
   feed_flag?: number;
@@ -126,10 +127,17 @@ export type CampaignSpec = {
 export type CodeName = { code: string; name: string };
 
 export type TargetSpec = {
+  template_config?: JSONObject;
   gender?: string;
   age?: string;
   device?: string;
+  device_price?: string;
   cities?: string;
+  city_type?: number;
+  area_code?: string;
+  search_city_intent?: string;
+  premium_target_type?: number;
+  generalization_switch?: number;
   content_interests?: CodeName[];
   shopping_interests?: CodeName[];
   crowd_packages?: JSONObject[];
@@ -188,6 +196,8 @@ export type UnitSpec = {
   keyword_target_actions?: number[];
   business_tree_name?: string;
   spu_notes?: { spu_id: string; note_ids: string[] }[];
+  item_id?: string;
+  item_notes?: { item_id: string; note_ids: string[] }[];
   keywords?: KeywordBid[];
   negative_keywords?: NegativeKeyword[];
   substituted_user_id?: string;
@@ -196,7 +206,17 @@ export type UnitSpec = {
   landing_page_url?: string;
   external_page_url?: string;
   landing_page_desc?: string;
-  target_template_id?: string;
+  target_template_id?: number;
+  target_position?: number;
+  promotion_target_mode?: number;
+  search_bid_ratio?: number;
+  landing_page_type?: number;
+  note_rec_type?: number;
+  phrase_match_type_upgrade?: number;
+  aigc_note_black_rec?: number;
+  biz_unit_type?: number;
+  target_goal?: number;
+  creation_type?: number;
   creativities: CreativitySpec[];
 };
 
@@ -352,6 +372,77 @@ export type Assets = {
   generated_at: string;
 };
 
+export type QuickPlanTemplateSummary = {
+  marketing_target: number;
+  promotion_target: number;
+  bidding_strategy: number;
+  optimize_target: number;
+  day_budget_fen: number;
+  event_bid_fen: number;
+  pacing_mode: number;
+  time_period_type: number;
+  conversion_type: number;
+};
+
+export type QuickPlanKeywordDefaults = {
+  bid_fen: number;
+  feed_bid_fen: number;
+  keyword_source: number;
+  phrase_match_type: number;
+  sample_count: number;
+};
+
+export type QuickPlanAudience = {
+  id: string;
+  name: string;
+  description: string;
+  sample_count: number;
+  target_type: number;
+};
+
+export type QuickPlanTemplate = {
+  placement: "feed" | "search";
+  placement_code: 1 | 2;
+  available: boolean;
+  unavailable_reason?: string;
+  sample_count: number;
+  mode_sample_count: number;
+  confidence: number;
+  ignored_sample_count?: number;
+  latest_synced_at?: string;
+  summary: QuickPlanTemplateSummary;
+  audiences: QuickPlanAudience[];
+  keyword_defaults: QuickPlanKeywordDefaults;
+};
+
+export type QuickPlanTemplates = {
+  feed: QuickPlanTemplate;
+  search: QuickPlanTemplate;
+  generated_at: string;
+};
+
+export type QuickPlanOverrides = {
+  marketing_target?: 4 | 13;
+  bidding_strategy?: 2 | 3 | 7;
+  day_budget_fen?: number;
+  event_bid_fen?: number;
+  pacing_mode?: 0 | 1 | 2;
+  time_period_type?: 0 | 1;
+  keyword_bid_fen?: number;
+  phrase_match_type?: 0 | 1 | 2 | 3;
+};
+
+export type CreateQuickPlanDraftInput = {
+  advertiser_id: number;
+  placement: "feed" | "search";
+  note_id: string;
+  note_title?: string;
+  audience_id: string;
+  keywords: string[];
+  overrides?: QuickPlanOverrides;
+  idempotency_key: string;
+};
+
 export type GatewayResponse = {
   operation: string;
   data: JSONObject;
@@ -430,6 +521,8 @@ export function createClientKey(prefix: string): string {
 export const deliveryAPI = {
 	session: () => request<DeliverySession>("/session"),
 	capabilities: (advertiserID: number) => request<Capability>(`/capabilities?advertiser_id=${advertiserID}`),
+	quickPlanTemplates: () => request<QuickPlanTemplates>("/quick-plan/templates"),
+  createQuickPlanDraft: (input: CreateQuickPlanDraftInput) => post<Draft>("/quick-plan/drafts", input),
   assets: (advertiserID: number, search = "", limit = 50) => {
     const query = new URLSearchParams({ advertiser_id: String(advertiserID), search, limit: String(limit) });
     return request<Assets>(`/assets?${query}`);

@@ -182,6 +182,14 @@ test("creates a complete draft and restores its persisted workflow", async ({ pa
   await expect(page.getByRole("button", { name: /校验与审批/ })).toBeVisible();
 });
 
+test("opens a linked quick-plan draft directly in review", async ({ page }) => {
+  await mockDeliveryAPI(page, [draft()]);
+  await page.goto(`/paipai/self-serve-delivery?advertiser_id=${advertiserID}&draft=${draftID}&view=review`);
+  await expect(page.getByText(draftID, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /校验与审批/ })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "执行校验" })).toBeVisible();
+});
+
 test("runs recommendations, validation, approval and dry-run while execute remains locked", async ({ page }) => {
   await mockDeliveryAPI(page, [draft()]);
   await openConsole(page);

@@ -45,7 +45,7 @@ func ValidateDraftSpec(spec DraftSpec) []ValidationIssue {
 	if utf8.RuneCountInString(campaign.Name) < 1 || utf8.RuneCountInString(campaign.Name) > 50 {
 		errorAt("campaign_name_invalid", "campaign.name", "campaign name must contain 1 to 50 characters")
 	}
-	if !oneOf(campaign.MarketingTarget, 3, 4, 8, 9, 10, 13, 14, 15, 16, 17) {
+	if !oneOf(campaign.MarketingTarget, 3, 4, 8, 9, 10, 13, 14, 15, 16, 17, 20, 21) {
 		errorAt("marketing_target_invalid", "campaign.marketing_target", "marketing target is not supported by the current contract")
 	}
 	if !oneOf(campaign.Placement, 1, 2, 4, 7) {
@@ -97,8 +97,8 @@ func ValidateDraftSpec(spec DraftSpec) []ValidationIssue {
 		if utf8.RuneCountInString(unit.Name) < 1 || utf8.RuneCountInString(unit.Name) > 50 {
 			errorAt("unit_name_invalid", base+".name", "unit name must contain 1 to 50 characters")
 		}
-		if !oneOf(unit.TargetType, 1, 2, 3) {
-			errorAt("target_type_invalid", base+".target_type", "target_type must be 1, 2, or 3")
+		if !oneOf(unit.TargetType, 0, 1, 2, 3) {
+			errorAt("target_type_invalid", base+".target_type", "target_type must be 0, 1, 2, or 3")
 		}
 		if unit.PromotionTarget != campaign.PromotionTarget {
 			errorAt("promotion_target_mismatch", base+".promotion_target", "unit promotion_target must match its campaign")
@@ -152,6 +152,16 @@ func ValidateDraftSpec(spec DraftSpec) []ValidationIssue {
 				}
 			}
 		}
+		for itemIndex, item := range unit.ItemNotes {
+			if strings.TrimSpace(item.ItemID) == "" {
+				errorAt("item_id_required", fmt.Sprintf("%s.item_notes[%d].item_id", base, itemIndex), "item_id is required")
+			}
+			for noteIndex, noteID := range item.NoteIDs {
+				if !noteIDPattern.MatchString(noteID) {
+					errorAt("item_note_id_invalid", fmt.Sprintf("%s.item_notes[%d].note_ids[%d]", base, itemIndex, noteIndex), "note_id must be a 24-character hexadecimal ID")
+				}
+			}
+		}
 		validateHTTPSURL(base+".landing_page_url", unit.LandingPageURL, errorAt)
 		validateHTTPSURL(base+".external_page_url", unit.ExternalPageURL, errorAt)
 		keywordSeen := map[string]struct{}{}
@@ -171,8 +181,8 @@ func ValidateDraftSpec(spec DraftSpec) []ValidationIssue {
 			if keyword.FeedBidFen < 0 || spec.Budget.MaxBidFen > 0 && keyword.FeedBidFen > spec.Budget.MaxBidFen {
 				errorAt("keyword_feed_bid_invalid", path+".feed_bid_fen", "keyword feed bid must be within the bid guardrail")
 			}
-			if !oneOf(keyword.PhraseMatchType, 0, 1, 2) {
-				errorAt("keyword_match_type_invalid", path+".phrase_match_type", "phrase_match_type must be 0, 1, or 2")
+			if !oneOf(keyword.PhraseMatchType, 0, 1, 2, 3) {
+				errorAt("keyword_match_type_invalid", path+".phrase_match_type", "phrase_match_type must be 0, 1, 2, or 3")
 			}
 			if keyword.KeywordSource < 0 {
 				errorAt("keyword_source_invalid", path+".keyword_source", "keyword_source cannot be negative")

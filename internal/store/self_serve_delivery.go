@@ -823,6 +823,62 @@ func (p *Postgres) Assets(ctx context.Context, query delivery.AssetQuery) (deliv
 	return result, nil
 }
 
+func (p *Postgres) QuickPlanTemplateSamples(ctx context.Context) ([]delivery.QuickPlanTemplateSample, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT campaign.placement, campaign.raw_payload, unit.raw_payload,
+			creativity.raw_payload,
+			GREATEST(campaign.synced_at, unit.synced_at, creativity.synced_at)
+		FROM xhs_jg_campaigns campaign
+		JOIN xhs_jg_units unit
+		  ON unit.advertiser_id=campaign.advertiser_id
+		 AND unit.campaign_id=campaign.campaign_id
+		JOIN LATERAL (
+			SELECT item.raw_payload, item.synced_at
+			FROM xhs_jg_creativities item
+			WHERE item.advertiser_id=unit.advertiser_id
+			  AND item.campaign_id=unit.campaign_id
+			  AND item.unit_id=unit.unit_id
+			  AND item.deleted_at IS NULL
+			  AND item.creativity_enable=1
+			  AND item.creativity_filter_state=8
+			  AND item.audit_status IN (1,7)
+			ORDER BY item.creativity_updated_at DESC NULLS LAST, item.creativity_id DESC
+			LIMIT 1
+		) creativity ON TRUE
+		WHERE campaign.placement IN (1,2)
+		  AND campaign.deleted_at IS NULL
+		  AND campaign.campaign_enable=1
+		  AND campaign.campaign_filter_state=1
+		  AND COALESCE(NULLIF(campaign.raw_payload->>'not_available_status','')::integer,0)=0
+		  AND unit.deleted_at IS NULL
+		  AND unit.unit_enable=1
+		  AND unit.unit_filter_state=10
+		  AND unit.not_available_status=0
+		ORDER BY campaign.placement,
+			GREATEST(campaign.synced_at, unit.synced_at, creativity.synced_at) DESC,
+			campaign.campaign_id DESC, unit.unit_id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query quick-plan template samples: %w", err)
+	}
+	defer rows.Close()
+	result := make([]delivery.QuickPlanTemplateSample, 0)
+	for rows.Next() {
+		var sample delivery.QuickPlanTemplateSample
+		if err := rows.Scan(
+			&sample.Placement, &sample.CampaignPayload, &sample.UnitPayload,
+			&sample.CreativePayload, &sample.LatestSyncedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan quick-plan template sample: %w", err)
+		}
+		result = append(result, sample)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate quick-plan template samples: %w", err)
+	}
+	return result, nil
+}
+
 func (p *Postgres) RecommendationCandidates(ctx context.Context, noteIDs []string) ([]delivery.CandidateNote, error) {
 	rows, err := p.pool.Query(ctx, `
 		WITH performance AS (

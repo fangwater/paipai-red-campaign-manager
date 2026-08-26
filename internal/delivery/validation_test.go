@@ -37,7 +37,7 @@ func TestValidateDraftRejectsBudgetAndKeywordConflicts(t *testing.T) {
 
 func TestValidateDraftRejectsKeywordContractViolations(t *testing.T) {
 	spec := validTestDraftSpec()
-	spec.Units[0].Keywords[0].PhraseMatchType = 3
+	spec.Units[0].Keywords[0].PhraseMatchType = 4
 	spec.Units[0].Keywords[0].FeedBidFen = spec.Budget.MaxBidFen + 1
 	spec.Units[0].NegativeKeywords = []NegativeKeyword{{Keyword: "批发", PhraseMatchType: 2}}
 	errors, _ := SplitIssues(ValidateDraftSpec(spec))
@@ -48,6 +48,18 @@ func TestValidateDraftRejectsKeywordContractViolations(t *testing.T) {
 	for _, code := range []string{"keyword_match_type_invalid", "keyword_feed_bid_invalid", "negative_keyword_match_type_invalid"} {
 		if !codes[code] {
 			t.Fatalf("missing validation code %q in %+v", code, errors)
+		}
+	}
+}
+
+func TestValidateDraftAcceptsCurrentDefaultTargetAndUpgradedKeywordMatch(t *testing.T) {
+	spec := validTestDraftSpec()
+	spec.Units[0].TargetType = 0
+	spec.Units[0].Keywords[0].PhraseMatchType = 3
+	errors, _ := SplitIssues(ValidateDraftSpec(spec))
+	for _, issue := range errors {
+		if issue.Code == "target_type_invalid" || issue.Code == "keyword_match_type_invalid" {
+			t.Fatalf("current Spotlight code rejected: %+v", errors)
 		}
 	}
 }

@@ -48,36 +48,37 @@ type BudgetPolicy struct {
 }
 
 type CampaignSpec struct {
-	LocalKey              string            `json:"local_key"`
-	Name                  string            `json:"name"`
-	MarketingTarget       int               `json:"marketing_target"`
-	Placement             int               `json:"placement"`
-	PromotionTarget       int               `json:"promotion_target"`
-	Enable                int               `json:"enable"`
-	TimeType              int               `json:"time_type"`
-	StartTime             string            `json:"start_time,omitempty"`
-	ExpireTime            string            `json:"expire_time,omitempty"`
-	TimePeriodType        int               `json:"time_period_type"`
-	TimePeriod            map[string]string `json:"time_period,omitempty"`
-	BiddingStrategy       int               `json:"bidding_strategy"`
-	LimitDayBudget        int               `json:"limit_day_budget"`
-	DayBudgetFen          int64             `json:"day_budget_fen,omitempty"`
-	OptimizeTarget        int               `json:"optimize_target"`
-	ConstraintType        *int              `json:"constraint_type,omitempty"`
-	SmartSwitch           *int              `json:"smart_switch,omitempty"`
-	PacingMode            int               `json:"pacing_mode,omitempty"`
-	FeedFlag              *int              `json:"feed_flag,omitempty"`
-	BuildType             *int              `json:"build_type,omitempty"`
-	EventAssetID          int64             `json:"event_asset_id,omitempty"`
-	AssetEvent            int               `json:"asset_event,omitempty"`
-	AssetEventID          int64             `json:"asset_event_id,omitempty"`
-	PageCategory          int               `json:"page_category,omitempty"`
-	SearchFlag            *int              `json:"search_flag,omitempty"`
-	TargetExtensionSwitch int               `json:"target_extension_switch,omitempty"`
-	SearchBidRatio        float64           `json:"search_bid_ratio,omitempty"`
-	DeeplinkID            int64             `json:"deeplink_id,omitempty"`
-	UniversalLinkID       int64             `json:"universal_link_id,omitempty"`
-	DetectURLLink         string            `json:"detect_url_link,omitempty"`
+	LocalKey              string  `json:"local_key"`
+	Name                  string  `json:"name"`
+	MarketingTarget       int     `json:"marketing_target"`
+	Placement             int     `json:"placement"`
+	PromotionTarget       int     `json:"promotion_target"`
+	Enable                int     `json:"enable"`
+	TimeType              int     `json:"time_type"`
+	StartTime             string  `json:"start_time,omitempty"`
+	ExpireTime            string  `json:"expire_time,omitempty"`
+	TimePeriodType        int     `json:"time_period_type"`
+	TimePeriod            any     `json:"time_period,omitempty"`
+	BiddingStrategy       int     `json:"bidding_strategy"`
+	LimitDayBudget        int     `json:"limit_day_budget"`
+	DayBudgetFen          int64   `json:"day_budget_fen,omitempty"`
+	OptimizeTarget        int     `json:"optimize_target"`
+	ConstraintType        *int    `json:"constraint_type,omitempty"`
+	ConstraintValueFen    *int64  `json:"constraint_value_fen,omitempty"`
+	SmartSwitch           *int    `json:"smart_switch,omitempty"`
+	PacingMode            int     `json:"pacing_mode,omitempty"`
+	FeedFlag              *int    `json:"feed_flag,omitempty"`
+	BuildType             *int    `json:"build_type,omitempty"`
+	EventAssetID          int64   `json:"event_asset_id,omitempty"`
+	AssetEvent            int     `json:"asset_event,omitempty"`
+	AssetEventID          int64   `json:"asset_event_id,omitempty"`
+	PageCategory          int     `json:"page_category,omitempty"`
+	SearchFlag            *int    `json:"search_flag,omitempty"`
+	TargetExtensionSwitch int     `json:"target_extension_switch,omitempty"`
+	SearchBidRatio        float64 `json:"search_bid_ratio,omitempty"`
+	DeeplinkID            int64   `json:"deeplink_id,omitempty"`
+	UniversalLinkID       int64   `json:"universal_link_id,omitempty"`
+	DetectURLLink         string  `json:"detect_url_link,omitempty"`
 }
 
 type CodeName struct {
@@ -95,22 +96,29 @@ type CrowdPackage struct {
 }
 
 type TargetSpec struct {
-	Gender                    string         `json:"gender,omitempty"`
-	Age                       string         `json:"age,omitempty"`
-	Device                    string         `json:"device,omitempty"`
-	Cities                    string         `json:"cities,omitempty"`
-	ContentInterests          []CodeName     `json:"content_interests,omitempty"`
-	ShoppingInterests         []CodeName     `json:"shopping_interests,omitempty"`
-	CrowdPackages             []CrowdPackage `json:"crowd_packages,omitempty"`
-	BehaviorKeywords          []string       `json:"behavior_keywords,omitempty"`
-	InterestKeywords          []string       `json:"interest_keywords,omitempty"`
-	KeywordTargetPeriod       int            `json:"keyword_target_period,omitempty"`
-	KeywordTargetActions      []int          `json:"keyword_target_actions,omitempty"`
-	IntelligentExpansion      int            `json:"intelligent_expansion,omitempty"`
-	ExcludeBloggerFans        bool           `json:"exclude_blogger_fans,omitempty"`
-	ExcludeBloggerPurchasers  bool           `json:"exclude_blogger_purchasers,omitempty"`
-	IncludeBrandRecognition   bool           `json:"include_brand_recognition,omitempty"`
-	IncludeCategoryInterested bool           `json:"include_category_interested,omitempty"`
+	TemplateConfig            json.RawMessage `json:"template_config,omitempty"`
+	Gender                    string          `json:"gender,omitempty"`
+	Age                       string          `json:"age,omitempty"`
+	Device                    string          `json:"device,omitempty"`
+	DevicePrice               string          `json:"device_price,omitempty"`
+	Cities                    string          `json:"cities,omitempty"`
+	CityType                  *int            `json:"city_type,omitempty"`
+	AreaCode                  string          `json:"area_code,omitempty"`
+	SearchCityIntent          string          `json:"search_city_intent,omitempty"`
+	PremiumTargetType         *int            `json:"premium_target_type,omitempty"`
+	GeneralizationSwitch      *int            `json:"generalization_switch,omitempty"`
+	ContentInterests          []CodeName      `json:"content_interests,omitempty"`
+	ShoppingInterests         []CodeName      `json:"shopping_interests,omitempty"`
+	CrowdPackages             []CrowdPackage  `json:"crowd_packages,omitempty"`
+	BehaviorKeywords          []string        `json:"behavior_keywords,omitempty"`
+	InterestKeywords          []string        `json:"interest_keywords,omitempty"`
+	KeywordTargetPeriod       int             `json:"keyword_target_period,omitempty"`
+	KeywordTargetActions      []int           `json:"keyword_target_actions,omitempty"`
+	IntelligentExpansion      int             `json:"intelligent_expansion,omitempty"`
+	ExcludeBloggerFans        bool            `json:"exclude_blogger_fans,omitempty"`
+	ExcludeBloggerPurchasers  bool            `json:"exclude_blogger_purchasers,omitempty"`
+	IncludeBrandRecognition   bool            `json:"include_brand_recognition,omitempty"`
+	IncludeCategoryInterested bool            `json:"include_category_interested,omitempty"`
 }
 
 type KeywordBid struct {
@@ -131,6 +139,11 @@ type SPUNoteSpec struct {
 	NoteIDs []string `json:"note_ids"`
 }
 
+type ItemNoteSpec struct {
+	ItemID  string   `json:"item_id"`
+	NoteIDs []string `json:"note_ids"`
+}
+
 type UnitSpec struct {
 	LocalKey            string            `json:"local_key"`
 	Name                string            `json:"name"`
@@ -143,6 +156,8 @@ type UnitSpec struct {
 	KeywordTargetAction []int             `json:"keyword_target_actions,omitempty"`
 	BusinessTreeName    string            `json:"business_tree_name,omitempty"`
 	SPUNotes            []SPUNoteSpec     `json:"spu_notes,omitempty"`
+	ItemID              string            `json:"item_id,omitempty"`
+	ItemNotes           []ItemNoteSpec    `json:"item_notes,omitempty"`
 	Keywords            []KeywordBid      `json:"keywords,omitempty"`
 	NegativeKeywords    []NegativeKeyword `json:"negative_keywords,omitempty"`
 	SubstitutedUserID   string            `json:"substituted_user_id,omitempty"`
@@ -151,7 +166,17 @@ type UnitSpec struct {
 	LandingPageURL      string            `json:"landing_page_url,omitempty"`
 	ExternalPageURL     string            `json:"external_page_url,omitempty"`
 	LandingPageDesc     string            `json:"landing_page_desc,omitempty"`
-	TargetTemplateID    string            `json:"target_template_id,omitempty"`
+	TargetTemplateID    *int64            `json:"target_template_id,omitempty"`
+	TargetPosition      *int              `json:"target_position,omitempty"`
+	PromotionTargetMode *int              `json:"promotion_target_mode,omitempty"`
+	SearchBidRatio      *float64          `json:"search_bid_ratio,omitempty"`
+	LandingPageType     *int              `json:"landing_page_type,omitempty"`
+	NoteRecType         *int              `json:"note_rec_type,omitempty"`
+	PhraseMatchUpgrade  *int              `json:"phrase_match_type_upgrade,omitempty"`
+	AIGCNoteBlackRec    *int              `json:"aigc_note_black_rec,omitempty"`
+	BizUnitType         *int              `json:"biz_unit_type,omitempty"`
+	TargetGoal          *int              `json:"target_goal,omitempty"`
+	CreationType        *int              `json:"creation_type,omitempty"`
 	Creativities        []CreativitySpec  `json:"creativities"`
 }
 

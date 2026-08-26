@@ -18,6 +18,7 @@ type serviceTestStore struct {
 	attempts          []APIAttempt
 	audits            int
 	campaignSnapshots []campaignSnapshotUpdate
+	quickPlanSamples  []QuickPlanTemplateSample
 }
 
 type campaignSnapshotUpdate struct {
@@ -26,8 +27,23 @@ type campaignSnapshotUpdate struct {
 	ActionType   int
 }
 
-func (store *serviceTestStore) CreateDraft(context.Context, CreateDraftInput, Actor) (Draft, error) {
-	return Draft{}, errors.New("not implemented")
+func (store *serviceTestStore) CreateDraft(_ context.Context, input CreateDraftInput, actor Actor) (Draft, error) {
+	spec := NormalizeSpec(input.Spec)
+	hash, _, err := HashSpec(spec)
+	if err != nil {
+		return Draft{}, err
+	}
+	id, err := NewID("drf")
+	if err != nil {
+		return Draft{}, err
+	}
+	now := time.Now().UTC()
+	store.draft = Draft{
+		ID: id, AdvertiserID: spec.AdvertiserID, Status: "draft", CurrentVersion: 1,
+		Spec: spec, SpecHash: hash, IdempotencyKey: input.IdempotencyKey,
+		CreatedBy: actor.ID, UpdatedBy: actor.ID, CreatedAt: now, UpdatedAt: now,
+	}
+	return store.draft, nil
 }
 func (store *serviceTestStore) UpdateDraft(context.Context, string, UpdateDraftInput, Actor) (Draft, error) {
 	return Draft{}, errors.New("not implemented")
@@ -154,6 +170,9 @@ func (store *serviceTestStore) SavePerformanceSnapshot(context.Context, Performa
 }
 func (store *serviceTestStore) Assets(context.Context, AssetQuery) (Assets, error) {
 	return Assets{}, nil
+}
+func (store *serviceTestStore) QuickPlanTemplateSamples(context.Context) ([]QuickPlanTemplateSample, error) {
+	return append([]QuickPlanTemplateSample(nil), store.quickPlanSamples...), nil
 }
 func (store *serviceTestStore) RecommendationCandidates(context.Context, []string) ([]CandidateNote, error) {
 	return nil, nil

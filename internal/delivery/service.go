@@ -985,7 +985,8 @@ func campaignPayload(draft Draft) map[string]any {
 		"time_period": campaign.TimePeriod, "bidding_strategy": campaign.BiddingStrategy,
 		"limit_day_budget": 1, "campaign_day_budget": campaign.DayBudgetFen,
 		"optimize_target": campaign.OptimizeTarget, "constraint_type": campaign.ConstraintType,
-		"smart_switch": campaign.SmartSwitch, "pacing_mode": campaign.PacingMode,
+		"constraint_value": campaign.ConstraintValueFen,
+		"smart_switch":     campaign.SmartSwitch, "pacing_mode": campaign.PacingMode,
 		"feed_flag": campaign.FeedFlag, "build_type": campaign.BuildType,
 		"event_asset_id": campaign.EventAssetID, "asset_event": campaign.AssetEvent,
 		"asset_event_id": campaign.AssetEventID, "page_category": campaign.PageCategory,
@@ -1001,6 +1002,10 @@ func unitPayload(draft Draft, unit UnitSpec, campaignID int64) map[string]any {
 	for _, value := range unit.SPUNotes {
 		spuNotes = append(spuNotes, map[string]any{"spu_id": value.SPUID, "note_ids": value.NoteIDs})
 	}
+	itemNotes := make([]map[string]any, 0, len(unit.ItemNotes))
+	for _, value := range unit.ItemNotes {
+		itemNotes = append(itemNotes, map[string]any{"item_id": value.ItemID, "note_ids": value.NoteIDs})
+	}
 	keywords := make([]map[string]any, 0, len(unit.Keywords))
 	for _, keyword := range unit.Keywords {
 		keywords = append(keywords, compactPayload(map[string]any{
@@ -1014,15 +1019,34 @@ func unitPayload(draft Draft, unit UnitSpec, campaignID int64) map[string]any {
 		"promotion_target": unit.PromotionTarget, "target_type": unit.TargetType,
 		"target_config": targetPayload(unit.Target), "keyword_target_period": unit.KeywordTargetPeriod,
 		"keyword_target_action": unit.KeywordTargetAction, "business_tree_name": unit.BusinessTreeName,
-		"spu_note_info": spuNotes, "keyword_with_bid": keywords,
+		"spu_note_info": spuNotes, "item_id": unit.ItemID, "item_note_info": itemNotes,
+		"keyword_with_bid":    keywords,
 		"substituted_user_id": unit.SubstitutedUserID, "keyword_gen_type": unit.KeywordGenType,
 		"page_id": unit.PageID, "landing_page_url": unit.LandingPageURL,
 		"unit_external_page_url": unit.ExternalPageURL, "unit_landing_page_desc": unit.LandingPageDesc,
-		"target_template_id": unit.TargetTemplateID,
+		"target_template_id": unit.TargetTemplateID, "target_position": unit.TargetPosition,
+		"promotion_target_mode": unit.PromotionTargetMode, "search_bid_ratio": unit.SearchBidRatio,
+		"landing_page_type": unit.LandingPageType, "note_rec_type": unit.NoteRecType,
+		"phrase_match_type_upgrade": unit.PhraseMatchUpgrade,
+		"aigc_note_black_rec":       unit.AIGCNoteBlackRec, "biz_unit_type": unit.BizUnitType,
+		"target_goal": unit.TargetGoal, "creation_type": unit.CreationType,
 	})
 }
 
 func targetPayload(target TargetSpec) map[string]any {
+	if len(target.TemplateConfig) > 0 {
+		var raw map[string]any
+		if json.Unmarshal(target.TemplateConfig, &raw) == nil {
+			result := make(map[string]any, len(raw))
+			for key, value := range raw {
+				if quickTargetConfigFields[key] {
+					result[key] = value
+				}
+			}
+			result["keywords"] = append([]string(nil), target.BehaviorKeywords...)
+			return result
+		}
+	}
 	content := make([]map[string]string, 0, len(target.ContentInterests))
 	for _, value := range target.ContentInterests {
 		content = append(content, map[string]string{"code": value.Code, "name": value.Name})
@@ -1037,10 +1061,14 @@ func targetPayload(target TargetSpec) map[string]any {
 	}
 	return compactPayload(map[string]any{
 		"target_gender": target.Gender, "target_age": target.Age,
-		"target_device": target.Device, "target_city": target.Cities,
-		"industry_interest_target": compactPayload(map[string]any{"content_interest": content, "shopping_interest": shopping}),
-		"crowd_target":             compactPayload(map[string]any{"crowd_pkg": crowds}),
-		"keywords":                 target.BehaviorKeywords, "interest_keywords": target.InterestKeywords,
+		"target_device": target.Device, "target_device_price": target.DevicePrice,
+		"target_city": target.Cities, "target_city_type": target.CityType,
+		"target_area_code": target.AreaCode, "search_target_city_intent": target.SearchCityIntent,
+		"premium_target_type":          target.PremiumTargetType,
+		"target_generalization_switch": target.GeneralizationSwitch,
+		"industry_interest_target":     compactPayload(map[string]any{"content_interest": content, "shopping_interest": shopping}),
+		"crowd_target":                 compactPayload(map[string]any{"crowd_pkg": crowds}),
+		"keywords":                     target.BehaviorKeywords, "interest_keywords": target.InterestKeywords,
 		"keyword_target_period":                 target.KeywordTargetPeriod,
 		"keyword_target_action":                 target.KeywordTargetActions,
 		"intelligent_expansion":                 target.IntelligentExpansion,
@@ -1049,6 +1077,21 @@ func targetPayload(target TargetSpec) map[string]any {
 		"have_brand_recognition_group":          target.IncludeBrandRecognition,
 		"have_category_interest_group":          target.IncludeCategoryInterested,
 	})
+}
+
+var quickTargetConfigFields = map[string]bool{
+	"keywords": true, "interest_keywords": true, "target_age": true, "target_city": true,
+	"target_city_type": true, "target_device": true, "target_device_price": true,
+	"target_gender": true, "targetAreaCode": true, "searchTargetCityIntent": true,
+	"premium_target_type": true, "target_generalization_switch": true,
+	"intelligent_expansion": true, "crowd_target": true, "premium_target_crowd": true,
+	"industry_interest_target": true, "reverse_target_crowd": true, "dandelion_crowd": true,
+	"reverseConversionType": true, "reverseConversionDuration": true,
+	"haveBrandAIGroup": true, "haveBrandInterestGroup": true, "haveBrandRecognitionGroup": true,
+	"haveCategoryAIGroup": true, "haveCategoryInterestGroup": true, "haveGoodsInterestGroup": true,
+	"haveReverseBloggerFanTarget": true, "haveReverseBloggerPurchasedTarget": true,
+	"have_brand_recognition_group": true, "have_category_interest_group": true,
+	"have_reverse_blogger_fan_target": true, "have_reverse_blogger_purchased_target": true,
 }
 
 func creativityPayload(draft Draft, creative CreativitySpec, unitID int64) map[string]any {
