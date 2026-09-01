@@ -3,7 +3,7 @@ import type { CellValue, Worksheet } from "exceljs";
 import {
   AlertCircle, ArrowRight, Bell, BookOpenCheck, CalendarDays, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, Clock3, Database,
   CirclePlus, FilePlus2, FileSpreadsheet, FileText, GitCompareArrows, Image as ImageIcon, LayoutDashboard, Lightbulb, Link2, LoaderCircle, Menu, Megaphone, Tags,
-  PanelLeftClose, RefreshCw, Route, Rows3, Search, Settings, Trash2, UploadCloud
+  PanelLeftClose, RefreshCw, Route, Rows3, Search, Settings, Stethoscope, Trash2, UploadCloud
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import QuickPlanCreator from "./QuickPlanCreator";
@@ -99,6 +99,7 @@ const navGroups = [
     label: "分析中心",
     items: [
       { label: "数据总览", icon: LayoutDashboard, path: "/overview" },
+      { label: "子账户数据", icon: Stethoscope, path: "/account-plan-diagnosis" },
       { label: "内容分析", icon: Rows3, path: "/content-analysis" },
       { label: "笔记场域分析", icon: ChartNoAxesCombined, path: "/note-campaign-analysis" },
       { label: "投流情况对比", icon: GitCompareArrows, path: "/traffic-comparison" },
@@ -376,10 +377,15 @@ function MaituoConsole() {
               <div className="heading-status"><span className={`status-dot ${serviceState}`} />{serviceState === "online" ? "后端服务已连接" : serviceState === "offline" ? "后端服务未连接" : "正在检查连接"}</div>
             </section>
             <section className="entry-section">
-              <div className="entry-header"><h2>业务入口</h2><span>14 个可用功能</span></div>
+              <div className="entry-header"><h2>业务入口</h2><span>15 个可用功能</span></div>
               <button className="entry-row" onClick={() => navigate("/overview")}>
                 <span className="entry-icon analysis-entry-icon"><LayoutDashboard size={22} /></span>
                 <span className="entry-copy"><strong>查看数据总览</strong><small>辅酶投放趋势与机构每日新增笔记</small></span>
+                <span className="entry-action">进入<ArrowRight size={17} /></span>
+              </button>
+              <button className="entry-row" onClick={() => navigate("/account-plan-diagnosis")}>
+                <span className="entry-icon analysis-entry-icon"><Stethoscope size={22} /></span>
+                <span className="entry-copy"><strong>查看子账户数据</strong><small>分子账户查看消耗、成本、CPC、CTR 与回搜率趋势</small></span>
                 <span className="entry-action">进入<ArrowRight size={17} /></span>
               </button>
               <button className="entry-row" onClick={() => navigate("/content-analysis")}>

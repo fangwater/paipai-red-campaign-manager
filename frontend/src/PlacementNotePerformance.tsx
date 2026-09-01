@@ -11,7 +11,7 @@ type SPUOption = "辅酶" | "磷虾油";
 type AgencyOption = "全部" | "曼杰" | "有一有二" | "智元";
 type DimensionOption = "audience" | "scenario";
 type NoteSortOption = "search_spend" | "feed_spend" | "search_cost_change";
-type CostFilter = "search" | "feed" | "search_stopped" | "feed_stopped";
+type CostFilter = "search" | "feed" | "search_running" | "feed_running";
 
 type ContentCampaign = {
   name: string;
@@ -419,8 +419,8 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
       return costFilters.some((filter) => {
         if (filter === "search") return costUnqualified(note.search_spend, note.search_cost, searchCostLimit);
         if (filter === "feed") return costUnqualified(note.feed_spend, note.feed_cost, feedCostLimit);
-        if (filter === "search_stopped") return note.search_stopped;
-        return note.feed_stopped;
+        if (filter === "search_running") return !note.search_stopped;
+        return !note.feed_stopped;
       });
     }).sort((left, right) => {
       const sortValue = (note: ContentNote) => {
@@ -439,8 +439,8 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
   const unqualifiedCounts = useMemo(() => ({
     search: placementNotes.filter((note) => costUnqualified(note.search_spend, note.search_cost, searchCostLimit)).length,
     feed: placementNotes.filter((note) => costUnqualified(note.feed_spend, note.feed_cost, feedCostLimit)).length,
-    searchStopped: placementNotes.filter((note) => note.search_stopped).length,
-    feedStopped: placementNotes.filter((note) => note.feed_stopped).length
+    searchRunning: placementNotes.filter((note) => !note.search_stopped).length,
+    feedRunning: placementNotes.filter((note) => !note.feed_stopped).length
   }), [feedCostLimit, placementNotes, searchCostLimit]);
   const sortLabel = NOTE_SORT_OPTIONS.find((option) => option.value === noteSort)?.label ?? (placement === "search" ? "搜索累计消耗" : "信息流累计消耗");
   const selectedCampaigns = useMemo(() => uniqueSelectedCampaigns(placementNotes, placement, selectedCampaignKeys), [placement, placementNotes, selectedCampaignKeys]);
@@ -577,10 +577,10 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
                 <strong>{integer.format(unqualifiedCounts.search)}</strong>
                 <small>累计回搜成本 &gt; {searchCostLimit} 或暂无成本</small>
               </button>
-              <button type="button" className={"content-note-filter-card" + (costFilters.includes("search_stopped") ? " active" : "")} aria-pressed={costFilters.includes("search_stopped")} onClick={() => toggleCostFilter("search_stopped")}>
-                <span>搜索已停投</span>
-                <strong>{integer.format(unqualifiedCounts.searchStopped)}</strong>
-                <small>近一天搜索消耗为 0</small>
+              <button type="button" className={"content-note-filter-card" + (costFilters.includes("search_running") ? " active" : "")} aria-pressed={costFilters.includes("search_running")} onClick={() => toggleCostFilter("search_running")}>
+                <span>搜索未停投</span>
+                <strong>{integer.format(unqualifiedCounts.searchRunning)}</strong>
+                <small>近一天搜索消耗不为 0</small>
               </button>
               <label className="content-note-threshold">搜索阈值<input type="number" min="0" step="1" aria-label="搜索成本不达标阈值" value={searchCostLimitInput} onChange={(event) => setSearchCostLimitInput(event.target.value)} /></label>
             </> : <>
@@ -589,10 +589,10 @@ function PlacementNotePerformance({ placement, serviceState }: { placement: Plac
                 <strong>{integer.format(unqualifiedCounts.feed)}</strong>
                 <small>累计成本 &gt; {feedCostLimit} 或暂无成本</small>
               </button>
-              <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed_stopped") ? " active" : "")} aria-pressed={costFilters.includes("feed_stopped")} onClick={() => toggleCostFilter("feed_stopped")}>
-                <span>信息流已停投</span>
-                <strong>{integer.format(unqualifiedCounts.feedStopped)}</strong>
-                <small>近一天信息流消耗为 0</small>
+              <button type="button" className={"content-note-filter-card" + (costFilters.includes("feed_running") ? " active" : "")} aria-pressed={costFilters.includes("feed_running")} onClick={() => toggleCostFilter("feed_running")}>
+                <span>信息流未停投</span>
+                <strong>{integer.format(unqualifiedCounts.feedRunning)}</strong>
+                <small>近一天信息流消耗不为 0</small>
               </button>
               <label className="content-note-threshold">信息流阈值<input type="number" min="0" step="1" aria-label="信息流成本不达标阈值" value={feedCostLimitInput} onChange={(event) => setFeedCostLimitInput(event.target.value)} /></label>
             </>}

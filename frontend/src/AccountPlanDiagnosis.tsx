@@ -10,7 +10,7 @@ import "./account-plan-diagnosis.css";
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 type ServiceState = "checking" | "online" | "offline";
-type PeriodDays = 7 | 14 | 30;
+type TrendPeriod = 7 | 14 | "all";
 
 type DiagnosisPoint = {
   report_date: string;
@@ -127,7 +127,11 @@ type TrendChartConfig = {
   metrics: TrendMetric[];
 };
 
-const PERIOD_OPTIONS: PeriodDays[] = [7, 14, 30];
+const PERIOD_OPTIONS: Array<{ value: TrendPeriod; label: string }> = [
+  { value: 7, label: "7日" },
+  { value: 14, label: "14日" },
+  { value: "all", label: "全部" }
+];
 
 function compactNumber(value: number): string {
   if (Math.abs(value) >= 10000) return `${(value / 10000).toFixed(1)}万`;
@@ -143,7 +147,7 @@ function trendValue(unit: TrendUnit, value: number | null): string {
 
 function pointLabel(unit: TrendUnit, value: number): string {
   if (unit === "percent") return `${value.toFixed(2)}%`;
-  return `¥${value.toFixed(value >= 1000 ? 0 : 2)}`;
+  return `¥${money.format(value)}`;
 }
 
 function accountTrendCharts(points: AccountOverviewPoint[]): TrendChartConfig[] {
@@ -172,10 +176,10 @@ function accountTrendCharts(points: AccountOverviewPoint[]): TrendChartConfig[] 
     },
     {
       key: "feed-delivery",
-      title: "信息流消耗与预计回流后成本",
+      title: "信息流消耗与回搜成本",
       metrics: [
         metric("feed-spend", "信息流消耗", "currency", "#3d6f9e", 0, "feed_spend"),
-        metric("feed-cost", "预计回流后成本", "currency", "#a66a2c", 1, "feed_cost")
+        metric("feed-cost", "回搜成本", "currency", "#a66a2c", 1, "feed_cost")
       ]
     },
     {
@@ -205,7 +209,7 @@ function accountTrendCharts(points: AccountOverviewPoint[]): TrendChartConfig[] 
   ];
 }
 
-function AccountTrendChart({ config, points, days }: { config: TrendChartConfig; points: Array<{ report_date: string }>; days: PeriodDays }) {
+function AccountTrendChart({ config, points, period }: { config: TrendChartConfig; points: Array<{ report_date: string }>; period: TrendPeriod }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const hasData = config.metrics.some((metric) => metric.values.some((value) => value !== null));
   const hasRightAxis = config.metrics.some((metric) => metric.axis === 1);
@@ -254,7 +258,7 @@ function AccountTrendChart({ config, points, days }: { config: TrendChartConfig;
         data: visiblePointIndexes.map((index) => points[index].report_date.slice(5)),
         axisLine: { lineStyle: { color: "#dfe3e5" } },
         axisTick: { show: false },
-        axisLabel: { color: "#858c92", fontSize: 9, interval: days === 7 ? 0 : "auto" }
+        axisLabel: { color: "#858c92", fontSize: 9, interval: period === 7 ? 0 : "auto" }
       },
       yAxis,
       series: config.metrics.map((metric, index) => ({
@@ -264,15 +268,15 @@ function AccountTrendChart({ config, points, days }: { config: TrendChartConfig;
         data: visiblePointIndexes.map((pointIndex) => metric.values[pointIndex]),
         connectNulls: true,
         smooth: 0.16,
-        showSymbol: days === 7,
+        showSymbol: period === 7,
         symbol: "circle",
         symbolSize: 7,
         lineStyle: { width: 2.5, color: metric.color },
         itemStyle: { color: metric.color, borderColor: "#fff", borderWidth: 2 },
         tooltip: { valueFormatter: (value: number) => trendValue(metric.unit, value) },
         label: {
-          show: days === 7,
-          position: config.key === "search-rate" || index % 2 === 0 ? "top" : "bottom",
+          show: period === 7,
+          position: index % 2 === 0 ? "top" : "bottom",
           distance: 6,
           color: metric.color,
           fontSize: 8,
@@ -281,7 +285,7 @@ function AccountTrendChart({ config, points, days }: { config: TrendChartConfig;
         emphasis: { focus: "series", scale: 1.15 }
       }))
     };
-  }, [config, days, hasRightAxis, points]);
+  }, [config, hasRightAxis, period, points]);
 
   useEffect(() => {
     if (!chartRef.current || !hasData) return;
@@ -317,7 +321,7 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [overviewAccount, setOverviewAccount] = useState("");
-  const [days, setDays] = useState<PeriodDays>(7);
+  const [period, setPeriod] = useState<TrendPeriod>(7);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -341,7 +345,10 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
   }, []);
 
   const overview = useMemo(() => result.account_overviews.find((account) => account.account === overviewAccount) ?? result.account_overviews[0] ?? null, [overviewAccount, result.account_overviews]);
-  const overviewPoints = useMemo(() => overview?.points.slice(-days) ?? [], [days, overview]);
+  const overviewPoints = useMemo(() => {
+    if (!overview) return [];
+    return period === "all" ? overview.points : overview.points.slice(-period);
+  }, [overview, period]);
   const overviewCharts = useMemo(() => accountTrendCharts(overviewPoints), [overviewPoints]);
   const overviewDateRange = overviewPoints.length > 0 ? `${overviewPoints[0].report_date} - ${overviewPoints.at(-1)?.report_date}` : "";
 
@@ -358,13 +365,13 @@ function AccountPlanDiagnosis({ serviceState }: { serviceState: ServiceState }) 
           {result.account_overviews.map((account) => <option key={account.account} value={account.account}>{account.account}</option>)}
         </select></label>
         <div className="segmented-control diagnosis-period" aria-label="总览时间范围">
-          {PERIOD_OPTIONS.map((option) => <button type="button" key={option} className={days === option ? "active" : ""} onClick={() => setDays(option)}>{option}日</button>)}
+          {PERIOD_OPTIONS.map((option) => <button type="button" key={option.value} className={period === option.value ? "active" : ""} onClick={() => setPeriod(option.value)}>{option.label}</button>)}
         </div>
       </div>
     </section>
     {loading ? <div className="analysis-loading"><LoaderCircle size={19} className="spin" />正在读取子账户趋势</div>
       : overview ? <section className="diagnosis-trend-grid">
-        {overviewCharts.map((chart) => <AccountTrendChart key={chart.key} config={chart} points={overviewPoints} days={days} />)}
+        {overviewCharts.map((chart) => <AccountTrendChart key={chart.key} config={chart} points={overviewPoints} period={period} />)}
       </section>
         : <div className="analysis-loading">当前 SPU 暂无子账户趋势数据</div>}
     <section className="diagnosis-table-section">

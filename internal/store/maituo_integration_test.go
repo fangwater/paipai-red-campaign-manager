@@ -107,7 +107,7 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		latestPoint.NoteCount == nil || *latestPoint.NoteCount != 7 {
 		t.Fatalf("diagnosis latest point: %+v", latestPoint)
 	}
-	if len(diagnosis.AccountOverviews) != 1 || len(diagnosis.AccountOverviews[0].Points) != maituoAccountOverviewDays {
+	if len(diagnosis.AccountOverviews) != 1 || len(diagnosis.AccountOverviews[0].Points) != 1 {
 		t.Fatalf("account overviews: %+v", diagnosis.AccountOverviews)
 	}
 	if len(diagnosis.PlanKPIs) != 0 || len(searchAccount.Plans) != 0 ||
@@ -142,7 +142,7 @@ func TestImportMaituoCustomerDailyIntegration(t *testing.T) {
 		overviewPoint.SearchCTRPct == nil || *overviewPoint.SearchCTRPct != 4 ||
 		overviewPoint.SearchRatePct == nil || *overviewPoint.SearchRatePct != 2 ||
 		overviewPoint.FeedSpend == nil || *overviewPoint.FeedSpend != 7 ||
-		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != 5.04 ||
+		overviewPoint.FeedCost == nil || *overviewPoint.FeedCost != feedSearchCost ||
 		overviewPoint.FeedCPC == nil || *overviewPoint.FeedCPC != 10 ||
 		overviewPoint.FeedCTRPct == nil || *overviewPoint.FeedCTRPct != 11 ||
 		overviewPoint.FeedSearchRatePct == nil || *overviewPoint.FeedSearchRatePct != 9 {

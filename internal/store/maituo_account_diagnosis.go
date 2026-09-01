@@ -27,11 +27,12 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		AccountOverviews: []maituo.AccountOverview{},
 		Accounts:         []maituo.AccountDiagnosis{},
 	}
+	var firstReportDate string
 	if err := p.pool.QueryRow(ctx, `
-		SELECT COALESCE(MAX(report_date)::TEXT, '')
+		SELECT COALESCE(MAX(report_date)::TEXT, ''), COALESCE(MIN(report_date)::TEXT, '')
 		FROM maituo_customer_daily_subaccounts
 		WHERE deleted_at IS NULL AND spu = $1
-	`, spu).Scan(&result.ReportDate); err != nil {
+	`, spu).Scan(&result.ReportDate, &firstReportDate); err != nil {
 		return result, fmt.Errorf("query Maituo account diagnosis date: %w", err)
 	}
 	if result.ReportDate == "" {
@@ -42,7 +43,12 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 	if err != nil {
 		return result, fmt.Errorf("parse Maituo account diagnosis date: %w", err)
 	}
-	windowStart := latestDate.AddDate(0, 0, -(maituoAccountOverviewDays - 1)).Format(time.DateOnly)
+	firstDate, err := time.Parse(time.DateOnly, firstReportDate)
+	if err != nil {
+		return result, fmt.Errorf("parse first Maituo account diagnosis date: %w", err)
+	}
+	overviewDays := int(latestDate.Sub(firstDate).Hours()/24) + 1
+	windowStart := firstDate.Format(time.DateOnly)
 	accountRows, err := p.pool.Query(ctx, `
 		SELECT accounts.report_date::TEXT, accounts.subaccount, accounts.placement,
 			accounts.spend::DOUBLE PRECISION, accounts.search_users,
@@ -50,6 +56,7 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 				THEN accounts.estimated_postback_cost::DOUBLE PRECISION
 				ELSE accounts.search_cost::DOUBLE PRECISION
 			END AS diagnosis_cost,
+			accounts.search_cost::DOUBLE PRECISION AS recall_search_cost,
 			accounts.search_rate_pct::DOUBLE PRECISION, accounts.cpc::DOUBLE PRECISION,
 			accounts.ctr_pct::DOUBLE PRECISION, accounts.note_count
 		FROM maituo_customer_daily_subaccounts accounts
@@ -66,6 +73,7 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		Spend         float64
 		SearchUsers   int64
 		Cost          *float64
+		RecallCost    *float64
 		SearchRatePct *float64
 		CPC           *float64
 		CTRPct        *float64
@@ -76,15 +84,16 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		var reportDate, account, placement string
 		var spend float64
 		var searchUsers, noteCount int64
-		var nullableCost, searchRatePct, cpc, ctrPct pgtype.Float8
+		var nullableCost, recallCost, searchRatePct, cpc, ctrPct pgtype.Float8
 		if err := accountRows.Scan(
 			&reportDate, &account, &placement, &spend, &searchUsers, &nullableCost,
-			&searchRatePct, &cpc, &ctrPct, &noteCount,
+			&recallCost, &searchRatePct, &cpc, &ctrPct, &noteCount,
 		); err != nil {
 			return result, fmt.Errorf("scan Maituo account diagnosis history: %w", err)
 		}
 		snapshot := accountSnapshot{
 			Spend: spend, SearchUsers: searchUsers, Cost: diagnosisNullableCost(nullableCost),
+			RecallCost:    diagnosisNullableCost(recallCost),
 			SearchRatePct: diagnosisNullableCost(searchRatePct), CPC: diagnosisNullableCost(cpc),
 			CTRPct: diagnosisNullableCost(ctrPct), NoteCount: noteCount,
 		}
@@ -159,13 +168,13 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 		overview := maituo.AccountOverview{Account: account, Points: []maituo.AccountOverviewPoint{}}
 		searchSnapshots := history[diagnosisAccountKey(account, "搜索")]
 		feedSnapshots := history[diagnosisAccountKey(account, "信息流")]
-		for offset := -(maituoAccountOverviewDays - 1); offset <= 0; offset++ {
+		for offset := -(overviewDays - 1); offset <= 0; offset++ {
 			date := latestDate.AddDate(0, 0, offset).Format(time.DateOnly)
 			point := maituo.AccountOverviewPoint{ReportDate: date}
 			if snapshot, exists := searchSnapshots[date]; exists {
 				spend := roundMaituoMoney(snapshot.Spend)
 				point.SearchSpend = &spend
-				point.SearchCost = snapshot.Cost
+				point.SearchCost = snapshot.RecallCost
 				point.SearchCPC = snapshot.CPC
 				point.SearchCTRPct = snapshot.CTRPct
 				point.SearchRatePct = snapshot.SearchRatePct
@@ -173,7 +182,7 @@ func (p *Postgres) MaituoAccountPlanDiagnosis(ctx context.Context, spu string) (
 			if snapshot, exists := feedSnapshots[date]; exists {
 				spend := roundMaituoMoney(snapshot.Spend)
 				point.FeedSpend = &spend
-				point.FeedCost = snapshot.Cost
+				point.FeedCost = snapshot.RecallCost
 				point.FeedCPC = snapshot.CPC
 				point.FeedCTRPct = snapshot.CTRPct
 				point.FeedSearchRatePct = snapshot.SearchRatePct

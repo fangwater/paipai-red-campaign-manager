@@ -179,9 +179,9 @@ test("search placement page lists note-level search aggregates with narrowed col
   await expect(table.getByRole("link", { name: "查看笔记场域分析 note-search" })).toHaveAttribute("href", "/paipai/note-campaign-analysis?q=note-search");
   await expect(table).not.toContainText("一周辅酶记录");
   await expect(page.getByRole("button", { name: "搜索成本不达标" })).toContainText("1");
-  await expect(page.getByRole("button", { name: "搜索已停投" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "搜索未停投" })).toContainText("22");
   await expect(page.getByRole("button", { name: "信息流成本不达标" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "信息流已停投" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "信息流未停投" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "回搜成本变化" }).click();
   const changeTable = page.getByRole("table", { name: "按回搜成本变化排序的笔记" });
@@ -200,9 +200,9 @@ test("search placement page lists note-level search aggregates with narrowed col
   await page.getByLabel("搜索成本不达标阈值").fill("50");
   await expect(page.getByText("当前筛选条件下暂无搜索笔记")).toBeVisible();
   await page.getByRole("button", { name: "搜索成本不达标" }).click();
-  await page.getByRole("button", { name: "搜索已停投" }).click();
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
-  await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("search-02");
+  await page.getByRole("button", { name: "搜索未停投" }).click();
+  await expect(page.getByText("共 22 篇 · 每页 20 篇")).toBeVisible();
+  await expect(page.getByRole("link", { name: "查看笔记场域分析 search-02" })).toHaveCount(0);
 
   const noteIDSearch = page.getByLabel("按笔记 ID 搜索");
   const filterCards = page.getByLabel("笔记表现筛选");
@@ -211,7 +211,7 @@ test("search placement page lists note-level search aggregates with narrowed col
     const cards = await filterCards.boundingBox();
     return searchBox && cards ? searchBox.x >= cards.x + cards.width - 8 : false;
   }).toBe(true);
-  await page.getByRole("button", { name: "搜索已停投" }).click();
+  await page.getByRole("button", { name: "搜索未停投" }).click();
   await noteIDSearch.fill("note-search");
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" }).locator("tbody tr")).toHaveCount(1);
   await expect(page.getByRole("table", { name: "按搜索累计消耗排序的笔记" })).toContainText("通勤精力管理实测");
@@ -253,8 +253,14 @@ test("feed placement page lists note-level feed aggregates without ROI or search
   await expect(table).toContainText("双场域笔记");
   await expect(table).not.toContainText("通勤精力管理实测");
   await expect(page.getByRole("button", { name: "信息流成本不达标" })).toContainText("1");
-  await expect(page.getByRole("button", { name: "信息流已停投" })).toContainText("1");
+  await expect(page.getByRole("button", { name: "信息流未停投" })).toContainText("1");
   await expect(page.getByRole("button", { name: "搜索成本不达标" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "信息流未停投" }).click();
+  await expect(table.locator("tbody tr")).toHaveCount(1);
+  await expect(table).toContainText("双场域笔记");
+  await expect(table).not.toContainText("一周辅酶记录");
+  await page.getByRole("button", { name: "信息流未停投" }).click();
 
   await page.getByRole("button", { name: "搜索累计消耗" }).click();
   const searchSorted = page.getByRole("table", { name: "按搜索累计消耗排序的笔记" });

@@ -84,6 +84,7 @@ test("renders independent subaccount overview and placement diagnostics", async 
   await expect(page.locator(".diagnosis-trend-card")).toHaveCount(6);
   await expect(page.getByRole("heading", { name: "综合加权回搜重合系数" })).toHaveCount(0);
   await expect(page.getByRole("img", { name: "总消耗趋势图" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "信息流消耗与回搜成本趋势图" })).toBeVisible();
   await expect(page.getByRole("img", { name: "搜索 / 信息流回搜率趋势图" })).toBeVisible();
   await expect.poll(async () => page.locator(".diagnosis-trend-canvas canvas").count()).toBe(6);
   const paintedPixels = await page.locator(".diagnosis-trend-canvas canvas").evaluateAll((canvases) => canvases.map((canvas) => {
@@ -101,8 +102,9 @@ test("renders independent subaccount overview and placement diagnostics", async 
   await expect(page.getByRole("button", { name: "14日" })).toHaveClass(/active/);
   await accountSelect.selectOption("Megared脉拓-智元01");
   await expect(page.locator(".diagnosis-overview-heading p")).toContainText("Megared脉拓-智元01");
-  await page.getByRole("button", { name: "30日" }).click();
-  await expect(page.getByRole("button", { name: "30日" })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "全部" }).click();
+  await expect(page.getByRole("button", { name: "全部" })).toHaveClass(/active/);
+  await expect(page.locator(".diagnosis-overview-heading p")).toContainText("2026-06-28 - 2026-07-27");
   await page.getByRole("button", { name: "7日" }).click();
   await expect(page.locator(".diagnosis-account-table tbody tr")).toHaveCount(1);
   await expect(page.getByText("+12.5%", { exact: true })).toBeVisible();
